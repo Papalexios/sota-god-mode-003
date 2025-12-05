@@ -1146,88 +1146,124 @@ export class MaintenanceEngine {
 
         // 7. VALIDATE & ADD REFERENCES (if missing)
         this.logCallback(`📚 CHECKING: References section...`);
-        const hasReferences = body.innerHTML.toLowerCase().includes('reference') ||
-                             body.innerHTML.toLowerCase().includes('source') ||
-                             body.querySelector('.sota-references-section');
+
+        const existingReferencesSection = body.querySelector('.sota-references-section, .references-section, .sources-section') ||
+                                        Array.from(body.querySelectorAll('h2, h3')).find(h => {
+                                            const text = h.textContent?.toLowerCase() || '';
+                                            return (text.includes('reference') || text.includes('sources') || text.includes('further reading')) &&
+                                                   !text.includes('code') && !text.includes('manual');
+                                        });
+
+        const hasReferences = !!existingReferencesSection;
+
+        this.logCallback(`📚 REFERENCES STATUS: ${hasReferences ? 'Already present' : 'Missing - will add'}`);
+        this.logCallback(`📚 SERPER API: ${serperApiKey ? 'Configured ✓' : 'NOT configured ✗'}`);
 
         if (!hasReferences && serperApiKey) {
-            this.logCallback(`🔍 SEARCHING: High-quality reference sources...`);
+            this.logCallback(`🔍 SEARCHING: High-quality reference sources with Serper API...`);
             try {
-                // Search for authoritative sources
-                const query = `${page.title} research study data statistics 2024 2025 -site:youtube.com -site:facebook.com -site:pinterest.com -site:twitter.com -site:reddit.com`;
+                // Search for authoritative sources (get more results to increase success rate)
+                const query = `${page.title} research study data statistics 2024 2025 expert guide -site:youtube.com -site:facebook.com -site:pinterest.com -site:twitter.com -site:reddit.com -site:instagram.com`;
+                this.logCallback(`🔍 QUERY: "${query.substring(0, 80)}..."`);
+
                 const response = await fetchWithProxies("https://google.serper.dev/search", {
                     method: 'POST',
                     headers: { 'X-API-KEY': serperApiKey, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ q: query, num: 15 })
+                    body: JSON.stringify({ q: query, num: 20 })
                 });
                 const data = await response.json();
                 const potentialLinks = data.organic || [];
 
-                this.logCallback(`📊 VALIDATING: ${potentialLinks.length} potential reference links...`);
+                if (potentialLinks.length === 0) {
+                    this.logCallback(`⚠️ WARNING: Serper returned 0 results - API may be failing or quota exceeded`);
+                    throw new Error('No search results from Serper API');
+                }
 
-                // Validate links (check 200 status)
+                this.logCallback(`📊 FOUND: ${potentialLinks.length} potential sources - validating each one...`);
+
                 const validatedLinks: Array<{title: string, url: string, source: string}> = [];
+                let checkedCount = 0;
+                let skippedCount = 0;
 
-                for (const link of potentialLinks.slice(0, 12)) {
+                for (const link of potentialLinks) {
+                    if (validatedLinks.length >= 10) break;
+
                     try {
-                        // Quick HEAD request to check if link is operational
+                        if (!link.link) continue;
+
                         const linkDomain = new URL(link.link).hostname.replace('www.', '');
 
-                        // Skip if it's the same site
-                        if (wpConfig.url && linkDomain.includes(new URL(wpConfig.url).hostname.replace('www.', ''))) continue;
+                        if (wpConfig.url) {
+                            const siteDomain = new URL(wpConfig.url).hostname.replace('www.', '');
+                            if (linkDomain === siteDomain) {
+                                skippedCount++;
+                                continue;
+                            }
+                        }
 
-                        // Validate link is operational
+                        checkedCount++;
+                        this.logCallback(`🔗 CHECKING [${checkedCount}]: ${linkDomain}`);
+
                         try {
                             const checkResponse = await fetch(link.link, {
                                 method: 'HEAD',
-                                signal: AbortSignal.timeout(5000)
+                                signal: AbortSignal.timeout(8000),
+                                redirect: 'follow'
                             });
 
                             if (checkResponse.ok && checkResponse.status === 200) {
                                 validatedLinks.push({
-                                    title: link.title,
+                                    title: link.title || linkDomain,
                                     url: link.link,
                                     source: linkDomain
                                 });
-
-                                if (validatedLinks.length >= 8) break; // Got enough validated links
+                                this.logCallback(`✅ VALID [${validatedLinks.length}/10]: ${linkDomain}`);
+                            } else {
+                                this.logCallback(`❌ FAILED [${checkResponse.status}]: ${linkDomain}`);
                             }
-                        } catch (e) {
-                            // Link not operational, skip it
+                        } catch (fetchError: any) {
+                            this.logCallback(`❌ ERROR: ${linkDomain} - ${fetchError.message.substring(0, 50)}`);
                             continue;
                         }
                     } catch (e) {
                         continue;
                     }
+
+                    if (validatedLinks.length < 10) {
+                        await delay(300);
+                    }
                 }
 
-                if (validatedLinks.length > 0) {
-                    this.logCallback(`✅ VALIDATED: ${validatedLinks.length} operational reference links`);
+                this.logCallback(`📊 VALIDATION SUMMARY: ${validatedLinks.length} valid, ${checkedCount - validatedLinks.length} failed, ${skippedCount} skipped (same domain)`);
 
-                    // Generate beautiful references section
+                if (validatedLinks.length > 0) {
+                    this.logCallback(`✅ SUCCESS: ${validatedLinks.length} operational reference links validated (all 200 status)`);
+
                     const listItems = validatedLinks.map(ref =>
                         `<li><a href="${ref.url}" target="_blank" rel="noopener noreferrer" title="Verified Source: ${ref.source}" style="text-decoration: underline; color: #2563EB;">${ref.title}</a> <span style="color:#64748B; font-size:0.8em;">(${ref.source})</span></li>`
                     ).join('');
 
-                    const referencesHtml = `<div class="sota-references-section" style="margin-top: 3rem; padding: 2rem; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px;"><h2 style="margin-top: 0; font-size: 1.5rem; color: #1E293B; border-bottom: 2px solid #3B82F6; padding-bottom: 0.5rem; margin-bottom: 1rem; font-weight: 800;">📚 Verified References & Further Reading</h2><ul style="columns: 2; -webkit-columns: 2; -moz-columns: 2; column-gap: 2rem; list-style: disc; padding-left: 1.5rem; line-height: 1.6;">${listItems}</ul></div>`;
+                    const referencesHtml = `<div class="sota-references-section" style="margin-top: 3rem; padding: 2rem; background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%); border: 2px solid #3B82F6; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);"><h2 style="margin-top: 0; font-size: 1.5rem; color: #1E293B; border-bottom: 3px solid #3B82F6; padding-bottom: 0.5rem; margin-bottom: 1rem; font-weight: 800;">📚 Verified References & Further Reading</h2><p style="color: #64748B; font-size: 0.85em; margin-bottom: 1rem; font-style: italic;">All sources verified operational with 200 status codes.</p><ul style="columns: 2; -webkit-columns: 2; -moz-columns: 2; column-gap: 2rem; list-style: disc; padding-left: 1.5rem; line-height: 1.8;">${listItems}</ul></div>`;
 
-                    // Add references at the end
                     const referencesWrapper = doc.createElement('div');
                     referencesWrapper.innerHTML = referencesHtml;
                     body.appendChild(referencesWrapper.firstElementChild || referencesWrapper);
 
                     structuralFixesMade++;
-                    this.logCallback(`✅ ADDED: ${validatedLinks.length} verified, operational references (all 200 status)`);
+                    this.logCallback(`✅ ADDED: ${validatedLinks.length} verified references (100% operational, all 200 status)`);
                 } else {
-                    this.logCallback(`⚠️ No operational reference links found`);
+                    this.logCallback(`❌ FAILED: No operational reference links found`);
+                    this.logCallback(`❌ Checked ${checkedCount} links from ${potentialLinks.length} search results - none returned 200 status`);
+                    this.logCallback(`💡 TIP: This may indicate network issues or all sources are paywalled/blocked`);
                 }
             } catch (e: any) {
-                this.logCallback(`⚠️ Reference generation failed: ${e.message}`);
+                this.logCallback(`❌ ERROR: Reference generation failed: ${e.message}`);
             }
         } else if (hasReferences) {
-            this.logCallback(`✅ REFERENCES: Already present`);
+            this.logCallback(`✅ REFERENCES: Already present - skipping`);
         } else {
-            this.logCallback(`⚠️ REFERENCES: Serper API key not configured`);
+            this.logCallback(`❌ CRITICAL: Serper API key NOT configured - CANNOT add references!`);
+            this.logCallback(`❌ Please add your Serper API key in settings to enable reference generation`);
         }
 
         // 8. RESTORE PROTECTED CONTENT & PUBLISH
