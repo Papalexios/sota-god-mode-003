@@ -679,9 +679,18 @@ export class MaintenanceEngine {
     async start(context: GenerationContext) {
         this.currentContext = context;
         if (this.isRunning) return;
-        
+
         this.isRunning = true;
         this.logCallback("🚀 God Mode Activated: Engine Cold Start...");
+
+        // CRITICAL: Validate API clients before starting
+        if (!context.apiClients || !context.apiClients[context.selectedModel as keyof typeof context.apiClients]) {
+            this.logCallback("❌ CRITICAL ERROR: AI API Client not initialized!");
+            this.logCallback(`🔧 REQUIRED: Configure ${context.selectedModel.toUpperCase()} API key in Settings`);
+            this.logCallback("🛑 STOPPING: God Mode requires a valid AI API client");
+            this.isRunning = false;
+            return;
+        }
 
         if (this.currentContext.existingPages.length === 0) {
             if (this.currentContext.wpConfig.url) {
@@ -790,7 +799,9 @@ export class MaintenanceEngine {
 
         const BATCH_SIZE = 2;
         let changesMade = 0;
+        let consecutiveErrors = 0;
         const MAX_BATCHES = 8;
+        const MAX_CONSECUTIVE_ERRORS = 3;
 
         this.logCallback(`⚡ Found ${safeNodes.length} safe text nodes. Processing top ${MAX_BATCHES * BATCH_SIZE}...`);
 
@@ -825,12 +836,29 @@ export class MaintenanceEngine {
 
                         node.textContent = cleanText;
                         changesMade++;
+                        consecutiveErrors = 0; // Reset error counter on success
                     }
-                } catch (e) {
-                    this.logCallback(`⚠️ AI Glitch. Skipping node...`);
+                } catch (e: any) {
+                    consecutiveErrors++;
+                    this.logCallback(`⚠️ AI Error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}): ${e.message}`);
+
+                    // CRITICAL: Stop if API client is not initialized
+                    if (e.message && e.message.includes('not initialized')) {
+                        this.logCallback(`❌ FATAL: API Client error detected. Stopping optimization.`);
+                        break;
+                    }
+
+                    // Stop if too many consecutive errors
+                    if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                        this.logCallback(`❌ Too many consecutive errors (${MAX_CONSECUTIVE_ERRORS}). Stopping optimization.`);
+                        break;
+                    }
                 }
                 await this.sleep(600);
             }
+
+            // Break outer loop too if fatal errors
+            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) break;
         }
 
         if (changesMade > 0 || schemaInjected) {
@@ -857,10 +885,12 @@ export class MaintenanceEngine {
                 localStorage.setItem(`sota_last_proc_${page.id}`, Date.now().toString());
             } else {
                 this.logCallback(`❌ Update Failed: ${publishResult.message}`);
+                // CRITICAL FIX: Don't mark as optimized if publish failed
             }
         } else {
-            this.logCallback("🤷 Content looks good. No safe updates found.");
-            localStorage.setItem(`sota_last_proc_${page.id}`, Date.now().toString());
+            // CRITICAL FIX: Don't mark as optimized if no actual changes were made
+            this.logCallback("⚠️ No optimization applied (0 changes, no schema). NOT marking as complete.");
+            this.logCallback("💡 This page will be retried on next cycle.");
         }
     }
 
