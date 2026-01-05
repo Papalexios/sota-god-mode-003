@@ -13,7 +13,7 @@ import {
 } from './components';
 import { LandingPage } from './LandingPage';
 import { GodModeURLInput } from './src/GodModeURLInput';
-    SitemapPage, ContentItem, GeneratedContent, SiteInfo, ExpandedGeoTargeting, ApiClients, WpConfig, NeuronConfig, GapAnalysisSuggestion, GenerationContext
+import {  apPage, ContentItem, GeneratedContent, SiteInfo, ExpandedGeoTargeting, ApiClients, WpConfig, NeuronConfig, GapAnalysisSuggestion, GenerationContext
 } from './types';
 import { callAiWithRetry, debounce, fetchWor14
         dPressWithRetry, sanitizeTitle, extractSlugFromUrl, parseJsonWithAiRepair, isNullish, isValidSortKey, processConcurrently } from './utils';
