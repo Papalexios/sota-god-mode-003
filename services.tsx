@@ -71,12 +71,13 @@ const surgicalSanitizer = (html: string): string => {
 export const fetchWordPressWithRetry = async (targetUrl: string, options: RequestInit): Promise<Response> => {
     const REQUEST_TIMEOUT = 45000;
 
-    // SOTA FIX: robustly check for Authorization header
+    // SOTA FIX: robustly check for Authorization header (defensive against cross-realm Headers)
     let hasAuthHeader = false;
     if (options.headers) {
         if (typeof options.headers === 'object' && options.headers !== null) {
-            if (options.headers instanceof Headers) {
-                hasAuthHeader = options.headers.has('Authorization');
+            // ENTERPRISE FIX: Check for .has method existence before calling (handles cross-realm Headers)
+            if (typeof (options.headers as any).has === 'function') {
+                hasAuthHeader = (options.headers as Headers).has('Authorization');
             } else if (Array.isArray(options.headers)) {
                 hasAuthHeader = options.headers.some(pair => pair[0].toLowerCase() === 'authorization');
             } else {
@@ -168,41 +169,55 @@ const fetchPAA = async (keyword: string, serperApiKey: string) => {
 
 export const fetchVerifiedReferenceData = async (keyword: string, serperApiKey: string, count: number = 20): Promise<Array<{ url: string, title: string, source: string }>> => {
     if (!serperApiKey) return [];
-    try {
-        const query = `${keyword} definitive guide research data statistics 2024 2025 -site:youtube.com -site:facebook.com -site:pinterest.com -site:twitter.com -site:reddit.com`;
-        const response = await fetchWithProxies("https://google.serper.dev/search", {
-            method: 'POST',
-            headers: { 'X-API-KEY': serperApiKey, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ q: query, num: Math.max(20, count) })
-        });
-        const data = await response.json();
-        const potentialLinks = data.organic || [];
 
-        // QUALITY FILTER: Block spam domains
-        const BLOCKED_DOMAINS = [
-            'quora.com', 'scribd.com', 'dokumen.pub', 'asau.ru', 'slideserve.com',
-            'studylib.net', 'document.pub', 'pdfcoffee.com', 'slideshare.net',
-            'academia.edu', 'researchgate.net', 'coursehero.com', 'chegg.com',
-            'slideplayer.com', 'vdocuments.mx', 'fdocuments.in', 'kupdf.net',
-            'pdfslide.net', 'issuu.com', 'yumpu.com', 'calameo.com',
-            'polishedrx.com', 'medium.com', 'linkedin.com', 'pinterest.com'
-        ];
+    // ENTERPRISE: Multiple query strategies to ALWAYS get 8-12 results
+    const queries = [
+        `${keyword} definitive guide research data statistics 2024 2025 -site:youtube.com -site:facebook.com -site:pinterest.com -site:twitter.com -site:reddit.com`,
+        `${keyword} "how to" "guide" "tips" 2026 2025 -site:youtube.com -site:pinterest.com`,
+        `${keyword} best practices expert advice -site:youtube.com -site:pinterest.com`
+    ];
 
-        const validationPromises = potentialLinks.map(async (link: any) => {
-            try {
-                if (!link.link) return null;
-                const linkDomain = new URL(link.link).hostname.replace('www.', '');
+    const allResults: Array<{ url: string, title: string, source: string }> = [];
+    const seenUrls = new Set<string>();
 
-                // Block spam domains
-                if (BLOCKED_DOMAINS.some(blocked => linkDomain.includes(blocked))) return null;
+    const BLOCKED_DOMAINS = [
+        'quora.com', 'scribd.com', 'dokumen.pub', 'asau.ru', 'slideserve.com',
+        'studylib.net', 'document.pub', 'pdfcoffee.com', 'slideshare.net',
+        'academia.edu', 'researchgate.net', 'coursehero.com', 'chegg.com',
+        'slideplayer.com', 'vdocuments.mx', 'fdocuments.in', 'kupdf.net',
+        'pdfslide.net', 'issuu.com', 'yumpu.com', 'calameo.com',
+        'polishedrx.com', 'medium.com', 'linkedin.com', 'pinterest.com'
+    ];
 
-                return { title: link.title, url: link.link, source: linkDomain };
-            } catch (e) { return null; }
-        });
+    for (const query of queries) {
+        if (allResults.length >= count) break;
 
-        const results = await Promise.all(validationPromises);
-        return results.filter(r => r !== null) as { title: string, url: string, source: string }[];
-    } catch (e) { return []; }
+        try {
+            const response = await fetchWithProxies("https://google.serper.dev/search", {
+                method: 'POST',
+                headers: { 'X-API-KEY': serperApiKey, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ q: query, num: 30 })
+            });
+            const data = await response.json();
+            const potentialLinks = data.organic || [];
+
+            for (const link of potentialLinks) {
+                if (allResults.length >= count) break;
+                if (!link.link) continue;
+                if (seenUrls.has(link.link)) continue;
+
+                try {
+                    const linkDomain = new URL(link.link).hostname.replace('www.', '');
+                    if (BLOCKED_DOMAINS.some(blocked => linkDomain.includes(blocked))) continue;
+
+                    seenUrls.add(link.link);
+                    allResults.push({ title: link.title, url: link.link, source: linkDomain });
+                } catch (e) { continue; }
+            }
+        } catch (e) { continue; }
+    }
+
+    return allResults;
 };
 
 export const fetchVerifiedReferences = async (keyword: string, serperApiKey: string, wpUrl?: string): Promise<string> => {
