@@ -1092,7 +1092,6 @@ Return ONLY the conclusion text (no headings, just paragraphs).`;
 <ol style="line-height: 2; padding-left: 1.5rem; color: #334155;">
 ${finalLinks.map(ref => `  <li><a href="${ref.url}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6; text-decoration: none; font-weight: 600;">${ref.title}</a> - ${ref.description}</li>`).join('\n')}
 </ol>
-<p style="font-size: 0.9rem; color: #64748b; margin: 1rem 0; font-style: italic;">All references verified for accuracy and accessibility as of 2026.</p>
 `;
 
         referencesSection.insertAdjacentHTML('afterend', referencesHtml);
