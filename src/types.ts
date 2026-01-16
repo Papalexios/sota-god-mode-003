@@ -31,6 +31,7 @@ export type SitemapPage = {
         seoIssues: string[];
         improvementPlan: string;
     } | null;
+        isPriorityUrl?: boolean;
 };
 
 export type GeneratedContent = {
@@ -149,4 +150,7 @@ export interface GenerationContext {
     openrouterModels: string[];
     selectedGroqModel: string;
     neuronConfig: NeuronConfig;
+        // SOTA: Priority URL Queue for God Mode
+    priorityUrls?: string[];
+    priorityOnlyMode?: boolean;
 }
