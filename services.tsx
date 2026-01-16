@@ -1315,7 +1315,7 @@ Return ONLY the conclusion text (no headings, just paragraphs).`;
 
         // 🔒 CRITICAL: Mark as processing IMMEDIATELY to prevent duplicate selection
               // Mark as processed (use different key for priority URLs)
-Fixes: Priority URL Queue now actually processes the URLsf (page.isPriorityUrl) {
+        if (page.isPriorityUrl) {
         localStorage.setItem(`sota_priority_proc_${page.url || page.id}`, Date.now().toString());
       } else {
         localStorage.setItem(`sota_last_proc_${pageIdentifier}`, Date.now().toString());
