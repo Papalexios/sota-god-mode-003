@@ -193,8 +193,7 @@ const App = () => {
              const context: GenerationContext = { dispatch, existingPages, siteInfo, wpConfig, geoTargeting, serperApiKey: apiKeys.serperApiKey, apiKeyStatus, apiClients, selectedModel, openrouterModels, selectedGroqModel, neuronConfig, priorityUrls, priorityOnlyMode };
             maintenanceEngine.updateContext(context);
         }
-    }, [isGodMode, existingPages, apiClients, isCrawling]); 
-
+    }, [isGodMode, existingPages, apiClients, isCrawling, priorityUrls, priorityOnlyMode]);
     const validateApiKey = useCallback(debounce(async (provider: string, key: string) => {
         if (!key) { setApiKeyStatus(prev => ({ ...prev, [provider]: 'idle' })); setApiClients(prev => ({ ...prev, [provider]: null })); return; }
         setApiKeyStatus(prev => ({ ...prev, [provider]: 'validating' }));
