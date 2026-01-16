@@ -1225,3 +1225,143 @@ export const generateContent = {
         }, 1, (c, t) => onProgress({ current: c, total: t }), () => shouldStop().current.size > 0);
     }
 };
+
+// ====================================================================
+// 2. CONTENT STRATEGY & PLANNING - GAP ANALYSIS INTEGRATION
+// ====================================================================
+
+/**
+ * Export Gap Analysis suggestions to Priority URL Queue
+ * This integrates the Gap Analysis results with the existing Priority URL Queue
+ * for seamless content strategy planning
+ */
+export const exportGapAnalysisToPriorityQueue = (
+  gapSuggestions: GapAnalysisSuggestion[],
+  priorityLevel: 'high' | 'medium' | 'low' = 'medium'
+): void => {
+  try {
+    // Get existing priority URLs from localStorage
+    const existingUrls = JSON.parse(localStorage.getItem('sota_priority_proc_queue') || '[]');
+    
+    // Transform gap suggestions into priority URL format
+    const newPriorityUrls = gapSuggestions.map((gap, index) => ({
+      url: gap.suggestedUrl || `${gap.topic.toLowerCase().replace(/\s+/g, '-')}`,
+      title: gap.title || gap.topic,
+      priority: priorityLevel,
+      status: 'pending' as const,
+      addedAt: new Date().toISOString(),
+      source: 'gap-analysis',
+      metadata: {
+        topic: gap.topic,
+        reason: gap.reason,
+        searchVolume: gap.searchVolume,
+        difficulty: gap.difficulty,
+        priority: gap.priority
+      }
+    }));
+    
+    // Merge with existing queue, avoiding duplicates
+    const urlSet = new Set(existingUrls.map((u: any) => u.url));
+    const uniqueNewUrls = newPriorityUrls.filter(u => !urlSet.has(u.url));
+    
+    const updatedQueue = [...existingUrls, ...uniqueNewUrls];
+    localStorage.setItem('sota_priority_proc_queue', JSON.stringify(updatedQueue));
+    
+    console.log(`✅ Exported ${uniqueNewUrls.length} gap analysis suggestions to Priority URL Queue`);
+  } catch (error) {
+    console.error('Failed to export gap analysis to priority queue:', error);
+  }
+};
+
+/**
+ * Enhance Gap Analysis suggestions with Priority URL Queue insights
+ * Identifies which gaps are already in the priority queue and adds strategic context
+ */
+export const enhanceGapAnalysisWithQueueStatus = (
+  gapSuggestions: GapAnalysisSuggestion[]
+): GapAnalysisSuggestion[] => {
+  try {
+    // Get existing priority URLs from localStorage
+    const existingUrls = JSON.parse(localStorage.getItem('sota_priority_proc_queue') || '[]');
+    const queueUrlMap = new Map(existingUrls.map((item: any) => [item.url, item]));
+    
+    // Enhance each gap suggestion with queue status
+    return gapSuggestions.map(gap => {
+      const queueItem = queueUrlMap.get(gap.suggestedUrl || '');
+      
+      return {
+        ...gap,
+        inPriorityQueue: !!queueItem,
+        queueStatus: queueItem?.status || null,
+        queuePriority: queueItem?.priority || null,
+        enhancedReason: queueItem 
+          ? `${gap.reason} (Already in Priority Queue with ${queueItem.status} status)`
+          : gap.reason
+      };
+    });
+  } catch (error) {
+    console.error('Failed to enhance gap analysis with queue status:', error);
+    return gapSuggestions; // Return original suggestions if enhancement fails
+  }
+};
+
+/**
+ * Batch add multiple gap suggestions to Priority URL Queue
+ * Provides filtering options for strategic selection
+ */
+export const batchAddGapsToQueue = (
+  gapSuggestions: GapAnalysisSuggestion[],
+  filters?: {
+    minPriority?: number;
+    maxDifficulty?: number;
+    searchVolumeThreshold?: number;
+  }
+): { added: number; skipped: number } => {
+  try {
+    // Apply filters if provided
+    let filteredGaps = gapSuggestions;
+    
+    if (filters) {
+      filteredGaps = gapSuggestions.filter(gap => {
+        if (filters.minPriority && gap.priority < filters.minPriority) return false;
+        if (filters.maxDifficulty && gap.difficulty > filters.maxDifficulty) return false;
+        if (filters.searchVolumeThreshold && gap.searchVolume < filters.searchVolumeThreshold) return false;
+        return true;
+      });
+    }
+    
+    // Determine priority level based on gap metrics
+    const gapsWithPriority = filteredGaps.map(gap => ({
+      ...gap,
+      calculatedPriority: gap.priority >= 8 ? 'high' : gap.priority >= 5 ? 'medium' : 'low'
+    }));
+    
+    // Group by priority level
+    const highPriority = gapsWithPriority.filter(g => g.calculatedPriority === 'high');
+    const mediumPriority = gapsWithPriority.filter(g => g.calculatedPriority === 'medium');
+    const lowPriority = gapsWithPriority.filter(g => g.calculatedPriority === 'low');
+    
+    // Export each group with appropriate priority
+    let totalAdded = 0;
+    if (highPriority.length > 0) {
+      exportGapAnalysisToPriorityQueue(highPriority, 'high');
+      totalAdded += highPriority.length;
+    }
+    if (mediumPriority.length > 0) {
+      exportGapAnalysisToPriorityQueue(mediumPriority, 'medium');
+      totalAdded += mediumPriority.length;
+    }
+    if (lowPriority.length > 0) {
+      exportGapAnalysisToPriorityQueue(lowPriority, 'low');
+      totalAdded += lowPriority.length;
+    }
+    
+    return {
+      added: totalAdded,
+      skipped: gapSuggestions.length - filteredGaps.length
+    };
+  } catch (error) {
+    console.error('Failed to batch add gaps to queue:', error);
+    return { added: 0, skipped: gapSuggestions.length };
+  }
+};
