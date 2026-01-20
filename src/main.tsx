@@ -3,12 +3,6 @@ import ReactDOM from 'react-dom/client';
 import App, { SotaErrorBoundary } from './App';
 import './index.css';
 
-// Suppress console errors in production
-if (import.meta.env.PROD) {
-  console.error = () => {};
-  console.warn = () => {};
-}
-
 const rootElement = document.getElementById('root');
 
 if (!rootElement) {
@@ -22,4 +16,3 @@ ReactDOM.createRoot(rootElement).render(
     </SotaErrorBoundary>
   </React.StrictMode>
 );
-
