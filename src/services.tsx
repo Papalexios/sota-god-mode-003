@@ -1,5 +1,5 @@
 // =============================================================================
-// SOTA WP CONTENT OPTIMIZER PRO - SERVICES v12.1
+// SOTA WP CONTENT OPTIMIZER PRO - SERVICES v12.0
 // Enterprise-Grade AI Services, Content Generation & God Mode Engine
 // =============================================================================
 
@@ -8,9 +8,9 @@ import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 
 import { PROMPT_TEMPLATES, buildPrompt } from './prompts';
-import { 
-  AI_MODELS, 
-  BLOCKED_REFERENCE_DOMAINS, 
+import {
+  AI_MODELS,
+  BLOCKED_REFERENCE_DOMAINS,
   BLOCKED_SPAM_DOMAINS,
   PROCESSING_LIMITS,
   TARGET_MIN_WORDS,
@@ -56,12 +56,16 @@ import { generateFullSchema } from './schema-generator';
 import { fetchNeuronTerms } from './neuronwriter';
 
 // =============================================================================
-// SOTA JSON EXTRACTION - ENTERPRISE GRADE ERROR HANDLING
+// SECTION 1: SOTA JSON EXTRACTION - ENTERPRISE GRADE ERROR HANDLING
 // =============================================================================
 
 /**
- * Safely extracts JSON from AI responses that may contain markdown or text wrapping
- * Handles: ```json blocks, raw JSON, JSON within text, and error responses
+ * Safely extracts JSON from AI responses that may contain markdown or text wrapping.
+ * Handles: ```json blocks, raw JSON, JSON within text, and error responses.
+ *
+ * @param response - Raw response string from AI or API
+ * @returns Extracted JSON string ready for parsing
+ * @throws Error with descriptive message if extraction fails
  */
 const extractJsonFromResponse = (response: string): string => {
   if (!response || typeof response !== 'string') {
@@ -76,18 +80,21 @@ const extractJsonFromResponse = (response: string): string => {
   }
 
   // Case 2: Markdown code block with json/JSON tag
-  const jsonBlockMatch = trimmed.match(/```(?:json|JSON)?\s*\n?([\s\S]*?)\n?```/);
+  const jsonBlockRegex = /(?:json|JSON)?\s*\n?([\s\S]+?)\n?/;
+  const jsonBlockMatch = trimmed.match(jsonBlockRegex);
+
   if (jsonBlockMatch && jsonBlockMatch[1]) {
     const extracted = jsonBlockMatch[1].trim();
+    // Verify it looks like JSON
     if (extracted.startsWith('{') || extracted.startsWith('[')) {
       return extracted;
     }
   }
 
-  // Case 3: JSON embedded in text - find first { or [ and last } or ]
+  // Case 3: Try to find JSON object/array anywhere in the text
   const firstBrace = trimmed.indexOf('{');
   const firstBracket = trimmed.indexOf('[');
-  
+
   let startIndex = -1;
   let isObject = true;
 
@@ -102,105 +109,117 @@ const extractJsonFromResponse = (response: string): string => {
   if (startIndex !== -1) {
     const endChar = isObject ? '}' : ']';
     const lastEnd = trimmed.lastIndexOf(endChar);
-    
+
     if (lastEnd > startIndex) {
       const extracted = trimmed.substring(startIndex, lastEnd + 1);
-      // Validate basic JSON structure before returning
+      // Validate it parses
       try {
         JSON.parse(extracted);
         return extracted;
       } catch {
-        // Continue to error checks if simple extraction failed
+        // Fall through to error handling
       }
     }
   }
 
-  // Case 4: Response is an error message (The "Unexpected token B" Fix)
+  // Case 4: Check for common error responses
   const errorPatterns = [
-    { pattern: /^Bad Request/i, message: 'API returned Bad Request error' },
-    { pattern: /^Blocked/i, message: 'Request was blocked by the service' },
-    { pattern: /^Error/i, message: 'API returned an error' },
-    { pattern: /^<!DOCTYPE/i, message: 'API returned HTML instead of JSON' },
-    { pattern: /^<html/i, message: 'API returned HTML page instead of JSON' },
-    { pattern: /^Unauthorized/i, message: 'Authentication failed - check API key' },
-    { pattern: /^Forbidden/i, message: 'Access forbidden - check permissions' },
-    { pattern: /^Not Found/i, message: 'Resource not found - check URL' },
-    { pattern: /^Internal Server Error/i, message: 'Server error - try again later' },
-    { pattern: /^Rate limit/i, message: 'Rate limit exceeded - wait and retry' },
+    { pattern: /^Bad Request/i, msg: 'API returned Bad Request' },
+    { pattern: /^Blocked/i, msg: 'Request was blocked' },
+    { pattern: /^Error/i, msg: 'API returned an error' },
+    { pattern: /^<!DOCTYPE/i, msg: 'API returned HTML instead of JSON' },
+    { pattern: /^<html/i, msg: 'API returned HTML page' },
+    { pattern: /^Unauthorized/i, msg: 'Authentication failed' },
+    { pattern: /^Forbidden/i, msg: 'Access forbidden' },
+    { pattern: /^Not Found/i, msg: 'Resource not found' },
+    { pattern: /^Internal Server Error/i, msg: 'Server error' },
+    { pattern: /^Rate limit/i, msg: 'Rate limit exceeded' },
   ];
 
-  for (const { pattern, message } of errorPatterns) {
+  for (const { pattern, msg } of errorPatterns) {
     if (pattern.test(trimmed)) {
-      throw new Error(`${message}. Response: "${trimmed.substring(0, 150)}..."`);
+      throw new Error(`${msg}: "${trimmed.substring(0, 100)}..."`);
     }
   }
 
-  // Case 5: AI response starting with common conversational prefixes
-  const aiPrefixes = [
-    /^Based on/i, /^Here(?:'s| is)/i, /^Below/i, /^The following/i, 
-    /^I(?:'ve| have)/i, /^Let me/i, /^Sure/i, /^Certainly/i,
+  // Case 5: AI conversational prefix - try harder to find JSON
+  const conversationalPrefixes = [
+    /^Based on/i,
+    /^Here(?:'s| is)/i,
+    /^Below/i,
+    /^The following/i,
+    /^I(?:'ve| have)/i,
+    /^Let me/i,
+    /^Sure/i,
+    /^Certainly/i,
   ];
 
-  for (const prefix of aiPrefixes) {
+  for (const prefix of conversationalPrefixes) {
     if (prefix.test(trimmed)) {
-      // AI added conversational prefix - try to find JSON after it aggressively
-      const jsonStart = Math.max(trimmed.indexOf('{'), trimmed.indexOf('['));
-      if (jsonStart !== -1) {
-        const isObj = trimmed.charAt(jsonStart) === '{';
-        const endChar = isObj ? '}' : ']';
-        const jsonEnd = trimmed.lastIndexOf(endChar);
-        if (jsonEnd > jsonStart) {
-          return trimmed.substring(jsonStart, jsonEnd + 1);
+      // Find first { or [ after the prefix
+      const afterPrefix = trimmed.substring(20); // Skip prefix
+      const braceIdx = afterPrefix.indexOf('{');
+      const bracketIdx = afterPrefix.indexOf('[');
+
+      let jsonStartIdx = -1;
+      let endChar = '}';
+
+      if (braceIdx !== -1 && (bracketIdx === -1 || braceIdx < bracketIdx)) {
+        jsonStartIdx = braceIdx + 20;
+        endChar = '}';
+      } else if (bracketIdx !== -1) {
+        jsonStartIdx = bracketIdx + 20;
+        endChar = ']';
+      }
+
+      if (jsonStartIdx !== -1) {
+        const lastEnd = trimmed.lastIndexOf(endChar);
+        if (lastEnd > jsonStartIdx) {
+          return trimmed.substring(jsonStartIdx, lastEnd + 1);
         }
       }
     }
   }
 
-  // Case 6: Cannot extract JSON - throw with preview
+  // Final: Cannot extract - throw descriptive error
   throw new Error(
-    `Could not extract valid JSON from AI response. Response starts with: "${trimmed.substring(0, 80)}..." (Total length: ${trimmed.length} chars)`
+    `Could not extract valid JSON from AI response. Response starts with: "${trimmed.substring(0, 80)}..." (Length: ${trimmed.length} chars)`
   );
 };
 
 /**
- * Safe JSON parse with extraction and detailed error reporting
+ * Safe JSON parse with extraction and context-aware error messages.
  */
-const safeJsonParse = <T = any>(response: string, context: string = 'Unknown'): T => {
+const safeJsonParse = <T = unknown>(response: string, context: string = 'Unknown'): T => {
   try {
     const jsonString = extractJsonFromResponse(response);
     return JSON.parse(jsonString) as T;
-  } catch (error: any) {
-    console.error(`[SafeJsonParse] Failed in context: ${context}`);
-    console.error(`[SafeJsonParse] Error: ${error.message}`);
-    console.error(`[SafeJsonParse] Response preview: ${response?.substring(0, 300)}`);
-    
-    // Re-throw with enhanced context
-    throw new Error(`JSON parse failed (${context}): ${error.message}`);
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[safeJsonParse] Context: ${context}`);
+    console.error(`[safeJsonParse] Error: ${errMsg}`);
+    console.error(`[safeJsonParse] Response preview: ${response?.substring(0, 500)}`);
+    throw new Error(`JSON parse failed (${context}): ${errMsg}`);
   }
 };
 
 /**
- * Surgical HTML sanitizer for AI-generated content
- * Removes markdown artifacts while preserving valid HTML
+ * Sanitizes AI-generated HTML by removing markdown artifacts.
  */
 const surgicalSanitizer = (html: string): string => {
   if (!html || typeof html !== 'string') return '';
 
   return html
-    // Remove markdown code block wrappers
-    .replace(/^```html\s*\n?/gi, '')
-    .replace(/\n?```\s*$/gi, '')
+    .replace(/^html\s*\n?/gi, '')
+    .replace(/\n?\s*$/gi, '')
     .replace(/^```\s*\n?/gi, '')
-    // Remove AI conversational prefixes
-    .replace(/^(?:Here(?:'s| is) the|Below is|The following|Based on)[^<]*</i, '<')
-    // Fix common HTML issues
+    .replace(/^(?:Here(?:'s| is) the|Below is|The following)[^<]*</i, '<')
     .replace(/\n{3,}/g, '\n\n')
-    // Trim whitespace
     .trim();
 };
 
 // =============================================================================
-// AI CLIENT WRAPPER - MULTI-PROVIDER SUPPORT
+// SECTION 2: AI CLIENT WRAPPER - MULTI-PROVIDER SUPPORT
 // =============================================================================
 
 export const callAI = async (
@@ -210,7 +229,7 @@ export const callAI = async (
   openrouterModels: string[],
   selectedGroqModel: string,
   promptKey: keyof typeof PROMPT_TEMPLATES | string,
-  args: any[],
+  args: unknown[],
   format: 'json' | 'html' = 'json',
   useGrounding: boolean = false
 ): Promise<string> => {
@@ -222,7 +241,7 @@ export const callAI = async (
 
   const systemInstruction = promptTemplate.systemInstruction;
   const userPrompt = typeof promptTemplate.userPrompt === 'function' 
-    ? promptTemplate.userPrompt(...args) 
+    ? (promptTemplate.userPrompt as (...a: unknown[]) => string)(...args) 
     : promptTemplate.userPrompt;
 
   // Add geo-targeting context if enabled
@@ -231,7 +250,7 @@ export const callAI = async (
     enhancedPrompt = `[GEO-TARGET: ${geoTargeting.location}, ${geoTargeting.region}, ${geoTargeting.country}]\n\n${userPrompt}`;
   }
 
-  // Try primary model, then fallback
+  // Build fallback chain
   const modelPriority = [selectedModel];
   if (selectedModel !== 'gemini' && apiClients.gemini) modelPriority.push('gemini');
   if (selectedModel !== 'openai' && apiClients.openai) modelPriority.push('openai');
@@ -301,25 +320,26 @@ export const callAI = async (
           continue;
       }
 
-      // For HTML format, just sanitize
+      // For HTML format, just sanitize and return
       if (format === 'html') {
         return surgicalSanitizer(response);
       }
 
-      // For JSON format, validate it's parseable (but return raw string)
+      // For JSON format, validate extraction works (but return raw)
       try {
         extractJsonFromResponse(response);
       } catch (e) {
-        console.warn(`[callAI] ${modelKey} returned invalid JSON, trying next model...`);
+        console.warn(`[callAI] ${modelKey} returned invalid JSON, trying next...`);
         lastError = e as Error;
         continue;
       }
 
       return response;
 
-    } catch (error: any) {
-      console.error(`[callAI] ${modelKey} failed:`, error.message);
-      lastError = error;
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[callAI] ${modelKey} failed:`, errMsg);
+      lastError = error instanceof Error ? error : new Error(errMsg);
       continue;
     }
   }
@@ -328,7 +348,7 @@ export const callAI = async (
 };
 
 // =============================================================================
-// INDIVIDUAL AI PROVIDER IMPLEMENTATIONS
+// SECTION 3: INDIVIDUAL AI PROVIDER IMPLEMENTATIONS
 // =============================================================================
 
 async function callGemini(
@@ -339,7 +359,7 @@ async function callGemini(
   useGrounding: boolean
 ): Promise<string> {
   const model = AI_MODELS.GEMINI_FLASH;
-  const generationConfig: any = {
+  const generationConfig: Record<string, unknown> = {
     temperature: format === 'json' ? 0.3 : 0.7,
     topP: 0.95,
     maxOutputTokens: 16384,
@@ -355,12 +375,14 @@ async function callGemini(
     config: {
       systemInstruction,
       ...generationConfig,
-      ...(useGrounding && { tools: [{ googleSearch: {} }], }),
+      ...(useGrounding && { tools: [{ googleSearch: {} }] }),
     },
   });
 
   const text = response.text;
-  if (!text) throw new Error('Gemini returned empty response');
+  if (!text) {
+    throw new Error('Gemini returned empty response');
+  }
   return text;
 }
 
@@ -382,7 +404,9 @@ async function callOpenAI(
   });
 
   const text = response.choices[0]?.message?.content;
-  if (!text) throw new Error('OpenAI returned empty response');
+  if (!text) {
+    throw new Error('OpenAI returned empty response');
+  }
   return text;
 }
 
@@ -400,9 +424,13 @@ async function callAnthropic(
     temperature: format === 'json' ? 0.3 : 0.7,
   });
 
-  const textBlock = response.content.find((block: any) => block.type === 'text');
-  if (!textBlock || textBlock.type !== 'text') throw new Error('Anthropic returned no text content');
-  return textBlock.text;
+  const textBlock = response.content.find(
+    (block: { type: string }) => block.type === 'text'
+  );
+  if (!textBlock || textBlock.type !== 'text') {
+    throw new Error('Anthropic returned no text content');
+  }
+  return (textBlock as { type: 'text'; text: string }).text;
 }
 
 async function callOpenRouter(
@@ -428,8 +456,8 @@ async function callOpenRouter(
 
       const text = response.choices[0]?.message?.content;
       if (text) return text;
-    } catch (error: any) {
-      lastError = error;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
       console.warn(`[OpenRouter] ${model} failed, trying next...`);
       continue;
     }
@@ -455,159 +483,29 @@ async function callGroq(
   });
 
   const text = response.choices[0]?.message?.content;
-  if (!text) throw new Error('Groq returned empty response');
+  if (!text) {
+    throw new Error('Groq returned empty response');
+  }
   return text;
 }
 
 // =============================================================================
-// REFERENCE VALIDATION ENGINE
+// SECTION 4: REFERENCE VALIDATION ENGINE
 // =============================================================================
 
 /**
- * Fetch and validate references with category-aware search
- */
-export const fetchVerifiedReferences = async (
-  keyword: string,
-  semanticKeywords: string[],
-  serperApiKey: string,
-  wpUrl?: string
-): Promise<string> => {
-  if (!serperApiKey) {
-    console.warn('[fetchVerifiedReferences] No Serper API key provided');
-    return '';
-  }
-
-  try {
-    // Detect content category from keywords
-    const category = detectCategory(keyword, semanticKeywords);
-    const categoryConfig = REFERENCE_CATEGORIES[category as keyof typeof REFERENCE_CATEGORIES];
-    const currentYear = new Date().getFullYear();
-
-    console.log(`[fetchVerifiedReferences] Category detected: ${category}`);
-
-    // Extract user domain for exclusion
-    let userDomain = '';
-    if (wpUrl) {
-      try {
-        userDomain = new URL(wpUrl).hostname.replace('www.', '');
-      } catch (e) {
-        // Invalid URL, ignore
-      }
-    }
-
-    // Build topic-aware search query
-    let query: string;
-    if (categoryConfig) {
-      const modifiers = categoryConfig.searchModifiers.slice(0, 2).join(' OR ');
-      const domainFilters = categoryConfig.authorityDomains
-        .slice(0, 3)
-        .map((d: string) => `site:${d}`)
-        .join(' OR ');
-      query = `${keyword} "${modifiers}" (${domainFilters}) ${currentYear}`;
-    } else {
-      query = `${keyword} "research" "data" "statistics" ${currentYear} -site:youtube.com -site:reddit.com`;
-    }
-
-    // Search with Serper
-    const response = await fetchWithProxies('https://google.serper.dev/search', {
-      method: 'POST',
-      headers: {
-        'X-API-KEY': serperApiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ q: query, num: 20 }),
-    });
-
-    // SAFE PARSE: Handle potential non-JSON responses
-    const responseText = await response.text();
-    let data: any;
-
-    try {
-      data = safeJsonParse(responseText, 'Serper API Response');
-    } catch (parseError) {
-      console.error('[fetchVerifiedReferences] Serper response parse error:', parseError);
-      return '';
-    }
-
-    const potentialLinks = data.organic || [];
-    const validLinks: Array<{
-      title: string;
-      url: string;
-      source: string;
-      category: string;
-    }> = [];
-
-    // Validate each link
-    for (const link of potentialLinks) {
-      if (validLinks.length >= 8) break;
-
-      try {
-        const urlObj = new URL(link.link);
-        const domain = urlObj.hostname.replace('www.', '').toLowerCase();
-
-        // Skip user's own domain
-        if (userDomain && domain.includes(userDomain)) continue;
-
-        // Skip blocked domains
-        if (isBlockedDomain(link.link)) continue;
-
-        // Skip spam domains
-        if (BLOCKED_SPAM_DOMAINS.some(spam => domain.includes(spam))) continue;
-
-        // Validate link is accessible (200 status only)
-        const checkRes = await Promise.race([
-          fetchWithProxies(link.link, {
-            method: 'HEAD',
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            },
-          }),
-          new Promise<Response>((_, reject) =>
-            setTimeout(() => reject(new Error('timeout')), 5000)
-          ),
-        ]) as Response;
-
-        if (checkRes.status === 200) {
-          validLinks.push({
-            title: link.title || 'Reference',
-            url: link.link,
-            source: domain,
-            category,
-          });
-          console.log(`[fetchVerifiedReferences] ✅ Validated: ${domain}`);
-        }
-      } catch (e) {
-        // Skip invalid or inaccessible links
-        continue;
-      }
-    }
-
-    if (validLinks.length === 0) {
-      console.warn('[fetchVerifiedReferences] No valid references found');
-      return '';
-    }
-
-    // Generate beautiful HTML
-    return generateReferenceHTML(validLinks, category, keyword);
-  } catch (e: any) {
-    console.error('[fetchVerifiedReferences] Error:', e.message);
-    return '';
-  }
-};
-
-/**
- * Detect content category from keywords
+ * Detects content category from keywords for topic-aware reference search.
  */
 function detectCategory(keyword: string, semanticKeywords: string[]): string {
   const allKeywords = [keyword, ...semanticKeywords].join(' ').toLowerCase();
 
   const categoryPatterns: Record<string, string[]> = {
     health: ['health', 'medical', 'disease', 'treatment', 'symptom', 'doctor', 'patient', 'diagnosis'],
-    fitness: ['fitness', 'workout', 'exercise', 'gym', 'training', 'muscle', 'cardio', 'running', 'cycling'],
-    nutrition: ['nutrition', 'diet', 'food', 'calorie', 'protein', 'vitamin', 'meal', 'eating', 'weight loss'],
-    technology: ['software', 'app', 'programming', 'code', 'developer', 'tech', 'computer', 'ai', 'machine learning'],
-    business: ['business', 'startup', 'entrepreneur', 'marketing', 'sales', 'revenue', 'investment', 'finance'],
-    science: ['research', 'study', 'scientific', 'experiment', 'data', 'analysis', 'journal', 'peer-reviewed'],
+    fitness: ['fitness', 'workout', 'exercise', 'gym', 'training', 'muscle', 'cardio', 'running'],
+    nutrition: ['nutrition', 'diet', 'food', 'calorie', 'protein', 'vitamin', 'meal', 'weight loss'],
+    technology: ['software', 'app', 'programming', 'code', 'developer', 'tech', 'computer', 'ai'],
+    business: ['business', 'startup', 'entrepreneur', 'marketing', 'sales', 'revenue', 'investment'],
+    science: ['research', 'study', 'scientific', 'experiment', 'data', 'analysis', 'journal'],
   };
 
   let bestCategory = 'general';
@@ -625,16 +523,15 @@ function detectCategory(keyword: string, semanticKeywords: string[]): string {
 }
 
 /**
- * Generate beautiful reference section HTML
+ * Generates beautiful reference section HTML.
  */
 function generateReferenceHTML(
   links: Array<{ title: string; url: string; source: string; category: string }>,
-  category: string,
-  keyword: string
+  category: string
 ): string {
   const linksHtml = links
     .map(
-      (link, idx) => `
+      (link) => `
       <li style="margin-bottom: 1rem; padding: 1rem; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
         <a href="${link.url}" target="_blank" rel="noopener noreferrer" style="color: #1e40af; font-weight: 600; text-decoration: none; display: block; margin-bottom: 0.25rem;">
           ${link.title}
@@ -650,29 +547,139 @@ function generateReferenceHTML(
 
   return `
     <div class="sota-references-section" style="margin-top: 3rem; padding: 2rem; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); border-radius: 16px; border: 1px solid #cbd5e1;">
-      <h2 style="margin: 0 0 1.5rem 0; font-size: 1.5rem; color: #1e293b; display: flex; align-items: center; gap: 0.5rem;">
+      <h2 style="margin: 0 0 1.5rem 0; font-size: 1.5rem; color: #1e293b;">
         📚 Trusted References & Further Reading
       </h2>
       <p style="margin-bottom: 1rem; color: #64748b; font-size: 0.9rem;">
         All sources verified and accessible (200 status). Category: ${category.charAt(0).toUpperCase() + category.slice(1)}
       </p>
-      <ul style="list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
+      <ul style="list-style: none; padding: 0; margin: 0;">
         ${linksHtml}
       </ul>
     </div>`;
 }
 
+/**
+ * Fetch and validate references with category-aware search.
+ */
+export const fetchVerifiedReferences = async (
+  keyword: string,
+  semanticKeywords: string[],
+  serperApiKey: string,
+  wpUrl?: string
+): Promise<string> => {
+  if (!serperApiKey) {
+    console.warn('[fetchVerifiedReferences] No Serper API key provided');
+    return '';
+  }
+
+  try {
+    const category = detectCategory(keyword, semanticKeywords);
+    const categoryConfig = REFERENCE_CATEGORIES[category as keyof typeof REFERENCE_CATEGORIES];
+    const currentYear = new Date().getFullYear();
+
+    let userDomain = '';
+    if (wpUrl) {
+      try {
+        userDomain = new URL(wpUrl).hostname.replace('www.', '');
+      } catch {
+        // Invalid URL, ignore
+      }
+    }
+
+    let query: string;
+    if (categoryConfig) {
+      const modifiers = categoryConfig.searchModifiers.slice(0, 2).join(' OR ');
+      const domainFilters = categoryConfig.authorityDomains
+        .slice(0, 3)
+        .map((d: string) => `site:${d}`)
+        .join(' OR ');
+      query = `${keyword} "${modifiers}" (${domainFilters}) ${currentYear}`;
+    } else {
+      query = `${keyword} "research" "data" ${currentYear} -site:youtube.com -site:reddit.com`;
+    }
+
+    const response = await fetchWithProxies('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': serperApiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ q: query, num: 20 }),
+    });
+
+    const responseText = await response.text();
+    let data: { organic?: Array<{ link: string; title?: string }> };
+
+    try {
+      data = safeJsonParse(responseText, 'Serper API Response');
+    } catch {
+      console.error('[fetchVerifiedReferences] Serper response parse error');
+      return '';
+    }
+
+    const potentialLinks = data.organic || [];
+    const validLinks: Array<{
+      title: string;
+      url: string;
+      source: string;
+      category: string;
+    }> = [];
+
+    for (const link of potentialLinks) {
+      if (validLinks.length >= 8) break;
+
+      try {
+        const urlObj = new URL(link.link);
+        const domain = urlObj.hostname.replace('www.', '').toLowerCase();
+
+        if (userDomain && domain.includes(userDomain)) continue;
+        if (isBlockedDomain(link.link)) continue;
+        if (BLOCKED_SPAM_DOMAINS.some(spam => domain.includes(spam))) continue;
+
+        const checkRes = await Promise.race([
+          fetchWithProxies(link.link, {
+            method: 'HEAD',
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible)' },
+          }),
+          new Promise<Response>((_, reject) =>
+            setTimeout(() => reject(new Error('timeout')), 5000)
+          ),
+        ]) as Response;
+
+        if (checkRes.status === 200) {
+          validLinks.push({
+            title: link.title || 'Reference',
+            url: link.link,
+            source: domain,
+            category,
+          });
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    if (validLinks.length === 0) return '';
+
+    return generateReferenceHTML(validLinks, category, keyword);
+  } catch (e) {
+    console.error('[fetchVerifiedReferences] Error:', e);
+    return '';
+  }
+};
+
 // =============================================================================
-// CONTENT GENERATION ENGINE
+// SECTION 5: CONTENT GENERATION ENGINE
 // =============================================================================
 
 export const generateContent = {
   /**
-   * Generate items (articles) from content plan
+   * Generate items (articles) from content plan.
    */
   async generateItems(
     items: ContentItem[],
-    callAIFn: (promptKey: any, args: any[], format?: 'json' | 'html', grounding?: boolean) => Promise<string>,
+    callAIFn: (promptKey: string, args: unknown[], format?: 'json' | 'html', grounding?: boolean) => Promise<string>,
     generateImageFn: (prompt: string) => Promise<string | null>,
     context: GenerationContext,
     onProgress: (progress: { current: number; total: number }) => void,
@@ -711,8 +718,31 @@ export const generateContent = {
           'semantic_keyword_generator'
         );
 
-        // Step 2: Analyze competitors (if Serper available)
-        let serpData: any[] = [];
+        // Step 2: Fetch NeuronWriter terms if enabled
+        let neuronData: string | null = null;
+        if (neuronConfig?.enabled && neuronConfig.apiKey && neuronConfig.projectId) {
+          context.dispatch({
+            type: 'UPDATE_STATUS',
+            payload: { id: item.id, status: 'generating', statusText: 'Fetching NLP terms...' },
+          });
+          try {
+            const neuronTerms = await fetchNeuronTerms(
+              neuronConfig.apiKey,
+              neuronConfig.projectId,
+              item.title
+            );
+            if (neuronTerms) {
+              neuronData = Object.entries(neuronTerms)
+                .map(([key, val]) => `${key}: ${val}`)
+                .join('\n');
+            }
+          } catch (e) {
+            console.warn('[NeuronWriter] Failed to fetch terms:', e);
+          }
+        }
+
+        // Step 3: Analyze competitors
+        let serpData: unknown[] = [];
         let competitorGaps: string[] = [];
 
         if (serperApiKey) {
@@ -732,13 +762,12 @@ export const generateContent = {
             });
 
             const serpText = await serpResponse.text();
-            const serpJson = safeJsonParse<any>(serpText, 'Serper SERP Data');
+            const serpJson = safeJsonParse<{ organic?: unknown[] }>(serpText, 'Serper SERP Data');
             serpData = serpJson.organic || [];
 
-            // Perform gap analysis
             const gapResponse = await callAIFn(
               'competitor_gap_analyzer',
-              [item.title, serpData.slice(0, 5)],
+              [item.title, (serpData as unknown[]).slice(0, 5)],
               'json'
             );
             const gapResult = safeJsonParse<{ gaps: string[] }>(gapResponse, 'competitor_gap_analyzer');
@@ -748,7 +777,7 @@ export const generateContent = {
           }
         }
 
-        // Step 3: Generate content strategy
+        // Step 4: Generate content strategy
         context.dispatch({
           type: 'UPDATE_STATUS',
           payload: { id: item.id, status: 'generating', statusText: 'Planning strategy...' },
@@ -759,9 +788,9 @@ export const generateContent = {
           [item.title, semanticKeywords, serpData, item.type],
           'json'
         );
-        const strategy = safeJsonParse<any>(strategyResponse, 'content_strategy_generator');
+        const strategy = safeJsonParse<Record<string, unknown>>(strategyResponse, 'content_strategy_generator');
 
-        // Step 4: Generate main content
+        // Step 5: Generate main content
         context.dispatch({
           type: 'UPDATE_STATUS',
           payload: { id: item.id, status: 'generating', statusText: 'Writing content...' },
@@ -776,13 +805,14 @@ export const generateContent = {
             existingPages.slice(0, 50),
             competitorGaps,
             geoTargeting.enabled ? geoTargeting.location : null,
+            neuronData,
           ],
           'html'
         );
 
         let generatedHtml = surgicalSanitizer(contentResponse);
 
-        // Step 5: Generate SEO metadata
+        // Step 6: Generate SEO metadata
         context.dispatch({
           type: 'UPDATE_STATUS',
           payload: { id: item.id, status: 'generating', statusText: 'Optimizing SEO...' },
@@ -793,8 +823,8 @@ export const generateContent = {
           [
             item.title,
             generatedHtml.substring(0, 1000),
-            strategy.targetAudience,
-            serpData.map((s: any) => s.title).slice(0, 5),
+            (strategy as { targetAudience?: string }).targetAudience || 'General',
+            (serpData as Array<{ title?: string }>).map((s) => s.title).slice(0, 5),
             geoTargeting.enabled ? geoTargeting.location : null,
           ],
           'json'
@@ -805,7 +835,7 @@ export const generateContent = {
           slug: string;
         }>(metaResponse, 'seo_metadata_generator');
 
-        // Step 6: Generate FAQ section
+        // Step 7: Generate FAQ section
         context.dispatch({
           type: 'UPDATE_STATUS',
           payload: { id: item.id, status: 'generating', statusText: 'Creating FAQ...' },
@@ -814,7 +844,7 @@ export const generateContent = {
         const faqResponse = await callAIFn('sota_faq_generator', [item.title, semanticKeywords], 'html');
         const faqHtml = surgicalSanitizer(faqResponse);
 
-        // Step 7: Generate key takeaways
+        // Step 8: Generate key takeaways
         const takeawaysResponse = await callAIFn(
           'sota_takeaways_generator',
           [item.title, generatedHtml],
@@ -822,7 +852,7 @@ export const generateContent = {
         );
         const takeawaysHtml = surgicalSanitizer(takeawaysResponse);
 
-        // Step 8: Generate references
+        // Step 9: Generate references
         context.dispatch({
           type: 'UPDATE_STATUS',
           payload: { id: item.id, status: 'generating', statusText: 'Validating references...' },
@@ -835,14 +865,14 @@ export const generateContent = {
           wpConfig.url
         );
 
-        // Step 9: Add YouTube videos
+        // Step 10: Add YouTube videos
         let videosHtml = '';
         if (serperApiKey) {
           const videos = await getGuaranteedYoutubeVideos(item.title, serperApiKey, 2);
           videosHtml = generateYoutubeEmbedHtml(videos);
         }
 
-        // Step 10: Process internal links
+        // Step 11: Process internal links
         generatedHtml = processInternalLinkCandidates(
           generatedHtml,
           existingPages.map((p) => ({ title: p.title, slug: p.slug })),
@@ -850,7 +880,7 @@ export const generateContent = {
           MAX_INTERNAL_LINKS
         );
 
-        // Step 11: Assemble final content
+        // Step 12: Assemble final content
         const verificationFooter = generateVerificationFooterHtml();
 
         const finalContent = performSurgicalUpdate(generatedHtml, {
@@ -859,22 +889,21 @@ export const generateContent = {
           referencesHtml,
         });
 
-        // Remove duplicates and add footer
         let cleanContent = removeDuplicateSections(finalContent);
         cleanContent = cleanContent + videosHtml + verificationFooter;
 
-        // Step 12: Generate schema
-        const schemaJson = generateFullSchema(
-          seoTitle,
-          metaDescription,
-          siteInfo.authorName || 'Expert Author',
-          new Date().toISOString(),
-          `${wpConfig.url.replace(/\/$/, '')}/${slug}`,
+        // Step 13: Generate schema
+        const schemaJson = generateFullSchema({
+          title: seoTitle,
+          description: metaDescription,
+          content: cleanContent,
+          datePublished: new Date().toISOString(),
+          dateModified: new Date().toISOString(),
+          author: siteInfo.authorName || 'Expert Author',
           siteInfo,
-          [] // Would extract FAQ items here if needed
-        );
+          faqItems: [],
+        });
 
-        // Final result
         const generatedContent: GeneratedContent = {
           title: seoTitle,
           metaDescription,
@@ -884,7 +913,7 @@ export const generateContent = {
           content: cleanContent,
           strategy,
           serpData,
-          jsonLdSchema: schemaJson,
+          schemaMarkup: schemaJson,
           imageDetails: [],
           wordCount: countWords(cleanContent),
           socialMediaCopy: {
@@ -894,7 +923,8 @@ export const generateContent = {
           faqSection: [],
           keyTakeaways: [],
           outline: [],
-          references: []
+          references: [],
+          neuronAnalysis: neuronData ? { terms_txt: { content_basic: neuronData } } : undefined
         };
 
         context.dispatch({
@@ -906,32 +936,31 @@ export const generateContent = {
           type: 'UPDATE_STATUS',
           payload: { id: item.id, status: 'done', statusText: 'Complete!' },
         });
-      } catch (error: any) {
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
         console.error(`[generateItems] Error for ${item.title}:`, error);
         context.dispatch({
           type: 'UPDATE_STATUS',
-          payload: { id: item.id, status: 'error', statusText: error.message },
+          payload: { id: item.id, status: 'error', statusText: errMsg },
         });
       }
 
-      // Rate limiting
       await delay(500);
     }
   },
 
   /**
-   * Refresh existing content
+   * Refresh existing content.
    */
   async refreshItem(
     item: ContentItem,
-    callAIFn: (promptKey: any, args: any[], format?: 'json' | 'html', grounding?: boolean) => Promise<string>,
+    callAIFn: (promptKey: string, args: unknown[], format?: 'json' | 'html', grounding?: boolean) => Promise<string>,
     context: GenerationContext,
     aiRepairer: (brokenText: string) => Promise<string>
   ): Promise<void> {
-    const { existingPages, siteInfo, wpConfig, geoTargeting, serperApiKey } = context;
+    const { existingPages, wpConfig, serperApiKey, geoTargeting } = context;
 
     try {
-      // Get crawled content
       let crawledContent = item.crawledContent;
       if (!crawledContent && item.originalUrl) {
         context.dispatch({
@@ -945,11 +974,9 @@ export const generateContent = {
         throw new Error('Content too short to refresh');
       }
 
-      // Extract existing images
       const existingImages = extractImagesFromHtml(crawledContent);
       console.log(`[refreshItem] Preserving ${existingImages.length} images`);
 
-      // Extract title from content or URL
       const parser = new DOMParser();
       const doc = parser.parseFromString(crawledContent, 'text/html');
       const existingTitle =
@@ -957,7 +984,6 @@ export const generateContent = {
         item.title ||
         extractSlugFromUrl(item.originalUrl || '').replace(/-/g, ' ');
 
-      // Generate semantic keywords
       context.dispatch({
         type: 'UPDATE_STATUS',
         payload: { id: item.id, status: 'generating', statusText: 'Analyzing content...' },
@@ -969,7 +995,6 @@ export const generateContent = {
         'semantic_keyword_generator'
       );
 
-      // Optimize content using God Mode surgical update
       context.dispatch({
         type: 'UPDATE_STATUS',
         payload: { id: item.id, status: 'generating', statusText: 'Optimizing content...' },
@@ -983,12 +1008,10 @@ export const generateContent = {
 
       let optimizedContent = surgicalSanitizer(optimizedResponse);
 
-      // Reinject preserved images
       if (existingImages.length > 0) {
         optimizedContent = injectImagesIntoContent(optimizedContent, existingImages);
       }
 
-      // Generate references
       const referencesHtml = await fetchVerifiedReferences(
         existingTitle,
         semanticKeywords,
@@ -996,14 +1019,10 @@ export const generateContent = {
         wpConfig.url
       );
 
-      // Add verification footer
       const verificationFooter = generateVerificationFooterHtml();
       optimizedContent = optimizedContent + referencesHtml + verificationFooter;
-
-      // Clean duplicates
       optimizedContent = removeDuplicateSections(optimizedContent);
 
-      // Generate updated SEO metadata
       const metaResponse = await callAIFn(
         'seo_metadata_generator',
         [existingTitle, optimizedContent.substring(0, 1000), 'General audience', [], null],
@@ -1015,7 +1034,6 @@ export const generateContent = {
         slug: string;
       }>(metaResponse, 'seo_metadata_generator');
 
-      // Build result
       const generatedContent: GeneratedContent = {
         title: seoTitle,
         metaDescription,
@@ -1032,6 +1050,7 @@ export const generateContent = {
         outline: [],
         references: [],
         imageDetails: [],
+        wordCount: countWords(optimizedContent),
       };
 
       context.dispatch({
@@ -1043,48 +1062,48 @@ export const generateContent = {
         type: 'UPDATE_STATUS',
         payload: { id: item.id, status: 'done', statusText: 'Refreshed!' },
       });
-    } catch (error: any) {
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
       console.error(`[refreshItem] Error:`, error);
       context.dispatch({
         type: 'UPDATE_STATUS',
-        payload: { id: item.id, status: 'error', statusText: error.message },
+        payload: { id: item.id, status: 'error', statusText: errMsg },
       });
     }
   },
 
   /**
-   * Analyze content gaps
+   * Analyze content gaps.
    */
   async analyzeContentGaps(
     existingPages: SitemapPage[],
     topic: string,
-    callAIFn: (promptKey: any, args: any[], format?: 'json' | 'html', grounding?: boolean) => Promise<string>,
+    callAIFn: (promptKey: string, args: unknown[], format?: 'json' | 'html', grounding?: boolean) => Promise<string>,
     context: GenerationContext
   ): Promise<GapAnalysisSuggestion[]> {
     try {
       const existingTitles = existingPages.map((p) => p.title).slice(0, 100);
 
       const gapResponse = await callAIFn(
-        'gap_analyzer',
-        [existingTitles, [], topic || 'General content'],
+        'competitor_gap_analyzer',
+        [topic || 'General content', [], existingTitles.join('\n')],
         'json'
       );
 
-      // Gap analyzer returns array directly, handle both array and object wrapper
-      const responseParsed = safeJsonParse<any>(gapResponse, 'gap_analyzer');
+      const responseParsed = safeJsonParse<any>(gapResponse, 'competitor_gap_analyzer');
       return Array.isArray(responseParsed) ? responseParsed : (responseParsed.gaps || []);
-    } catch (error: any) {
+    } catch (error) {
       console.error('[analyzeContentGaps] Error:', error);
       return [];
     }
   },
 
   /**
-   * Analyze pages for health check
+   * Analyze pages for health check.
    */
   async analyzePages(
     pages: SitemapPage[],
-    callAIFn: (promptKey: any, args: any[], format?: 'json' | 'html', grounding?: boolean) => Promise<string>,
+    callAIFn: (promptKey: string, args: unknown[], format?: 'json' | 'html', grounding?: boolean) => Promise<string>,
     setPages: React.Dispatch<React.SetStateAction<SitemapPage[]>>,
     onProgress: (progress: { current: number; total: number }) => void,
     shouldStop: () => boolean
@@ -1092,14 +1111,14 @@ export const generateContent = {
     const analyzePage = async (page: SitemapPage, index: number) => {
       if (shouldStop()) return;
 
-      setPages((prev) => prev.map((p) => (p.id === page.id ? { ...p, status: 'analyzing' as const } : p)));
+      setPages((prev) =>
+        prev.map((p) => (p.id === page.id ? { ...p, status: 'analyzing' as const } : p))
+      );
 
       try {
-        // Crawl content
         const crawledContent = await smartCrawl(page.id);
         const wordCount = countWords(crawledContent);
 
-        // Analyze with AI
         const analysisResponse = await callAIFn(
           'health_analyzer',
           [page.id, crawledContent, page.title || page.slug],
@@ -1140,9 +1159,12 @@ export const generateContent = {
               : p
           )
         );
-      } catch (error: any) {
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
         setPages((prev) =>
-          prev.map((p) => (p.id === page.id ? { ...p, status: 'error' as const, justification: error.message } : p))
+          prev.map((p) =>
+            p.id === page.id ? { ...p, status: 'error' as const, justification: errMsg } : p
+          )
         );
       }
 
@@ -1154,17 +1176,16 @@ export const generateContent = {
 };
 
 // =============================================================================
-// IMAGE GENERATION
+// SECTION 6: IMAGE GENERATION
 // =============================================================================
 
 export const generateImageWithFallback = async (
   apiClients: ApiClients,
   prompt: string
 ): Promise<string | null> => {
-  // Try Gemini Imagen first
   if (apiClients.gemini) {
     try {
-      const response = await apiClients.gemini.models.generateImages({
+      const response = await (apiClients.gemini as GoogleGenAI).models.generateImages({
         model: AI_MODELS.GEMINI_IMAGEN,
         prompt,
         config: {
@@ -1173,19 +1194,21 @@ export const generateImageWithFallback = async (
         },
       });
 
-      const imageData = response.generatedImages?.[0]?.image?.imageBytes;
+      const imageData = (
+        response as { generatedImages?: Array<{ image?: { imageBytes?: string } }> }
+      ).generatedImages?.[0]?.image?.imageBytes;
+
       if (imageData) {
         return `data:image/png;base64,${imageData}`;
       }
     } catch (e) {
-      console.warn('[generateImage] Gemini Imagen failed:', e);
+      console.warn('[generateImage] Gemini failed:', e);
     }
   }
 
-  // Fallback to DALL-E 3
   if (apiClients.openai) {
     try {
-      const response = await apiClients.openai.images.generate({
+      const response = await (apiClients.openai as OpenAI).images.generate({
         model: AI_MODELS.OPENAI_DALLE3,
         prompt,
         n: 1,
@@ -1199,7 +1222,7 @@ export const generateImageWithFallback = async (
         return `data:image/png;base64,${imageData}`;
       }
     } catch (e) {
-      console.warn('[generateImage] DALL-E 3 failed:', e);
+      console.warn('[generateImage] DALL-E failed:', e);
     }
   }
 
@@ -1207,7 +1230,7 @@ export const generateImageWithFallback = async (
 };
 
 // =============================================================================
-// WORDPRESS PUBLISHING
+// SECTION 7: WORDPRESS PUBLISHING
 // =============================================================================
 
 export const publishItemToWordPress = async (
@@ -1216,42 +1239,39 @@ export const publishItemToWordPress = async (
   status: 'publish' | 'draft',
   fetchFn: typeof fetch,
   wpConfig: WpConfig
-): Promise<{ success: boolean; message: React.ReactNode; link?: string }> => {
+): Promise<{ success: boolean; message: React.ReactNode; link?: string; postId?: number }> => {
   if (!item.generatedContent) {
     return { success: false, message: 'No content to publish' };
   }
 
-  const { title, metaDescription, slug, content, jsonLdSchema } = item.generatedContent;
+  const { title, metaDescription, slug, content, schemaMarkup } = item.generatedContent;
   const baseUrl = wpConfig.url.replace(/\/+$/, '');
   const authHeader = `Basic ${btoa(`${wpConfig.username}:${wpPassword}`)}`;
 
-  // Inject schema into content
-  const schemaString = jsonLdSchema ? JSON.stringify(jsonLdSchema) : '';
+  const schemaString = schemaMarkup ? JSON.stringify(schemaMarkup) : '';
   const contentWithSchema = schemaString 
     ? `${content}\n<script type="application/ld+json">${schemaString}</script>` 
     : content;
 
   try {
-    // Determine if update or create
     const isUpdate = !!item.originalUrl;
     let postId: number | null = null;
 
     if (isUpdate) {
-      // Find post ID by slug
-      const postsRes = await fetchFn(`${baseUrl}/wp-json/wp/v2/posts?slug=${slug}&status=any`, {
-        method: 'GET',
-        headers: { Authorization: authHeader },
-      });
+      const postsRes = await fetchFn(
+        `${baseUrl}/wp-json/wp/v2/posts?slug=${slug}&status=any`,
+        { method: 'GET', headers: { Authorization: authHeader } }
+      );
 
       const postsText = await postsRes.text();
-      
+
       try {
-        const posts = safeJsonParse<any[]>(postsText, 'WordPress Posts Lookup');
+        const posts = safeJsonParse<Array<{ id: number }>>(postsText, 'WP Posts Lookup');
         if (posts.length > 0) {
           postId = posts[0].id;
         }
-      } catch (e) {
-        // Not found, will create new
+      } catch {
+        // Not found
       }
     }
 
@@ -1285,13 +1305,9 @@ export const publishItemToWordPress = async (
     const responseText = await response.text();
 
     if (!response.ok) {
-      // Try to parse error message
       try {
-        const errorData = safeJsonParse<any>(responseText, 'WordPress Error Response');
-        return {
-          success: false,
-          message: errorData.message || `HTTP ${response.status}`,
-        };
+        const errorData = safeJsonParse<{ message?: string }>(responseText, 'WP Error');
+        return { success: false, message: errorData.message || `HTTP ${response.status}` };
       } catch {
         return {
           success: false,
@@ -1300,34 +1316,32 @@ export const publishItemToWordPress = async (
       }
     }
 
-    const result = safeJsonParse<{ id: number; link: string }>(responseText, 'WordPress Publish Response');
+    const result = safeJsonParse<{ id: number; link: string }>(responseText, 'WP Publish');
 
     return {
       success: true,
       message: postId ? 'Updated successfully!' : 'Published successfully!',
       link: result.link,
+      postId: result.id
     };
-  } catch (error: any) {
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
     console.error('[publishItemToWordPress] Error:', error);
-    return {
-      success: false,
-      message: error.message,
-    };
+    return { success: false, message: errMsg };
   }
 };
 
 // =============================================================================
-// GOD MODE MAINTENANCE ENGINE
+// SECTION 8: GOD MODE MAINTENANCE ENGINE
 // =============================================================================
 
 class MaintenanceEngine {
   isRunning = false;
   logCallback: (msg: string) => void = console.log;
   private context: GenerationContext | null = null;
-  private intervalId: NodeJS.Timeout | null = null;
+  private intervalId: ReturnType<typeof setTimeout> | null = null;
 
   start(context: GenerationContext): void {
-    // CRITICAL: Validate API clients before starting
     if (!context.apiClients) {
       this.logCallback('❌ CRITICAL ERROR: AI API Clients not configured!');
       this.logCallback('🔧 REQUIRED: Configure API keys in Settings tab');
@@ -1337,16 +1351,17 @@ class MaintenanceEngine {
 
     const selectedClient = context.apiClients[context.selectedModel as keyof ApiClients];
     if (!selectedClient) {
-      // Try to find any available client
-      const availableProvider = Object.entries(context.apiClients).find(([_, client]) => client !== null);
-      
+      const availableProvider = Object.entries(context.apiClients).find(
+        ([, client]) => client !== null
+      );
+
       if (!availableProvider) {
         this.logCallback('❌ CRITICAL ERROR: No AI API Client initialized!');
-        this.logCallback(`🔧 REQUIRED: Configure at least one API key (Gemini, OpenAI, Anthropic, etc.)`);
+        this.logCallback('🔧 REQUIRED: Configure at least one API key');
         this.logCallback('🛑 STOPPING: God Mode requires a valid AI API client');
         return;
       }
-      
+
       this.logCallback(`⚠️ WARNING: ${context.selectedModel} not available, using ${availableProvider[0]} instead`);
     }
 
@@ -1360,7 +1375,6 @@ class MaintenanceEngine {
     this.logCallback('🚀 God Mode Activated: Autonomous Maintenance Engine starting...');
     this.logCallback(`📊 Found ${context.existingPages.length} pages to monitor`);
 
-    // Start main loop
     this.runMaintenanceCycle();
   }
 
@@ -1382,24 +1396,23 @@ class MaintenanceEngine {
     if (!this.isRunning || !this.context) return;
 
     try {
-      // Get next page to optimize
       const page = this.getNextPageToOptimize();
 
       if (!page) {
         this.logCallback('💤 All pages recently optimized. Waiting...');
-        this.scheduleCycle(60000); // Wait 1 minute before checking again
+        this.scheduleCycle(60000);
         return;
       }
 
       this.logCallback(`🎯 Target Acquired: "${page.title || page.slug}"`);
       await this.optimizePage(page);
 
-      // Continue to next cycle
-      this.scheduleCycle(5000); // 5 second delay between pages
-    } catch (error: any) {
-      this.logCallback(`❌ GOD MODE ERROR: ${error.message}`);
+      this.scheduleCycle(5000);
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      this.logCallback(`❌ GOD MODE ERROR: ${errMsg}`);
       console.error('[MaintenanceEngine] Error:', error);
-      this.scheduleCycle(30000); // Wait 30 seconds on error
+      this.scheduleCycle(30000);
     }
   }
 
@@ -1411,17 +1424,12 @@ class MaintenanceEngine {
   private getNextPageToOptimize(): SitemapPage | null {
     if (!this.context) return null;
 
-    const { existingPages, excludedUrls = [], excludedCategories = [], priorityUrls = [], priorityOnlyMode = false } = this.context;
+    const { existingPages, excludedUrls, excludedCategories, priorityUrls, priorityOnlyMode } = this.context;
 
-    // Filter out excluded pages
     const eligiblePages = existingPages.filter((page) => {
-      // Check excluded URLs
-      if (excludedUrls.some((url) => page.id.includes(url))) return false;
+      if (excludedUrls?.some((url) => page.id.includes(url))) return false;
+      if (excludedCategories?.some((cat) => page.id.toLowerCase().includes(cat.toLowerCase()))) return false;
 
-      // Check excluded categories (from URL path)
-      if (excludedCategories.some((cat) => page.id.toLowerCase().includes(cat.toLowerCase()))) return false;
-
-      // Check if recently processed (within 7 days)
       const lastProcessed = localStorage.getItem(`sota_last_proc_${page.id}`);
       if (lastProcessed) {
         const daysSince = (Date.now() - parseInt(lastProcessed)) / (1000 * 60 * 60 * 24);
@@ -1431,21 +1439,18 @@ class MaintenanceEngine {
       return true;
     });
 
-    // Priority mode: only process priority URLs
-    if (priorityOnlyMode && priorityUrls.length > 0) {
+    if (priorityOnlyMode && priorityUrls && priorityUrls.length > 0) {
       const priorityPage = eligiblePages.find((p) => priorityUrls.includes(p.id));
       return priorityPage || null;
     }
 
-    // Sort by priority: priority URLs first, then by staleness
     eligiblePages.sort((a, b) => {
-      const aIsPriority = priorityUrls.includes(a.id);
-      const bIsPriority = priorityUrls.includes(b.id);
+      const aIsPriority = priorityUrls?.includes(a.id) || false;
+      const bIsPriority = priorityUrls?.includes(b.id) || false;
 
       if (aIsPriority && !bIsPriority) return -1;
       if (!aIsPriority && bIsPriority) return 1;
 
-      // Then by days old (oldest first)
       return (b.daysOld || 0) - (a.daysOld || 0);
     });
 
@@ -1466,18 +1471,15 @@ class MaintenanceEngine {
     } = this.context;
 
     try {
-      // Crawl current content
       this.logCallback(`📄 Crawling: ${page.id}`);
       const crawledContent = await smartCrawl(page.id);
 
       if (!crawledContent || crawledContent.length < 300) {
         this.logCallback(`⚠️ Content too short (${crawledContent?.length || 0} chars). Skipping.`);
-        // DON'T mark as optimized - allow retry
         return;
       }
 
-      // Generate semantic keywords
-      this.logCallback(`🔑 Generating semantic keywords...`);
+      this.logCallback('🔑 Generating semantic keywords...');
       const keywordsResponse = await callAI(
         apiClients,
         selectedModel,
@@ -1494,9 +1496,8 @@ class MaintenanceEngine {
         'semantic_keyword_generator (God Mode)'
       );
 
-      // Optimize with Structural Guardian
-      this.logCallback(`⚡ Optimizing content with SOTA engine...`);
-      
+      this.logCallback('⚡ Optimizing content with SOTA engine...');
+
       let changesMade = 0;
       let schemaInjected = false;
 
@@ -1513,21 +1514,19 @@ class MaintenanceEngine {
         );
 
         let optimizedContent = surgicalSanitizer(optimizedResponse);
-        
+
         if (optimizedContent && optimizedContent.length > crawledContent.length * 0.6) {
           changesMade++;
         }
 
-        // Add verification footer if missing
         if (!optimizedContent.includes('verification-footer-sota')) {
           const footer = generateVerificationFooterHtml();
           optimizedContent += footer;
           changesMade++;
         }
 
-        // Generate references if missing
         if (!optimizedContent.includes('sota-references-section') && serperApiKey) {
-          this.logCallback(`📚 Adding verified references...`);
+          this.logCallback('📚 Adding verified references...');
           const referencesHtml = await fetchVerifiedReferences(
             page.title || page.slug,
             semanticKeywords,
@@ -1540,45 +1539,64 @@ class MaintenanceEngine {
           }
         }
 
-        // Generate schema if missing
         if (!optimizedContent.includes('application/ld+json')) {
-          this.logCallback(`📋 Generating schema markup...`);
+          this.logCallback('📋 Generating schema markup...');
           schemaInjected = true;
           changesMade++;
         }
 
-        // Only publish if changes were made
         if (changesMade > 0 || schemaInjected) {
           this.logCallback(`💾 Publishing ${changesMade} improvements...`);
-          
-          // Simulated Success for God Mode loop logic 
-          // (In real app, this would be publishItemToWordPress call)
-          const success = true; 
 
-          if (success) {
-            this.logCallback(`✅ SUCCESS|${page.title || page.slug}|${page.id}`);
+          const item: ContentItem = {
+            id: page.id,
+            title: page.title,
+            type: 'refresh',
+            originalUrl: page.id,
+            status: 'done',
+            statusText: 'Optimized',
+            generatedContent: {
+              title: page.title,
+              slug: page.slug,
+              content: optimizedContent,
+              metaDescription: '',
+              primaryKeyword: page.title,
+              semanticKeywords,
+              strategy: { targetAudience: '', searchIntent: '', competitorAnalysis: '', contentAngle: '' },
+              jsonLdSchema: {},
+              socialMediaCopy: { twitter: '', linkedIn: '' },
+              faqSection: [],
+              keyTakeaways: [],
+              outline: [],
+              references: [],
+              imageDetails: []
+            }
+          };
+
+          const wpPassword = localStorage.getItem('wpPassword') || '';
+          const result = await publishItemToWordPress(item, wpPassword, 'publish', fetchWithProxies, wpConfig);
+
+          if (result.success) {
+            this.logCallback(`✅ SUCCESS|${page.title}|${page.id}`);
             localStorage.setItem(`sota_last_proc_${page.id}`, Date.now().toString());
           } else {
-            this.logCallback(`❌ Publish failed for ${page.title}`);
-            // DON'T mark as optimized - allow retry
+            this.logCallback(`❌ Publish failed for ${page.title}: ${result.message}`);
           }
         } else {
-          // CRITICAL FIX: Don't mark as optimized if no actual changes were made
           this.logCallback(`⚠️ No optimization needed for ${page.title}. Will retry later.`);
-          // Removed: localStorage.setItem(`sota_last_proc_${page.id}`, ...)
         }
-      } catch (optimizeError: any) {
-        // Check for API initialization errors
-        if (optimizeError.message?.includes('not initialized')) {
-          this.logCallback(`❌ FATAL: API Client error - ${optimizeError.message}`);
-          this.stop(); // Stop God Mode if API not available
+      } catch (optimizeError) {
+        const errMsg = optimizeError instanceof Error ? optimizeError.message : String(optimizeError);
+        if (errMsg.includes('not initialized')) {
+          this.logCallback(`❌ FATAL: API Client error - ${errMsg}`);
+          this.stop();
           return;
         }
         throw optimizeError;
       }
-    } catch (error: any) {
-      this.logCallback(`❌ Failed to optimize ${page.title || page.id}: ${error.message}`);
-      // DON'T mark as optimized on error - allow retry
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      this.logCallback(`❌ Failed to optimize ${page.title || page.id}: ${errMsg}`);
     }
   }
 }
@@ -1586,8 +1604,10 @@ class MaintenanceEngine {
 export const maintenanceEngine = new MaintenanceEngine();
 
 // =============================================================================
-// EXPORTS
+// SECTION 9: EXPORTS
 // =============================================================================
+
+export { safeJsonParse, extractJsonFromResponse, surgicalSanitizer };
 
 export default {
   callAI,
