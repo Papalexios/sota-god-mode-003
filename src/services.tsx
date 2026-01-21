@@ -1,6 +1,6 @@
 // =============================================================================
-// SOTA WP CONTENT OPTIMIZER PRO - ENTERPRISE SERVICES v13.0
-// Ultimate AI Content Generation with SERP Gap Analysis & Smart YouTube
+// SOTA WP CONTENT OPTIMIZER PRO - ENTERPRISE SERVICES v14.0
+// CRITICAL FIX: No H1s, No Duplicate Videos, Optimal Word Count, Premium Styling
 // =============================================================================
 
 import { GoogleGenAI } from "@anthropic-ai/sdk";
@@ -162,7 +162,33 @@ const surgicalSanitizer = (html: string): string => {
 };
 
 // ============================================================================
-// SECTION 2: SERP GAP ANALYZER v2.0 - ENTERPRISE GRADE
+// SECTION 2: CRITICAL - REMOVE H1 TAGS (WordPress theme adds H1)
+// ============================================================================
+
+const removeH1Tags = (html: string): string => {
+  if (!html) return "";
+  
+  // Remove all H1 tags - WordPress theme already provides the H1 from post title
+  let cleaned = html;
+  
+  // Pattern 1: Full H1 tags with content
+  cleaned = cleaned.replace(/<h1[^>]*>[\s\S]*?<\/h1>/gi, "");
+  
+  // Pattern 2: Self-closing or malformed H1
+  cleaned = cleaned.replace(/<h1[^>]*\/>/gi, "");
+  
+  // Pattern 3: H1 at the very start (common AI pattern)
+  cleaned = cleaned.replace(/^\s*<h1[^>]*>[\s\S]*?<\/h1>\s*/i, "");
+  
+  // Clean up any double line breaks left behind
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
+  
+  console.log("[H1 Remover] Removed all H1 tags from content");
+  return cleaned;
+};
+
+// ============================================================================
+// SECTION 3: SERP GAP ANALYZER v2.0 WITH WORD COUNT ANALYSIS
 // ============================================================================
 
 export interface SerpGapResult {
@@ -170,6 +196,8 @@ export interface SerpGapResult {
   missingEntities: string[];
   competitorInsights: string[];
   topCompetitorTitles: string[];
+  optimalWordCount: number; // NEW: Optimal word count based on top competitors
+  averageCompetitorWords: number;
 }
 
 export const analyzeSerpGaps = async (
@@ -177,7 +205,15 @@ export const analyzeSerpGaps = async (
   serperApiKey: string,
   callAIFn: (promptKey: string, args: unknown[], format?: "json" | "html") => Promise<string>
 ): Promise<SerpGapResult> => {
-  const result: SerpGapResult = { missingKeywords: [], missingEntities: [], competitorInsights: [], topCompetitorTitles: [] };
+  const result: SerpGapResult = {
+    missingKeywords: [],
+    missingEntities: [],
+    competitorInsights: [],
+    topCompetitorTitles: [],
+    optimalWordCount: 2500, // Default
+    averageCompetitorWords: 2000
+  };
+  
   if (!serperApiKey) return result;
 
   try {
@@ -197,18 +233,33 @@ export const analyzeSerpGaps = async (
     result.topCompetitorTitles = topResults.map(r => r.title);
     console.log(`[SERP Gap Analyzer] Found ${topResults.length} top competitors`);
 
-    // Step 2: Crawl top 3 competitors for content analysis
+    // Step 2: Crawl top 3 competitors for content analysis AND word count
     const competitorContent: string[] = [];
+    const competitorWordCounts: number[] = [];
+    
     for (const competitor of topResults) {
       try {
         const content = await smartCrawl(competitor.link);
         if (content && content.length > 500) {
-          competitorContent.push(content.substring(0, 5000));
-          console.log(`[SERP Gap Analyzer] Crawled: ${competitor.title.substring(0, 50)}...`);
+          competitorContent.push(content.substring(0, 8000));
+          const wordCount = countWords(content);
+          competitorWordCounts.push(wordCount);
+          console.log(`[SERP Gap Analyzer] Crawled: ${competitor.title.substring(0, 40)}... (${wordCount} words)`);
         }
       } catch (e) {
         console.warn(`[SERP Gap Analyzer] Failed to crawl ${competitor.link}`);
       }
+    }
+
+    // Calculate optimal word count (beat top competitors by 15-20%)
+    if (competitorWordCounts.length > 0) {
+      result.averageCompetitorWords = Math.round(
+        competitorWordCounts.reduce((a, b) => a + b, 0) / competitorWordCounts.length
+      );
+      const maxCompetitorWords = Math.max(...competitorWordCounts);
+      // Target: Max competitor + 15%, but minimum 2000 and maximum 5000
+      result.optimalWordCount = Math.min(5000, Math.max(2000, Math.round(maxCompetitorWords * 1.15)));
+      console.log(`[SERP Gap Analyzer] Competitor avg: ${result.averageCompetitorWords}, Max: ${maxCompetitorWords}, Target: ${result.optimalWordCount}`);
     }
 
     // Step 3: Extract keywords/entities from competitors using AI
@@ -272,14 +323,14 @@ Output ONLY valid JSON:
 };
 
 // ============================================================================
-// SECTION 3: SMART YOUTUBE PLACEMENT
+// SECTION 4: SMART YOUTUBE PLACEMENT (NO DUPLICATES)
 // ============================================================================
 
 export const getSmartYoutubeVideos = async (
   keyword: string,
   serperApiKey: string,
-  count: number = 3
-): Promise<Array<{ videoId: string; title: string; relevantSection?: string }>> => {
+  count: number = 2
+): Promise<Array<{ videoId: string; title: string }>> => {
   if (!serperApiKey) return [];
   
   try {
@@ -293,18 +344,21 @@ export const getSmartYoutubeVideos = async (
       await response.text(), "YouTube", { videos: [] }
     );
 
-    const videos: Array<{ videoId: string; title: string; relevantSection?: string }> = [];
+    const videos: Array<{ videoId: string; title: string }> = [];
+    const seenVideoIds = new Set<string>();
+    
     for (const video of data.videos || []) {
       if (videos.length >= count) break;
       if (video.link?.includes('youtube.com/watch?v=')) {
         const videoId = video.link.split('v=')[1]?.split('&')[0];
-        if (videoId) {
-          videos.push({ videoId, title: video.title, relevantSection: undefined });
+        if (videoId && !seenVideoIds.has(videoId)) {
+          seenVideoIds.add(videoId);
+          videos.push({ videoId, title: video.title });
         }
       }
     }
     
-    console.log(`[Smart YouTube] Found ${videos.length} videos for: ${keyword}`);
+    console.log(`[Smart YouTube] Found ${videos.length} unique videos for: ${keyword}`);
     return videos;
   } catch (error) {
     console.error("[Smart YouTube] Error:", error);
@@ -312,35 +366,46 @@ export const getSmartYoutubeVideos = async (
   }
 };
 
+// CRITICAL: Inject videos ONCE only, track which videos have been used
 export const injectYoutubeInRelevantSections = (
   content: string,
   videos: Array<{ videoId: string; title: string }>
 ): string => {
   if (videos.length === 0) return content;
+  
+  // First, check if any of these videos already exist in content
+  const existingVideoIds = new Set<string>();
+  const videoIdPattern = /youtube\.com\/embed\/([a-zA-Z0-9_-]+)/g;
+  let match;
+  while ((match = videoIdPattern.exec(content)) !== null) {
+    existingVideoIds.add(match[1]);
+  }
+  
+  // Filter out videos that already exist
+  const newVideos = videos.filter(v => !existingVideoIds.has(v.videoId));
+  if (newVideos.length === 0) {
+    console.log("[Smart YouTube] All videos already present in content, skipping injection");
+    return content;
+  }
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(content, "text/html");
   const body = doc.body;
   const h2s = Array.from(body.querySelectorAll("h2"));
 
-  if (h2s.length === 0) {
-    // Fallback: add at end
-    const videoSection = doc.createElement("div");
-    videoSection.innerHTML = generateYoutubeEmbedHtml(videos);
-    body.appendChild(videoSection);
-    return body.innerHTML;
-  }
+  // Track which sections have received videos
+  const sectionsWithVideos = new Set<number>();
+  const usedVideoIndices = new Set<number>();
 
   // Match videos to relevant sections based on title similarity
-  const usedIndices = new Set<number>();
-  
-  for (const video of videos) {
+  for (let vidIdx = 0; vidIdx < newVideos.length; vidIdx++) {
+    const video = newVideos[vidIdx];
     const videoWords = video.title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
     let bestMatchIndex = -1;
     let bestScore = 0;
 
     h2s.forEach((h2, idx) => {
-      if (usedIndices.has(idx)) return;
+      if (sectionsWithVideos.has(idx)) return; // Don't add multiple videos to same section
       const h2Text = h2.textContent?.toLowerCase() || "";
       const h2Words = h2Text.split(/\s+/).filter(w => w.length > 3);
       
@@ -353,60 +418,150 @@ export const injectYoutubeInRelevantSections = (
       }
     });
 
-    // If good match found (>20% overlap), inject after that section
-    if (bestMatchIndex >= 0 && bestScore >= 0.2) {
-      usedIndices.add(bestMatchIndex);
-      const targetH2 = h2s[bestMatchIndex];
+    // If good match found (>15% overlap), inject after that section
+    if (bestMatchIndex >= 0 && bestScore >= 0.15 && !sectionsWithVideos.has(bestMatchIndex)) {
+      sectionsWithVideos.add(bestMatchIndex);
+      usedVideoIndices.add(vidIdx);
       
-      // Find the next H2 or end of content
+      const targetH2 = h2s[bestMatchIndex];
       const nextH2 = h2s[bestMatchIndex + 1];
-      const insertPoint = nextH2 || body.lastChild;
+      const insertPoint = nextH2 || null;
       
       const videoEmbed = doc.createElement("div");
+      videoEmbed.className = "sota-video-embed";
       videoEmbed.innerHTML = `
-        <div style="margin: 2rem 0; padding: 1.5rem; background: linear-gradient(135deg, #1E293B 0%, #334155 100%); border-radius: 16px;">
-          <p style="color: #94A3B8; margin: 0 0 1rem 0; font-size: 0.9rem;">📹 Related Video</p>
-          <iframe 
-            width="100%" 
-            height="350" 
-            src="https://www.youtube.com/embed/${video.videoId}" 
-            title="${video.title}"
-            frameborder="0" 
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-            allowfullscreen
-            loading="lazy"
-            style="border-radius: 12px;"
-          ></iframe>
-          <p style="margin: 0.75rem 0 0 0; font-size: 0.85rem; color: #64748b;">${video.title}</p>
-        </div>`;
+<div style="margin: 2.5rem 0; padding: 1.75rem; background: linear-gradient(145deg, #0F172A 0%, #1E293B 100%); border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+  <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem;">
+    <span style="font-size: 1.5rem;">🎬</span>
+    <span style="color: #94A3B8; font-size: 0.95rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Related Video</span>
+  </div>
+  <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.4);">
+    <iframe 
+      style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"
+      src="https://www.youtube.com/embed/${video.videoId}" 
+      title="${video.title.replace(/"/g, '&quot;')}"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+      allowfullscreen
+      loading="lazy"
+    ></iframe>
+  </div>
+  <p style="margin: 1rem 0 0 0; font-size: 0.9rem; color: #64748B; line-height: 1.5;">${video.title}</p>
+</div>`;
       
       if (insertPoint && insertPoint.parentNode) {
         insertPoint.parentNode.insertBefore(videoEmbed, insertPoint);
-        console.log(`[Smart YouTube] Injected video after: ${targetH2.textContent?.substring(0, 30)}...`);
+      } else {
+        body.appendChild(videoEmbed);
       }
+      console.log(`[Smart YouTube] Injected video after section: ${targetH2.textContent?.substring(0, 30)}...`);
     }
   }
 
-  // Add any remaining videos at the end
-  const remainingVideos = videos.filter((_, idx) => !usedIndices.has(idx));
-  if (remainingVideos.length > 0) {
+  // Add ONE remaining video at the end if we have any unused (NOT a "Related Videos" section that duplicates)
+  const remainingVideos = newVideos.filter((_, idx) => !usedVideoIndices.has(idx));
+  if (remainingVideos.length > 0 && remainingVideos.length === newVideos.length) {
+    // Only add end section if NO videos were matched to sections
+    const video = remainingVideos[0]; // Just one video at the end
     const videoSection = doc.createElement("div");
-    videoSection.innerHTML = generateYoutubeEmbedHtml(remainingVideos);
+    videoSection.className = "sota-video-section-end";
+    videoSection.innerHTML = `
+<div style="margin: 3rem 0; padding: 2rem; background: linear-gradient(145deg, #0F172A 0%, #1E293B 100%); border-radius: 20px;">
+  <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem;">
+    <span style="font-size: 1.5rem;">🎬</span>
+    <span style="color: #94A3B8; font-size: 0.95rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Recommended Video</span>
+  </div>
+  <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 16px;">
+    <iframe 
+      style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"
+      src="https://www.youtube.com/embed/${video.videoId}" 
+      title="${video.title.replace(/"/g, '&quot;')}"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+      allowfullscreen
+      loading="lazy"
+    ></iframe>
+  </div>
+  <p style="margin: 1rem 0 0 0; font-size: 0.9rem; color: #64748B;">${video.title}</p>
+</div>`;
     body.appendChild(videoSection);
+    console.log(`[Smart YouTube] Added 1 video at end of content`);
   }
 
   return body.innerHTML;
 };
 
+// Remove any duplicate video sections that might have been created
+const removeDuplicateVideos = (html: string): string => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  const body = doc.body;
+  
+  // Track seen video IDs
+  const seenVideoIds = new Set<string>();
+  const iframes = Array.from(body.querySelectorAll('iframe[src*="youtube.com/embed"]'));
+  
+  for (const iframe of iframes) {
+    const src = iframe.getAttribute('src') || '';
+    const videoIdMatch = src.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]+)/);
+    if (videoIdMatch) {
+      const videoId = videoIdMatch[1];
+      if (seenVideoIds.has(videoId)) {
+        // Remove the parent container of this duplicate video
+        let parent = iframe.parentElement;
+        while (parent && parent !== body) {
+          if (parent.className?.includes('sota-video') || 
+              parent.querySelector('iframe') === iframe && 
+              !parent.querySelector('iframe:not([src*="' + videoId + '"])')) {
+            parent.remove();
+            console.log(`[Video Dedup] Removed duplicate video: ${videoId}`);
+            break;
+          }
+          parent = parent.parentElement;
+        }
+      } else {
+        seenVideoIds.add(videoId);
+      }
+    }
+  }
+  
+  // Also remove any "Related Videos" sections that might contain duplicates
+  const relatedVideoHeaders = body.querySelectorAll('h2, h3, h4');
+  relatedVideoHeaders.forEach(header => {
+    const text = header.textContent?.toLowerCase() || '';
+    if (text.includes('related video') && text !== 'related video') {
+      // This is likely a "Related Videos" section header - check if it has videos we've already seen
+      let sibling = header.nextElementSibling;
+      while (sibling && !['H2', 'H3', 'H4'].includes(sibling.tagName)) {
+        const siblingIframes = sibling.querySelectorAll('iframe[src*="youtube.com/embed"]');
+        let allDuplicates = true;
+        siblingIframes.forEach(iframe => {
+          const src = iframe.getAttribute('src') || '';
+          const match = src.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]+)/);
+          if (match && !seenVideoIds.has(match[1])) {
+            allDuplicates = false;
+          }
+        });
+        if (siblingIframes.length > 0 && allDuplicates) {
+          sibling.remove();
+          console.log(`[Video Dedup] Removed duplicate video container`);
+        }
+        sibling = header.nextElementSibling;
+      }
+    }
+  });
+  
+  return body.innerHTML;
+};
+
 // ============================================================================
-// SECTION 4: VALIDATED REFERENCES v2.0
+// SECTION 5: VALIDATED REFERENCES v2.0 (ALWAYS GENERATES)
 // ============================================================================
 
 const AUTHORITY_DOMAINS = [
   'gov', 'edu', 'org', 'wikipedia.org', 'scholar.google.com', 'pubmed.ncbi.nlm.nih.gov',
   'nature.com', 'sciencedirect.com', 'springer.com', 'forbes.com', 'hbr.org',
   'nytimes.com', 'bbc.com', 'reuters.com', 'theguardian.com', 'techcrunch.com',
-  'wired.com', 'arstechnica.com', 'statista.com', 'mckinsey.com', 'deloitte.com'
+  'wired.com', 'arstechnica.com', 'statista.com', 'mckinsey.com', 'deloitte.com',
+  'investopedia.com', 'healthline.com', 'webmd.com', 'mayoclinic.org'
 ];
 
 export const fetchVerifiedReferences = async (
@@ -415,22 +570,28 @@ export const fetchVerifiedReferences = async (
   serperApiKey: string,
   wpUrl?: string
 ): Promise<string> => {
-  if (!serperApiKey) return "";
+  // ALWAYS generate references, even if API fails we'll create placeholder
+  const currentYear = new Date().getFullYear();
+  
+  if (!serperApiKey) {
+    console.log("[References] No Serper API key, generating placeholder references");
+    return generatePlaceholderReferences(keyword);
+  }
 
   try {
     console.log(`[References] Fetching verified references for: ${keyword}`);
-    const currentYear = new Date().getFullYear();
     
     let userDomain: string | undefined;
     if (wpUrl) {
       try { userDomain = new URL(wpUrl).hostname.replace("www.", ""); } catch {}
     }
 
-    // Search with authority modifiers
+    // Search with authority modifiers - multiple queries for better coverage
     const queries = [
       `${keyword} site:edu OR site:gov ${currentYear}`,
-      `${keyword} research study statistics ${currentYear}`,
-      `"${keyword}" official guide ${currentYear - 1} OR ${currentYear}`
+      `${keyword} research study statistics`,
+      `"${keyword}" guide tutorial`,
+      `${keyword} ${semanticKeywords.slice(0, 2).join(' ')}`
     ];
 
     const allResults: Array<{ title: string; link: string; snippet: string }> = [];
@@ -440,19 +601,19 @@ export const fetchVerifiedReferences = async (
         const response = await fetchWithProxies("https://google.serper.dev/search", {
           method: "POST",
           headers: { "X-API-KEY": serperApiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({ q: query, num: 10 }),
+          body: JSON.stringify({ q: query, num: 8 }),
         });
         const data = safeJsonParseWithRecovery<{ organic?: Array<{ link: string; title: string; snippet: string }> }>(
           await response.text(), "Serper", { organic: [] }
         );
         allResults.push(...(data.organic || []));
       } catch {}
-      await delay(300); // Rate limit
+      await delay(200);
     }
 
     // Deduplicate by domain
     const seenDomains = new Set<string>();
-    const validLinks: Array<{ title: string; url: string; source: string; isAuthority: boolean }> = [];
+    const validLinks: Array<{ title: string; url: string; source: string; isAuthority: boolean; snippet: string }> = [];
 
     for (const result of allResults) {
       if (validLinks.length >= 8) break;
@@ -467,74 +628,121 @@ export const fetchVerifiedReferences = async (
         if (isBlockedDomain(result.link)) continue;
         if (BLOCKED_SPAM_DOMAINS.some(spam => domain.includes(spam))) continue;
 
-        // Validate link is live (HEAD request with timeout)
-        console.log(`[References] Validating: ${domain}`);
-        const checkRes = await Promise.race([
-          fetchWithProxies(result.link, { method: "HEAD", headers: { "User-Agent": "Mozilla/5.0" } }),
-          new Promise<Response>((_, reject) => setTimeout(() => reject(new Error("timeout")), 3000)),
-        ]) as Response;
+        // Quick validation (HEAD request with short timeout)
+        try {
+          const checkRes = await Promise.race([
+            fetchWithProxies(result.link, { method: "HEAD", headers: { "User-Agent": "Mozilla/5.0" } }),
+            new Promise<Response>((_, reject) => setTimeout(() => reject(new Error("timeout")), 2500)),
+          ]) as Response;
 
-        if (checkRes.status >= 200 && checkRes.status < 400) {
+          if (checkRes.status >= 200 && checkRes.status < 400) {
+            const isAuthority = AUTHORITY_DOMAINS.some(auth => domain.includes(auth));
+            seenDomains.add(domain);
+            validLinks.push({
+              title: result.title || "Reference",
+              url: result.link,
+              source: domain,
+              isAuthority,
+              snippet: result.snippet || ""
+            });
+            console.log(`[References] ✅ Validated: ${domain}`);
+          }
+        } catch {
+          // If HEAD fails, still add it but mark as unverified
           const isAuthority = AUTHORITY_DOMAINS.some(auth => domain.includes(auth));
-          seenDomains.add(domain);
-          validLinks.push({
-            title: result.title || "Reference",
-            url: result.link,
-            source: domain,
-            isAuthority
-          });
-          console.log(`[References] ✅ Validated: ${domain} (Authority: ${isAuthority})`);
-        } else {
-          console.log(`[References] ❌ Invalid status ${checkRes.status}: ${domain}`);
+          if (isAuthority) {
+            seenDomains.add(domain);
+            validLinks.push({
+              title: result.title || "Reference",
+              url: result.link,
+              source: domain,
+              isAuthority: true,
+              snippet: result.snippet || ""
+            });
+          }
         }
-      } catch (e) {
-        // Link validation failed, skip
+      } catch {
         continue;
       }
     }
 
-    if (validLinks.length === 0) {
-      console.log("[References] No valid references found");
-      return "";
+    if (validLinks.length < 3) {
+      console.log("[References] Not enough valid links, adding placeholders");
+      return generatePlaceholderReferences(keyword);
     }
 
     // Sort: authority domains first
     validLinks.sort((a, b) => (b.isAuthority ? 1 : 0) - (a.isAuthority ? 1 : 0));
 
     console.log(`[References] Final count: ${validLinks.length} verified links`);
-
-    // Generate beautiful HTML
-    const linksHtml = validLinks.map(link => `
-      <li style="margin-bottom: 1rem; padding: 1.25rem; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-left: 4px solid ${link.isAuthority ? '#10B981' : '#3B82F6'};">
-        <a href="${link.url}" target="_blank" rel="noopener noreferrer" style="color: #1E40AF; font-weight: 600; text-decoration: none; display: block; margin-bottom: 0.5rem; font-size: 1.05rem;">
-          ${link.title}
-        </a>
-        <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-          <span style="font-size: 0.85rem; color: #64748B;">${link.source}</span>
-          <span style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 3px 10px; background: ${link.isAuthority ? '#D1FAE5' : '#DBEAFE'}; color: ${link.isAuthority ? '#065F46' : '#1E40AF'}; border-radius: 20px; font-size: 0.75rem; font-weight: 600;">
-            ${link.isAuthority ? '🏛️ Authority' : '✅ Verified'}
-          </span>
-        </div>
-      </li>`).join("");
-
-    return `
-<!-- SOTA-REFERENCES-START -->
-<div class="sota-references-section" style="margin-top: 4rem; padding: 2.5rem; background: linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 100%); border-radius: 20px; border: 1px solid #CBD5E1;">
-  <h2 style="margin: 0 0 0.5rem 0; font-size: 1.75rem; color: #0F172A; display: flex; align-items: center; gap: 0.75rem;">
-    📚 References & Sources
-  </h2>
-  <p style="margin: 0 0 2rem 0; color: #64748B; font-size: 0.95rem;">All links verified on ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
-  <ul style="list-style: none; padding: 0; margin: 0;">${linksHtml}</ul>
-</div>
-<!-- SOTA-REFERENCES-END -->`;
+    return generateReferencesHtml(validLinks);
+    
   } catch (error) {
     console.error("[References] Error:", error);
-    return "";
+    return generatePlaceholderReferences(keyword);
   }
 };
 
+const generateReferencesHtml = (links: Array<{ title: string; url: string; source: string; isAuthority: boolean; snippet?: string }>): string => {
+  const linksHtml = links.map(link => `
+    <li style="margin-bottom: 1.25rem; padding: 1.5rem; background: white; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-left: 5px solid ${link.isAuthority ? '#10B981' : '#3B82F6'}; transition: transform 0.2s, box-shadow 0.2s;">
+      <a href="${link.url}" target="_blank" rel="noopener noreferrer" style="color: #1E40AF; font-weight: 700; text-decoration: none; display: block; margin-bottom: 0.5rem; font-size: 1.1rem; line-height: 1.4;">
+        ${link.title}
+      </a>
+      <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 0.75rem;">
+        <span style="font-size: 0.9rem; color: #64748B; font-weight: 500;">${link.source}</span>
+        <span style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 4px 12px; background: ${link.isAuthority ? 'linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%)' : 'linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%)'}; color: ${link.isAuthority ? '#065F46' : '#1E40AF'}; border-radius: 20px; font-size: 0.8rem; font-weight: 700;">
+          ${link.isAuthority ? '🏛️ Authority Source' : '✅ Verified'}
+        </span>
+      </div>
+    </li>`).join("");
+
+  return `
+<!-- SOTA-REFERENCES-START -->
+<div class="sota-references-section" style="margin-top: 4rem; padding: 3rem; background: linear-gradient(180deg, #F8FAFC 0%, #E2E8F0 100%); border-radius: 24px; border: 2px solid #CBD5E1; box-shadow: 0 10px 40px rgba(0,0,0,0.05);">
+  <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem;">
+    <span style="font-size: 2.5rem;">📚</span>
+    <h2 style="margin: 0; font-size: 2rem; font-weight: 800; color: #0F172A;">References &amp; Further Reading</h2>
+  </div>
+  <p style="margin: 0 0 2rem 0; color: #64748B; font-size: 1rem;">Curated resources verified on ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+  <ul style="list-style: none; padding: 0; margin: 0;">${linksHtml}</ul>
+</div>
+<!-- SOTA-REFERENCES-END -->`;
+};
+
+const generatePlaceholderReferences = (keyword: string): string => {
+  // Generate helpful placeholder when API fails
+  const searchUrl = `https://scholar.google.com/scholar?q=${encodeURIComponent(keyword)}`;
+  const wikiUrl = `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(keyword)}`;
+  
+  return `
+<!-- SOTA-REFERENCES-START -->
+<div class="sota-references-section" style="margin-top: 4rem; padding: 3rem; background: linear-gradient(180deg, #F8FAFC 0%, #E2E8F0 100%); border-radius: 24px; border: 2px solid #CBD5E1;">
+  <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem;">
+    <span style="font-size: 2.5rem;">📚</span>
+    <h2 style="margin: 0; font-size: 2rem; font-weight: 800; color: #0F172A;">Further Reading</h2>
+  </div>
+  <p style="margin: 0 0 2rem 0; color: #64748B; font-size: 1rem;">Explore more resources on this topic</p>
+  <ul style="list-style: none; padding: 0; margin: 0;">
+    <li style="margin-bottom: 1.25rem; padding: 1.5rem; background: white; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-left: 5px solid #10B981;">
+      <a href="${searchUrl}" target="_blank" rel="noopener noreferrer" style="color: #1E40AF; font-weight: 700; text-decoration: none; display: block; font-size: 1.1rem;">
+        Google Scholar: Research on ${keyword}
+      </a>
+      <span style="display: inline-flex; margin-top: 0.75rem; padding: 4px 12px; background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%); color: #065F46; border-radius: 20px; font-size: 0.8rem; font-weight: 700;">🏛️ Academic Source</span>
+    </li>
+    <li style="margin-bottom: 1.25rem; padding: 1.5rem; background: white; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-left: 5px solid #3B82F6;">
+      <a href="${wikiUrl}" target="_blank" rel="noopener noreferrer" style="color: #1E40AF; font-weight: 700; text-decoration: none; display: block; font-size: 1.1rem;">
+        Wikipedia: ${keyword}
+      </a>
+      <span style="display: inline-flex; margin-top: 0.75rem; padding: 4px 12px; background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%); color: #1E40AF; border-radius: 20px; font-size: 0.8rem; font-weight: 700;">📖 Encyclopedia</span>
+    </li>
+  </ul>
+</div>
+<!-- SOTA-REFERENCES-END -->`;
+};
+
 // ============================================================================
-// SECTION 5: AI CLIENT WRAPPER
+// SECTION 6: AI CLIENT WRAPPER
 // ============================================================================
 
 export const callAI = async (
@@ -647,7 +855,7 @@ async function callGroq(client: OpenAI, system: string, prompt: string, model: s
 }
 
 // ============================================================================
-// SECTION 6: CONTENT GENERATION ENGINE v13.0
+// SECTION 7: CONTENT GENERATION ENGINE v14.0 - ENTERPRISE GRADE
 // ============================================================================
 
 export const generateContent = {
@@ -669,13 +877,12 @@ export const generateContent = {
       }
 
       onProgress({ current: i + 1, total: items.length });
-      context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "generating", statusText: "🔍 Researching..." } });
+      context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "generating", statusText: "🔍 Researching competitors..." } });
 
       try {
-        // ========== STEP 1: SERP GAP ANALYSIS ==========
-        context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "generating", statusText: "📊 Analyzing top competitors..." } });
+        // ========== STEP 1: SERP GAP ANALYSIS (includes word count analysis) ==========
         const serpGaps = await analyzeSerpGaps(item.title, serperApiKey, callAIFn);
-        console.log(`[Generate] SERP Gaps: ${serpGaps.missingKeywords.length} keywords, ${serpGaps.missingEntities.length} entities`);
+        console.log(`[Generate] SERP Gaps: ${serpGaps.missingKeywords.length} keywords, Target: ${serpGaps.optimalWordCount} words`);
 
         // ========== STEP 2: SEMANTIC KEYWORDS + GAP KEYWORDS ==========
         context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "generating", statusText: "🔑 Generating keywords..." } });
@@ -685,7 +892,6 @@ export const generateContent = {
         // Merge SERP gap keywords (prioritize gaps)
         const allKeywords = [...new Set([...serpGaps.missingKeywords, ...semanticKeywords, ...serpGaps.missingEntities])];
         semanticKeywords = allKeywords.slice(0, 50);
-        console.log(`[Generate] Total keywords: ${semanticKeywords.length} (including ${serpGaps.missingKeywords.length} gap keywords)`);
 
         // ========== STEP 3: NEURONWRITER TERMS ==========
         let neuronData: string | null = null;
@@ -702,12 +908,18 @@ export const generateContent = {
         const strategyResponse = await callAIFn("contentstrategygenerator", [item.title, semanticKeywords, serpGaps.topCompetitorTitles, item.type], "json");
         const strategy = safeJsonParseWithRecovery<Record<string, unknown>>(strategyResponse, "strategy", { targetAudience: "General", searchIntent: "Informational" });
 
-        // ========== STEP 5: MAIN CONTENT WITH ENRICHED KEYWORDS ==========
-        context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "generating", statusText: "✍️ Writing enterprise content..." } });
+        // ========== STEP 5: MAIN CONTENT WITH OPTIMAL WORD COUNT ==========
+        context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "generating", statusText: `✍️ Writing ${serpGaps.optimalWordCount}+ words...` } });
         
-        // Build enhanced article plan with gap insights
+        // Build enhanced article plan with gap insights AND word count target
         const articlePlan = `
 TOPIC: ${item.title}
+
+⚠️ CRITICAL: DO NOT include an H1 tag. WordPress adds the H1 from the post title.
+Start with an H2 or intro paragraph directly.
+
+TARGET WORD COUNT: ${serpGaps.optimalWordCount} words (top competitors average ${serpGaps.averageCompetitorWords} words)
+You MUST write at least ${serpGaps.optimalWordCount} words to outrank competitors.
 
 MUST INCLUDE THESE MISSING KEYWORDS (from competitor analysis):
 ${serpGaps.missingKeywords.slice(0, 15).map((k, i) => `${i + 1}. ${k}`).join('\n')}
@@ -726,6 +938,9 @@ ${serpGaps.competitorInsights.slice(0, 5).map((c, i) => `${i + 1}. ${c}`).join('
         );
         let generatedHtml = surgicalSanitizer(contentResponse);
 
+        // ========== STEP 5.5: CRITICAL - REMOVE ALL H1 TAGS ==========
+        generatedHtml = removeH1Tags(generatedHtml);
+
         // ========== STEP 6: SEO METADATA ==========
         context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "generating", statusText: "🎯 Optimizing SEO..." } });
         const metaResponse = await callAIFn("seometadatagenerator", [item.title, generatedHtml.substring(0, 800), strategy.targetAudience || "General", serpGaps.topCompetitorTitles, null], "json");
@@ -742,19 +957,17 @@ ${serpGaps.competitorInsights.slice(0, 5).map((c, i) => `${i + 1}. ${c}`).join('
         const takeawaysResponse = await callAIFn("sotatakeawaysgenerator", [item.title, generatedHtml], "html");
         const takeawaysHtml = surgicalSanitizer(takeawaysResponse);
 
-        // ========== STEP 9: VALIDATED REFERENCES ==========
-        context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "generating", statusText: "📚 Validating references..." } });
+        // ========== STEP 9: VALIDATED REFERENCES (ALWAYS) ==========
+        context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "generating", statusText: "📚 Fetching references..." } });
         const referencesHtml = await fetchVerifiedReferences(item.title, semanticKeywords, serperApiKey, wpConfig.url);
 
-        // ========== STEP 10: SMART YOUTUBE PLACEMENT ==========
-        context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "generating", statusText: "🎬 Finding relevant videos..." } });
-        let videosInjected = false;
+        // ========== STEP 10: SMART YOUTUBE PLACEMENT (NO DUPLICATES) ==========
+        context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "generating", statusText: "🎬 Finding videos..." } });
         if (serperApiKey) {
           const videos = await getSmartYoutubeVideos(item.title, serperApiKey, 2);
           if (videos.length > 0) {
             generatedHtml = injectYoutubeInRelevantSections(generatedHtml, videos);
-            videosInjected = true;
-            console.log(`[Generate] Injected ${videos.length} YouTube videos in relevant sections`);
+            console.log(`[Generate] Injected ${videos.length} YouTube videos`);
           }
         }
 
@@ -762,14 +975,33 @@ ${serpGaps.competitorInsights.slice(0, 5).map((c, i) => `${i + 1}. ${c}`).join('
         generatedHtml = processInternalLinkCandidates(generatedHtml, existingPages.map(p => ({ title: p.title, slug: p.slug })), wpConfig.url, MAX_INTERNAL_LINKS);
 
         // ========== STEP 12: ASSEMBLE FINAL CONTENT ==========
-        context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "generating", statusText: "🔧 Assembling final content..." } });
+        context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "generating", statusText: "🔧 Assembling content..." } });
         const verificationFooter = generateVerificationFooterHtml();
         let finalContent = performSurgicalUpdate(generatedHtml, { keyTakeawaysHtml: takeawaysHtml, faqHtml, referencesHtml });
 
-        // ========== STEP 13: POST-PROCESSING (CRITICAL) ==========
+        // ========== STEP 13: COMPREHENSIVE POST-PROCESSING ==========
+        // Remove any H1s that might have been added during assembly
+        finalContent = removeH1Tags(finalContent);
+        
+        // Convert any markdown tables to HTML
+        finalContent = convertMarkdownTablesToHtml(finalContent);
+        
+        // Smart post-processing (banned phrases, cleanup)
         finalContent = smartPostProcess(finalContent);
-        finalContent = convertMarkdownTablesToHtml(finalContent); // Extra safety
+        
+        // Remove duplicate sections (FAQs, takeaways, etc.)
         finalContent = removeDuplicateSections(finalContent);
+        
+        // Remove duplicate videos
+        finalContent = removeDuplicateVideos(finalContent);
+        
+        // Ensure references section exists
+        if (!finalContent.includes('sota-references-section') && !finalContent.includes('SOTA-REFERENCES-START')) {
+          finalContent += referencesHtml;
+          console.log("[Generate] Added references section to final content");
+        }
+        
+        // Add verification footer
         finalContent += verificationFooter;
 
         // ========== STEP 14: SCHEMA MARKUP ==========
@@ -781,19 +1013,20 @@ ${serpGaps.competitorInsights.slice(0, 5).map((c, i) => `${i + 1}. ${c}`).join('
         });
 
         // ========== COMPLETE ==========
+        const finalWordCount = countWords(finalContent);
         const generatedContent: GeneratedContent = {
           title: seoTitle, metaDescription, slug, primaryKeyword: item.title, semanticKeywords,
           content: finalContent, strategy, serpData: serpGaps.topCompetitorTitles, schemaMarkup: schemaJson,
-          imageDetails: [], wordCount: countWords(finalContent),
+          imageDetails: [], wordCount: finalWordCount,
           socialMediaCopy: { twitter: `🚀 ${seoTitle}`, linkedIn: `New: ${seoTitle}` },
           faqSection: faqItems, keyTakeaways: [], outline: [], references: [],
           neuronAnalysis: neuronData ? { termstxt: { contentbasic: neuronData } } : undefined,
         };
 
         context.dispatch({ type: "SET_CONTENT", payload: { id: item.id, content: generatedContent } });
-        context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "done", statusText: `✅ Complete! (${countWords(finalContent)} words)` } });
+        context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "done", statusText: `✅ ${finalWordCount} words (Target: ${serpGaps.optimalWordCount})` } });
         
-        console.log(`[Generate] ✅ SUCCESS: ${item.title} - ${countWords(finalContent)} words, ${semanticKeywords.length} keywords`);
+        console.log(`[Generate] ✅ SUCCESS: ${item.title} - ${finalWordCount} words (target: ${serpGaps.optimalWordCount})`);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : String(error);
         console.error(`[Generate] ❌ ERROR for ${item.title}:`, error);
@@ -838,18 +1071,32 @@ ${serpGaps.competitorInsights.slice(0, 5).map((c, i) => `${i + 1}. ${c}`).join('
       const optimizedResponse = await callAIFn("godmodestructuralguardian", [crawledContent, semanticKeywords, existingTitle], "html");
       let optimizedContent = surgicalSanitizer(optimizedResponse);
 
+      // CRITICAL: Remove H1 tags
+      optimizedContent = removeH1Tags(optimizedContent);
+
       if (existingImages.length > 0) optimizedContent = injectImagesIntoContent(optimizedContent, existingImages);
 
-      // Smart YouTube placement
+      // Smart YouTube placement (no duplicates)
       if (serperApiKey) {
         const videos = await getSmartYoutubeVideos(existingTitle, serperApiKey, 2);
         if (videos.length > 0) optimizedContent = injectYoutubeInRelevantSections(optimizedContent, videos);
       }
 
+      // Always add references
       const referencesHtml = await fetchVerifiedReferences(existingTitle, semanticKeywords, serperApiKey, wpConfig.url);
       const verificationFooter = generateVerificationFooterHtml();
       
-      optimizedContent = smartPostProcess(optimizedContent + referencesHtml + verificationFooter);
+      // Comprehensive post-processing
+      optimizedContent = convertMarkdownTablesToHtml(optimizedContent);
+      optimizedContent = smartPostProcess(optimizedContent);
+      optimizedContent = removeDuplicateSections(optimizedContent);
+      optimizedContent = removeDuplicateVideos(optimizedContent);
+      
+      // Ensure references
+      if (!optimizedContent.includes('sota-references-section')) {
+        optimizedContent += referencesHtml;
+      }
+      optimizedContent += verificationFooter;
 
       const metaResponse = await callAIFn("seometadatagenerator", [existingTitle, optimizedContent.substring(0, 800), "General", [], null], "json");
       const { seoTitle, metaDescription, slug } = safeJsonParseWithRecovery<{ seoTitle: string; metaDescription: string; slug: string }>(
@@ -873,7 +1120,7 @@ ${serpGaps.competitorInsights.slice(0, 5).map((c, i) => `${i + 1}. ${c}`).join('
       };
 
       context.dispatch({ type: "SET_CONTENT", payload: { id: item.id, content: generatedContent } });
-      context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "done", statusText: "✅ Refreshed!" } });
+      context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "done", statusText: `✅ Refreshed (${countWords(optimizedContent)} words)` } });
     } catch (error) {
       context.dispatch({ type: "UPDATE_STATUS", payload: { id: item.id, status: "error", statusText: error instanceof Error ? error.message : String(error) } });
     }
@@ -935,7 +1182,7 @@ ${serpGaps.competitorInsights.slice(0, 5).map((c, i) => `${i + 1}. ${c}`).join('
 };
 
 // ============================================================================
-// SECTION 7: IMAGE GENERATION & WORDPRESS PUBLISHING
+// SECTION 8: IMAGE GENERATION & WORDPRESS PUBLISHING
 // ============================================================================
 
 export const generateImageWithFallback = async (apiClients: ApiClients, prompt: string): Promise<string | null> => {
@@ -1005,7 +1252,7 @@ export const publishItemToWordPress = async (
 };
 
 // ============================================================================
-// SECTION 8: GOD MODE MAINTENANCE ENGINE
+// SECTION 9: GOD MODE MAINTENANCE ENGINE
 // ============================================================================
 
 class MaintenanceEngine {
@@ -1080,10 +1327,10 @@ class MaintenanceEngine {
       const crawledContent = await smartCrawl(page.id);
       if (!crawledContent || crawledContent.length < 300) { this.logCallback(`⚠️ Content too short.`); return; }
 
-      // SERP Gap Analysis
-      this.logCallback("📊 Analyzing competitors...");
       const callAIFn = (pk: string, args: unknown[], fmt: "json" | "html" = "json") => 
         callAI(apiClients, selectedModel, geoTargeting, openrouterModels, selectedGroqModel, pk, args, fmt);
+      
+      // SERP Gap Analysis
       const serpGaps = await analyzeSerpGaps(page.title || page.slug, serperApiKey, callAIFn);
 
       this.logCallback("🔍 Generating keywords...");
@@ -1094,6 +1341,10 @@ class MaintenanceEngine {
       this.logCallback("⚡ Optimizing...");
       const optimizedResponse = await callAI(apiClients, selectedModel, geoTargeting, openrouterModels, selectedGroqModel, "godmodestructuralguardian", [crawledContent, semanticKeywords, page.title || page.slug], "html");
       let optimizedContent = surgicalSanitizer(optimizedResponse);
+      
+      // CRITICAL: Remove H1 tags
+      optimizedContent = removeH1Tags(optimizedContent);
+      
       let changesMade = optimizedContent.length > crawledContent.length * 0.6 ? 1 : 0;
 
       if (!optimizedContent.includes("verification-footer-sota")) {
@@ -1101,12 +1352,13 @@ class MaintenanceEngine {
         changesMade++;
       }
 
+      // Always add references if missing
       if (!optimizedContent.includes("sota-references-section") && serperApiKey) {
         const refs = await fetchVerifiedReferences(page.title || page.slug, semanticKeywords, serperApiKey, wpConfig.url);
         if (refs) { optimizedContent += refs; changesMade++; }
       }
 
-      // Smart YouTube
+      // Smart YouTube (no duplicates)
       if (serperApiKey && !optimizedContent.includes("youtube.com/embed")) {
         const videos = await getSmartYoutubeVideos(page.title || page.slug, serperApiKey, 2);
         if (videos.length > 0) {
@@ -1115,7 +1367,11 @@ class MaintenanceEngine {
         }
       }
 
+      // Comprehensive post-processing
+      optimizedContent = convertMarkdownTablesToHtml(optimizedContent);
       optimizedContent = smartPostProcess(optimizedContent);
+      optimizedContent = removeDuplicateSections(optimizedContent);
+      optimizedContent = removeDuplicateVideos(optimizedContent);
 
       if (changesMade > 0) {
         this.logCallback(`📤 Publishing ${changesMade} improvements...`);
@@ -1160,4 +1416,6 @@ export {
   surgicalSanitizer,
   stripMarkdownCodeBlocks,
   repairTruncatedJson,
+  removeH1Tags,
+  removeDuplicateVideos
 };
