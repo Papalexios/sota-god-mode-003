@@ -111,6 +111,62 @@ function safeJsonParse(response, context) {
   }
 }
 
+// ADD THIS NEAR THE TOP OF services.tsx (after imports)
+
+/**
+ * Sanitizes AI response by removing markdown code blocks
+ */
+const sanitizeAIResponse = (response: string, format: 'json' | 'html'): string => {
+  if (!response || typeof response !== 'string') return '';
+  
+  let cleaned = response.trim();
+  
+  if (format === 'json') {
+    // Remove markdown code blocks
+    if (cleaned.startsWith('```json') || cleaned.startsWith('```JSON')) {
+      cleaned = cleaned.slice(7);
+    } else if (cleaned.startsWith('```')) {
+      cleaned = cleaned.slice(3);
+    }
+    
+    if (cleaned.endsWith('```')) {
+      cleaned = cleaned.slice(0, -3);
+    }
+    
+    cleaned = cleaned.trim();
+    
+    // Try to extract JSON boundaries
+    const jsonObjectMatch = cleaned.match(/\{[\s\S]*\}/);
+    const jsonArrayMatch = cleaned.match(/\[[\s\S]*\]/);
+    
+    if (jsonObjectMatch && jsonArrayMatch) {
+      const objectIndex = cleaned.indexOf(jsonObjectMatch[0]);
+      const arrayIndex = cleaned.indexOf(jsonArrayMatch[0]);
+      cleaned = objectIndex < arrayIndex ? jsonObjectMatch[0] : jsonArrayMatch[0];
+    } else if (jsonObjectMatch) {
+      cleaned = jsonObjectMatch[0];
+    } else if (jsonArrayMatch) {
+      cleaned = jsonArrayMatch[0];
+    }
+  }
+  
+  if (format === 'html') {
+    // Remove markdown html blocks
+    if (cleaned.startsWith('```html') || cleaned.startsWith('```HTML')) {
+      cleaned = cleaned.slice(7);
+    } else if (cleaned.startsWith('```')) {
+      cleaned = cleaned.slice(3);
+    }
+    
+    if (cleaned.endsWith('```')) {
+      cleaned = cleaned.slice(0, -3);
+    }
+  }
+  
+  return cleaned.trim();
+};
+
+
 
 // =============================================================================
 // SECTION 1: SOTA JSON EXTRACTION - ENTERPRISE GRADE ERROR HANDLING
