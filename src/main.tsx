@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 
-// Error Boundary
+// Error Boundary Component
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error: Error | null }
@@ -61,10 +61,10 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-// Export for use in App.tsx
+// Export for backward compatibility
 export { ErrorBoundary as SotaErrorBoundary };
 
-// Mount app
+// Mount application
 const rootElement = document.getElementById('root');
 
 if (!rootElement) {
