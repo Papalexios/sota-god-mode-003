@@ -1,4 +1,5 @@
 // Enterprise-Grade AI Services, Content Generation & God Mode Engine
+// Version 12.1 - Robust JSON Parsing with Truncation Recovery
 
 import { GoogleGenAI } from "@anthropic-ai/sdk";
 import OpenAI from "openai";
@@ -47,7 +48,7 @@ import { generateFullSchema } from "./schema-generator";
 import { fetchNeuronTerms } from "./neuronwriter";
 
 // ============================================================================
-// SECTION 1: SOTA JSON EXTRACTION - ENTERPRISE GRADE ERROR HANDLING
+// SECTION 1: SOTA JSON EXTRACTION - ENTERPRISE GRADE WITH TRUNCATION RECOVERY
 // ============================================================================
 
 /**
@@ -86,8 +87,185 @@ const stripMarkdownCodeBlocks = (text: string): string => {
 };
 
 /**
+ * ENTERPRISE-GRADE: Repairs truncated JSON from AI responses that hit token limits.
+ * Handles unterminated strings, missing brackets, and partial arrays.
+ * 
+ * @param json - Potentially truncated JSON string
+ * @returns Repaired JSON string or null if unrepairable
+ */
+const repairTruncatedJson = (json: string): string | null => {
+  if (!json || typeof json !== "string") return null;
+  
+  let repaired = json.trim();
+  
+  // Track state for repair
+  let inString = false;
+  let escapeNext = false;
+  let bracketStack: string[] = [];
+  let lastValidIndex = -1;
+  
+  for (let i = 0; i < repaired.length; i++) {
+    const char = repaired[i];
+    
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    
+    if (char === "\\") {
+      escapeNext = true;
+      continue;
+    }
+    
+    if (char === '"' && !escapeNext) {
+      inString = !inString;
+      if (!inString) {
+        lastValidIndex = i; // Valid string close
+      }
+      continue;
+    }
+    
+    if (!inString) {
+      if (char === '{' || char === '[') {
+        bracketStack.push(char);
+        lastValidIndex = i;
+      } else if (char === '}' || char === ']') {
+        if (bracketStack.length > 0) {
+          bracketStack.pop();
+          lastValidIndex = i;
+        }
+      } else if (char === ',' || char === ':') {
+        lastValidIndex = i;
+      }
+    }
+  }
+  
+  // If we're inside a string at the end, it's truncated
+  if (inString) {
+    console.warn("[repairTruncatedJson] Detected truncated string, attempting repair...");
+    
+    // Find the last complete item in an array
+    // Look for pattern: "keyword", or "keyword" before truncation
+    const lastCompleteQuote = repaired.lastIndexOf('"');
+    if (lastCompleteQuote > 0) {
+      // Check if this quote closes a string (previous char should be content, not escape)
+      const beforeQuote = repaired.substring(0, lastCompleteQuote);
+      const lastOpenQuote = beforeQuote.lastIndexOf('"');
+      
+      if (lastOpenQuote !== -1) {
+        // We have a complete string, find the comma or bracket before the truncated part
+        let truncateAt = repaired.length;
+        
+        // Look for the last complete array element
+        for (let i = repaired.length - 1; i >= 0; i--) {
+          const c = repaired[i];
+          if (c === ',' || c === '[' || c === '{') {
+            truncateAt = i;
+            break;
+          }
+          if (c === '"') {
+            // Check if this is a complete string by looking for its opening quote
+            let j = i - 1;
+            while (j >= 0 && repaired[j] !== '"') j--;
+            if (j >= 0) {
+              // This is a complete string, check what follows
+              const afterString = repaired.substring(i + 1).trim();
+              if (afterString.startsWith(',') || afterString.startsWith(']') || afterString.startsWith('}')) {
+                truncateAt = repaired.indexOf(',', i + 1);
+                if (truncateAt === -1) truncateAt = i + 1;
+                break;
+              }
+            }
+          }
+        }
+        
+        // Truncate and close brackets
+        repaired = repaired.substring(0, truncateAt);
+      }
+    }
+  }
+  
+  // Remove trailing commas before closing
+  repaired = repaired.replace(/,\s*$/, "");
+  
+  // Close any remaining open brackets
+  // Re-scan to find what's still open
+  bracketStack = [];
+  inString = false;
+  escapeNext = false;
+  
+  for (let i = 0; i < repaired.length; i++) {
+    const char = repaired[i];
+    
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    
+    if (char === "\\") {
+      escapeNext = true;
+      continue;
+    }
+    
+    if (char === '"' && !escapeNext) {
+      inString = !inString;
+      continue;
+    }
+    
+    if (!inString) {
+      if (char === '{') bracketStack.push('}');
+      else if (char === '[') bracketStack.push(']');
+      else if (char === '}' || char === ']') {
+        if (bracketStack.length > 0 && bracketStack[bracketStack.length - 1] === char) {
+          bracketStack.pop();
+        }
+      }
+    }
+  }
+  
+  // If still in string, close it
+  if (inString) {
+    repaired += '"';
+  }
+  
+  // Close remaining brackets in reverse order
+  while (bracketStack.length > 0) {
+    repaired += bracketStack.pop();
+  }
+  
+  // Validate the repair worked
+  try {
+    JSON.parse(repaired);
+    console.log("[repairTruncatedJson] Successfully repaired truncated JSON");
+    return repaired;
+  } catch (e) {
+    console.warn("[repairTruncatedJson] Repair attempt failed, trying fallback...");
+    
+    // Fallback: Try to extract just the array content for keyword responses
+    const arrayMatch = json.match(/\[\s*(["'][^"']+["']\s*,?\s*)+/g);
+    if (arrayMatch) {
+      // Extract all quoted strings from the partial array
+      const keywords: string[] = [];
+      const stringMatches = json.matchAll(/["']([^"']+)["']/g);
+      for (const match of stringMatches) {
+        if (match[1] && match[1].length > 1 && match[1].length < 100) {
+          keywords.push(match[1]);
+        }
+      }
+      
+      if (keywords.length > 5) {
+        console.log(`[repairTruncatedJson] Extracted ${keywords.length} keywords from truncated response`);
+        return JSON.stringify({ semanticKeywords: keywords });
+      }
+    }
+    
+    return null;
+  }
+};
+
+/**
  * Safely extracts JSON from AI responses that may contain markdown or text wrapping.
- * Handles: ```json blocks, raw JSON, JSON within text, and error responses.
+ * ENHANCED: Now handles truncated responses from token limits.
  * 
  * @param response - Raw response string from AI or API
  * @returns Extracted JSON string ready for parsing
@@ -105,52 +283,69 @@ const extractJsonFromResponse = (response: string): string => {
 
   // Case 2: Already valid JSON (starts with { or [)
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-    // Validate it's complete JSON by finding matching brackets
-    const isObject = trimmed.startsWith("{");
-    const openChar = isObject ? "{" : "[";
-    const closeChar = isObject ? "}" : "]";
-    
-    let depth = 0;
-    let inString = false;
-    let escapeNext = false;
-    let endIndex = -1;
-    
-    for (let i = 0; i < trimmed.length; i++) {
-      const char = trimmed[i];
+    // First, try direct parse
+    try {
+      JSON.parse(trimmed);
+      return trimmed;
+    } catch (directError) {
+      // JSON is malformed, likely truncated - attempt repair
+      console.warn("[extractJsonFromResponse] Direct parse failed, attempting repair...");
       
-      if (escapeNext) {
-        escapeNext = false;
-        continue;
+      const repaired = repairTruncatedJson(trimmed);
+      if (repaired) {
+        return repaired;
       }
       
-      if (char === "\\") {
-        escapeNext = true;
-        continue;
-      }
+      // If repair failed, try to find complete JSON within
+      const isObject = trimmed.startsWith("{");
+      const openChar = isObject ? "{" : "[";
+      const closeChar = isObject ? "}" : "]";
       
-      if (char === '"' && !escapeNext) {
-        inString = !inString;
-        continue;
-      }
+      let depth = 0;
+      let inString = false;
+      let escapeNext = false;
+      let endIndex = -1;
       
-      if (!inString) {
-        if (char === openChar) depth++;
-        else if (char === closeChar) {
-          depth--;
-          if (depth === 0) {
-            endIndex = i;
-            break;
+      for (let i = 0; i < trimmed.length; i++) {
+        const char = trimmed[i];
+        
+        if (escapeNext) {
+          escapeNext = false;
+          continue;
+        }
+        
+        if (char === "\\") {
+          escapeNext = true;
+          continue;
+        }
+        
+        if (char === '"' && !escapeNext) {
+          inString = !inString;
+          continue;
+        }
+        
+        if (!inString) {
+          if (char === openChar) depth++;
+          else if (char === closeChar) {
+            depth--;
+            if (depth === 0) {
+              endIndex = i;
+              break;
+            }
           }
         }
       }
+      
+      if (endIndex > 0) {
+        const extracted = trimmed.substring(0, endIndex + 1);
+        try {
+          JSON.parse(extracted);
+          return extracted;
+        } catch {
+          // Continue to other methods
+        }
+      }
     }
-    
-    if (endIndex > 0) {
-      return trimmed.substring(0, endIndex + 1);
-    }
-    
-    // If we couldn't find matching brackets, return as-is and let JSON.parse handle it
-    return trimmed;
   }
 
   // Case 3: Markdown code block with json/JSON tag (already stripped, but check again)
@@ -159,7 +354,13 @@ const extractJsonFromResponse = (response: string): string => {
   if (jsonBlockMatch && jsonBlockMatch[1]) {
     const extracted = jsonBlockMatch[1].trim();
     if (extracted.startsWith("{") || extracted.startsWith("[")) {
-      return extracted;
+      try {
+        JSON.parse(extracted);
+        return extracted;
+      } catch {
+        const repaired = repairTruncatedJson(extracted);
+        if (repaired) return repaired;
+      }
     }
   }
 
@@ -185,13 +386,18 @@ const extractJsonFromResponse = (response: string): string => {
     if (lastEnd > startIndex) {
       const extracted = trimmed.substring(startIndex, lastEnd + 1);
       
-      // Quick validation - try to parse
       try {
         JSON.parse(extracted);
         return extracted;
       } catch {
-        // Continue to error handling
+        // Try repair on this substring
+        const repaired = repairTruncatedJson(trimmed.substring(startIndex));
+        if (repaired) return repaired;
       }
+    } else {
+      // No closing bracket found - definitely truncated
+      const repaired = repairTruncatedJson(trimmed.substring(startIndex));
+      if (repaired) return repaired;
     }
   }
 
@@ -215,50 +421,25 @@ const extractJsonFromResponse = (response: string): string => {
     }
   }
 
-  // Case 6: AI conversational prefix - try harder to find JSON
-  const conversationalPrefixes = [
-    /^Based on/i,
-    /^Here(?:'s| is)/i,
-    /^Below/i,
-    /^The following/i,
-    /^I(?:'ve| have)/i,
-    /^Let me/i,
-    /^Sure/i,
-    /^Certainly/i,
-  ];
-
-  for (const prefix of conversationalPrefixes) {
-    if (prefix.test(trimmed)) {
-      // Find first { or [ after the prefix
-      const afterPrefix = trimmed.substring(20); // Skip prefix
-      const braceIdx = afterPrefix.indexOf("{");
-      const bracketIdx = afterPrefix.indexOf("[");
-      
-      let jsonStartIdx = -1;
-      let endChar: string;
-      
-      if (braceIdx !== -1 && (bracketIdx === -1 || braceIdx < bracketIdx)) {
-        jsonStartIdx = braceIdx + 20;
-        endChar = "}";
-      } else if (bracketIdx !== -1) {
-        jsonStartIdx = bracketIdx + 20;
-        endChar = "]";
-      }
-      
-      if (jsonStartIdx !== -1) {
-        const lastEnd = trimmed.lastIndexOf(endChar!);
-        if (lastEnd > jsonStartIdx) {
-          return trimmed.substring(jsonStartIdx, lastEnd + 1);
-        }
-      }
+  // Case 6: Last resort - try to extract any keywords from the response
+  const keywordExtraction = trimmed.matchAll(/["']([^"']{2,50})["']/g);
+  const extractedKeywords: string[] = [];
+  for (const match of keywordExtraction) {
+    if (match[1] && !match[1].includes(":") && !match[1].includes("{")) {
+      extractedKeywords.push(match[1]);
     }
+  }
+  
+  if (extractedKeywords.length >= 5) {
+    console.warn(`[extractJsonFromResponse] Fallback: Extracted ${extractedKeywords.length} keywords from malformed response`);
+    return JSON.stringify({ semanticKeywords: extractedKeywords.slice(0, 40) });
   }
 
   // Final: Cannot extract - throw descriptive error
   throw new Error(
     `Could not extract valid JSON from AI response. ` +
     `Response starts with: "${trimmed.substring(0, 80)}..." ` +
-    `(Length: ${trimmed.length} chars)`
+    `(Length: ${trimmed.length} chars). Response may be truncated.`
   );
 };
 
@@ -275,6 +456,73 @@ const safeJsonParse = <T = unknown>(response: string, context: string = "Unknown
     console.error(`[safeJsonParse] Error: ${errMsg}`);
     console.error(`[safeJsonParse] Response preview:`, response?.substring(0, 500));
     throw new Error(`JSON parse failed (${context}): ${errMsg}`);
+  }
+};
+
+/**
+ * ENTERPRISE-GRADE: Safe JSON parse with automatic recovery and fallback values.
+ * Use this for non-critical parsing where we can continue with defaults.
+ */
+const safeJsonParseWithRecovery = <T = unknown>(
+  response: string, 
+  context: string, 
+  fallback: T
+): T => {
+  try {
+    return safeJsonParse<T>(response, context);
+  } catch (error) {
+    console.warn(`[safeJsonParseWithRecovery] Failed for ${context}, using fallback`);
+    return fallback;
+  }
+};
+
+/**
+ * Extracts semantic keywords from AI response with multiple fallback strategies.
+ */
+const extractSemanticKeywords = (response: string, context: string): string[] => {
+  try {
+    const parsed = safeJsonParse<any>(response, context);
+    
+    // Handle { semanticKeywords: [...] } format
+    if (parsed && Array.isArray(parsed.semanticKeywords)) {
+      return parsed.semanticKeywords.filter((k: unknown) => typeof k === "string").slice(0, 50);
+    }
+    
+    // Handle direct array format [...]
+    if (Array.isArray(parsed)) {
+      return parsed.filter((k: unknown) => typeof k === "string").slice(0, 50);
+    }
+    
+    // Handle nested structure
+    if (parsed && typeof parsed === "object") {
+      const possibleArrays = Object.values(parsed).filter(Array.isArray);
+      if (possibleArrays.length > 0) {
+        const keywords = possibleArrays[0] as unknown[];
+        return keywords.filter((k: unknown) => typeof k === "string").slice(0, 50);
+      }
+    }
+    
+    console.warn(`[extractSemanticKeywords] Unexpected format for ${context}`);
+    return [];
+  } catch (error) {
+    console.error(`[extractSemanticKeywords] Failed for ${context}:`, error);
+    
+    // Last resort: extract quoted strings from raw response
+    const extracted: string[] = [];
+    const matches = response.matchAll(/["']([a-zA-Z][a-zA-Z0-9\s-]{2,40})["']/g);
+    for (const match of matches) {
+      if (match[1] && !extracted.includes(match[1])) {
+        extracted.push(match[1]);
+      }
+      if (extracted.length >= 30) break;
+    }
+    
+    if (extracted.length > 5) {
+      console.log(`[extractSemanticKeywords] Recovered ${extracted.length} keywords from raw response`);
+      return extracted;
+    }
+    
+    return [];
   }
 };
 
@@ -313,7 +561,7 @@ export const callAI = async (
   const promptTemplate = PROMPT_TEMPLATES[promptKey as keyof typeof PROMPT_TEMPLATES];
   
   if (!promptTemplate) {
-    throw new Error(`Unknown prompt template: ${promptKey}`);
+    throw new Error(`Unknown prompt template: ${promptKey}. Available: ${Object.keys(PROMPT_TEMPLATES).slice(0, 10).join(", ")}...`);
   }
 
   const systemInstruction = promptTemplate.systemInstruction;
@@ -774,17 +1022,19 @@ export const generateContent = {
       });
 
       try {
-        // Step 1: Generate semantic keywords
+        // Step 1: Generate semantic keywords with robust extraction
         context.dispatch({
           type: "UPDATE_STATUS",
           payload: { id: item.id, status: "generating", statusText: "Generating keywords..." },
         });
 
         const keywordsResponse = await callAIFn("semantickeywordgenerator", [item.title], "json");
-        const semanticKeywords = safeJsonParse<{ semanticKeywords: string[] }>(
-          keywordsResponse,
-          "semantickeywordgenerator"
-        ).semanticKeywords || safeJsonParse<string[]>(keywordsResponse, "semantickeywordgenerator");
+        // FIXED: Use robust extraction that handles truncation
+        const semanticKeywords = extractSemanticKeywords(keywordsResponse, "semantickeywordgenerator");
+        
+        if (semanticKeywords.length === 0) {
+          console.warn(`[generateItems] No keywords extracted for ${item.title}, using title-based fallback`);
+        }
 
         // Step 2: Fetch NeuronWriter terms if enabled
         let neuronData: string | null = null;
@@ -831,7 +1081,11 @@ export const generateContent = {
             });
 
             const serpText = await serpResponse.text();
-            const serpJson = safeJsonParse<{ organic?: unknown[] }>(serpText, "Serper SERP Data");
+            const serpJson = safeJsonParseWithRecovery<{ organic?: unknown[] }>(
+              serpText, 
+              "Serper SERP Data",
+              { organic: [] }
+            );
             serpData = serpJson.organic || [];
 
             const gapResponse = await callAIFn(
@@ -839,7 +1093,11 @@ export const generateContent = {
               [item.title, (serpData as unknown[]).slice(0, 5)],
               "json"
             );
-            const gapResult = safeJsonParse<{ gaps: string[] }>(gapResponse, "competitorgapanalyzer");
+            const gapResult = safeJsonParseWithRecovery<{ gaps: string[] }>(
+              gapResponse, 
+              "competitorgapanalyzer",
+              { gaps: [] }
+            );
             competitorGaps = gapResult.gaps || [];
           } catch (e) {
             console.warn("[generateItems] SERP analysis failed:", e);
@@ -857,7 +1115,11 @@ export const generateContent = {
           [item.title, semanticKeywords, serpData, item.type],
           "json"
         );
-        const strategy = safeJsonParse<Record<string, unknown>>(strategyResponse, "contentstrategygenerator");
+        const strategy = safeJsonParseWithRecovery<Record<string, unknown>>(
+          strategyResponse, 
+          "contentstrategygenerator",
+          { targetAudience: "General", searchIntent: "Informational", contentAngle: "Comprehensive" }
+        );
 
         // Step 5: Generate main content
         context.dispatch({
@@ -897,11 +1159,15 @@ export const generateContent = {
           ],
           "json"
         );
-        const { seoTitle, metaDescription, slug } = safeJsonParse<{
+        const { seoTitle, metaDescription, slug } = safeJsonParseWithRecovery<{
           seoTitle: string;
           metaDescription: string;
           slug: string;
-        }>(metaResponse, "seometadatagenerator");
+        }>(metaResponse, "seometadatagenerator", {
+          seoTitle: item.title,
+          metaDescription: `Learn about ${item.title}`,
+          slug: item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 50)
+        });
 
         // Step 7: Generate FAQ section
         context.dispatch({
@@ -928,7 +1194,7 @@ export const generateContent = {
 
         const referencesHtml = await fetchVerifiedReferences(
           item.title,
-          Array.isArray(semanticKeywords) ? semanticKeywords : [],
+          semanticKeywords,
           serperApiKey,
           wpConfig.url
         );
@@ -976,7 +1242,7 @@ export const generateContent = {
           metaDescription,
           slug,
           primaryKeyword: item.title,
-          semanticKeywords: Array.isArray(semanticKeywords) ? semanticKeywords : [],
+          semanticKeywords,
           content: cleanContent,
           strategy,
           serpData,
@@ -1060,10 +1326,8 @@ export const generateContent = {
       });
 
       const keywordsResponse = await callAIFn("semantickeywordgenerator", [existingTitle], "json");
-      const semanticKeywords = safeJsonParse<{ semanticKeywords: string[] }>(
-        keywordsResponse,
-        "semantickeywordgenerator"
-      ).semanticKeywords || safeJsonParse<string[]>(keywordsResponse, "semantickeywordgenerator");
+      // FIXED: Use robust extraction
+      const semanticKeywords = extractSemanticKeywords(keywordsResponse, "semantickeywordgenerator (refresh)");
 
       context.dispatch({
         type: "UPDATE_STATUS",
@@ -1083,7 +1347,7 @@ export const generateContent = {
 
       const referencesHtml = await fetchVerifiedReferences(
         existingTitle,
-        Array.isArray(semanticKeywords) ? semanticKeywords : [],
+        semanticKeywords,
         serperApiKey,
         wpConfig.url
       );
@@ -1097,18 +1361,22 @@ export const generateContent = {
         [existingTitle, optimizedContent.substring(0, 1000), "General audience", [], null],
         "json"
       );
-      const { seoTitle, metaDescription, slug } = safeJsonParse<{
+      const { seoTitle, metaDescription, slug } = safeJsonParseWithRecovery<{
         seoTitle: string;
         metaDescription: string;
         slug: string;
-      }>(metaResponse, "seometadatagenerator");
+      }>(metaResponse, "seometadatagenerator", {
+        seoTitle: existingTitle,
+        metaDescription: `Learn about ${existingTitle}`,
+        slug: extractSlugFromUrl(item.originalUrl!) || existingTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+      });
 
       const generatedContent: GeneratedContent = {
         title: seoTitle,
         metaDescription,
         slug: extractSlugFromUrl(item.originalUrl!) || slug,
         primaryKeyword: existingTitle,
-        semanticKeywords: Array.isArray(semanticKeywords) ? semanticKeywords : [],
+        semanticKeywords,
         content: optimizedContent,
         strategy: {
           targetAudience: "General",
@@ -1165,7 +1433,11 @@ export const generateContent = {
         "json"
       );
 
-      const responseParsed = safeJsonParse<any>(gapResponse, "competitorgapanalyzer");
+      const responseParsed = safeJsonParseWithRecovery<any>(
+        gapResponse, 
+        "competitorgapanalyzer",
+        { gaps: [] }
+      );
       return Array.isArray(responseParsed) ? responseParsed : responseParsed.gaps || [];
     } catch (error) {
       console.error("[analyzeContentGaps] Error:", error);
@@ -1175,7 +1447,6 @@ export const generateContent = {
 
   /**
    * Analyze pages for health check.
-   * FIXED: Now properly extracts and displays AI analysis results
    */
   async analyzePages(
     pages: SitemapPage[],
@@ -1203,8 +1474,8 @@ export const generateContent = {
           "json"
         );
 
-        // FIXED: Properly parse the analysis response
-        const analysis = safeJsonParse<{
+        // Use recovery function for analysis
+        const analysis = safeJsonParseWithRecovery<{
           healthScore: number;
           wordCount: number;
           issues: Array<{ type: string; issue: string; fix: string }>;
@@ -1212,7 +1483,15 @@ export const generateContent = {
           critique?: string;
           strengths?: string[];
           weaknesses?: string[];
-        }>(analysisResponse, "healthanalyzer");
+        }>(analysisResponse, "healthanalyzer", {
+          healthScore: 50,
+          wordCount,
+          issues: [],
+          recommendations: ["Analysis could not be completed"],
+          critique: "Analysis incomplete",
+          strengths: [],
+          weaknesses: []
+        });
 
         const updatePriority =
           analysis.healthScore < 50
@@ -1223,7 +1502,6 @@ export const generateContent = {
             ? "Medium"
             : "Healthy";
 
-        // FIXED: Use actual AI response data instead of hardcoded values
         setPages((prev) =>
           prev.map((p) =>
             p.id === page.id
@@ -1236,26 +1514,18 @@ export const generateContent = {
                   updatePriority,
                   justification: analysis.recommendations?.[0] || "Analysis complete",
                   analysis: {
-                    // FIXED: Use actual critique from AI or generate meaningful one
                     critique: analysis.critique || 
                       `Content health score: ${analysis.healthScore}/100. ` +
                       `Word count: ${analysis.wordCount || wordCount}. ` +
                       `Found ${analysis.issues?.length || 0} issues requiring attention.`,
-                    
-                    // FIXED: Extract strengths from analysis
                     strengths: analysis.strengths || 
                       (analysis.healthScore >= 70 
                         ? ["Content structure is acceptable", "Page is indexed and accessible"]
                         : []),
-                    
-                    // FIXED: Extract weaknesses from issues
                     weaknesses: analysis.weaknesses || 
                       analysis.issues?.map((i) => i.issue) || 
                       [],
-                    
-                    // FIXED: Use actual recommendations
                     recommendations: analysis.recommendations || [],
-                    
                     seoScore: analysis.healthScore,
                     readabilityScore: Math.min(100, analysis.healthScore + 10),
                   },
@@ -1610,10 +1880,8 @@ class MaintenanceEngine {
         [page.title || page.slug],
         "json"
       );
-      const semanticKeywords = safeJsonParse<{ semanticKeywords: string[] }>(
-        keywordsResponse,
-        "semantickeywordgenerator (God Mode)"
-      ).semanticKeywords || safeJsonParse<string[]>(keywordsResponse, "semantickeywordgenerator");
+      // FIXED: Use robust extraction
+      const semanticKeywords = extractSemanticKeywords(keywordsResponse, "semantickeywordgenerator (God Mode)");
 
       this.logCallback("⚡ Optimizing content with SOTA engine...");
       let changesMade = 0;
@@ -1646,7 +1914,7 @@ class MaintenanceEngine {
           this.logCallback("📚 Adding verified references...");
           const referencesHtml = await fetchVerifiedReferences(
             page.title || page.slug,
-            Array.isArray(semanticKeywords) ? semanticKeywords : [],
+            semanticKeywords,
             serperApiKey,
             wpConfig.url
           );
@@ -1678,7 +1946,7 @@ class MaintenanceEngine {
               content: optimizedContent,
               metaDescription: "",
               primaryKeyword: page.title!,
-              semanticKeywords: Array.isArray(semanticKeywords) ? semanticKeywords : [],
+              semanticKeywords,
               strategy: {
                 targetAudience: "",
                 searchIntent: "",
@@ -1727,6 +1995,9 @@ export const maintenanceEngine = new MaintenanceEngine();
 export {
   extractJsonFromResponse,
   safeJsonParse,
+  safeJsonParseWithRecovery,
+  extractSemanticKeywords,
   surgicalSanitizer,
   stripMarkdownCodeBlocks,
+  repairTruncatedJson,
 };
