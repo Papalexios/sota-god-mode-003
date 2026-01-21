@@ -1,7 +1,7 @@
 // =============================================================================
-// SOTA WP CONTENT OPTIMIZER PRO - PROMPT SUITE v12.1
+// SOTA WP CONTENT OPTIMIZER PRO - PROMPT SUITE v12.2
 // =============================================================================
-// CRITICAL: All template keys support both snake_case AND camelCase for compatibility
+// CRITICAL: Optimized for reliable JSON output within token limits
 
 export interface PromptTemplate {
   systemInstruction: string;
@@ -229,25 +229,14 @@ DISTRIBUTION:
 // ==================== CORE PROMPT TEMPLATES ====================
 const CORE_TEMPLATES: Record<string, PromptTemplate> = {
 
-  // ==================== CONTENT STRATEGY GENERATOR (NEW) ====================
+  // ==================== CONTENT STRATEGY GENERATOR ====================
   content_strategy_generator: {
-    systemInstruction: `You are a content strategy expert. Analyze the topic and create a comprehensive content strategy.
+    systemInstruction: `You are a content strategy expert. Create a CONCISE content strategy.
 
-OUTPUT FORMAT (JSON):
-{
-  "targetAudience": "Primary audience description",
-  "searchIntent": "informational|transactional|navigational|commercial",
-  "contentAngle": "Unique angle for this content",
-  "competitorAnalysis": "Brief analysis of competition",
-  "keyMessages": ["Message 1", "Message 2", "Message 3"],
-  "contentStructure": {
-    "introduction": "Hook strategy",
-    "mainSections": ["Section 1", "Section 2", "Section 3"],
-    "conclusion": "CTA strategy"
-  },
-  "differentiators": ["What makes this content unique"],
-  "estimatedWordCount": 2500
-}`,
+CRITICAL: Output COMPACT JSON only. No explanations.
+
+OUTPUT FORMAT:
+{"targetAudience":"...","searchIntent":"informational|transactional|navigational|commercial","contentAngle":"...","competitorAnalysis":"...","keyMessages":["msg1","msg2","msg3"],"estimatedWordCount":2500}`,
 
     userPrompt: (
       topic: string = "",
@@ -255,19 +244,41 @@ OUTPUT FORMAT (JSON):
       serpData: unknown[] = [],
       contentType: string = "article"
     ): string => {
-      const keywords = semanticKeywords?.slice(0, 20).join(", ") || "None";
-      const serp = Array.isArray(serpData) 
-        ? serpData.slice(0, 5).map((s: any) => s?.title || "").filter(Boolean).join("; ") 
-        : "None";
+      const keywords = semanticKeywords?.slice(0, 10).join(", ") || "None";
       
-      return `CREATE CONTENT STRATEGY:
-
-TOPIC: ${topic || "General topic"}
+      return `TOPIC: ${topic || "General"}
 TYPE: ${contentType}
 KEYWORDS: ${keywords}
-COMPETITOR TITLES: ${serp}
 
-Analyze and output JSON strategy.`;
+Output COMPACT JSON strategy. No explanations.`;
+    }
+  },
+
+  // ==================== SEMANTIC KEYWORD GENERATOR (OPTIMIZED) ====================
+  semantic_keyword_generator: {
+    systemInstruction: `Generate semantic keywords. Output ONLY valid JSON.
+
+CRITICAL RULES:
+1. Output EXACTLY this format: {"semanticKeywords":["kw1","kw2",...]
+2. Include 25-35 total keywords (NOT 60-90)
+3. Short keywords only (2-5 words each)
+4. NO explanations, NO markdown, ONLY JSON
+5. Close all brackets properly
+
+Categories (keep brief):
+- Primary variations: 5-8 keywords
+- LSI terms: 8-10 keywords  
+- Question keywords: 5-8 keywords
+- Long-tail: 7-10 keywords`,
+
+    userPrompt: (
+      primaryKeyword: string = "",
+      topic: string = "",
+      serpData: SerpDataItem[] = []
+    ): string => {
+      return `PRIMARY: ${primaryKeyword}
+
+Output JSON: {"semanticKeywords":[...]} with 25-35 SHORT keywords. No markdown.`;
     }
   },
 
@@ -294,23 +305,20 @@ OUTPUT: Clean HTML only. No markdown. 2500-3000 words.`,
       geoLocation: string | null = null,
       neuronData: string | null = null
     ): string => {
-      const keywords = semanticKeywords?.slice(0, 40).join(", ") || "None";
-      const gaps = competitorGaps?.slice(0, 5).join("; ") || "None";
-      const pages = existingPages?.slice(0, 20).map(p => p.title).join(", ") || "None";
+      const keywords = semanticKeywords?.slice(0, 25).join(", ") || "None";
+      const gaps = competitorGaps?.slice(0, 3).join("; ") || "None";
+      const pages = existingPages?.slice(0, 15).map(p => p.title).join(", ") || "None";
       const geo = geoLocation ? `\nGEO-TARGET: ${geoLocation}` : "";
-      const neuron = neuronData ? `\nNLP TERMS: ${neuronData.substring(0, 500)}` : "";
+      const neuron = neuronData ? `\nNLP TERMS: ${neuronData.substring(0, 300)}` : "";
       
       return `WRITE ARTICLE:
 
 PLAN: ${articlePlan || "Comprehensive guide"}
 TARGET AUDIENCE: ${strategy?.targetAudience || "General"}
-SEARCH INTENT: ${strategy?.searchIntent || "Informational"}
-CONTENT ANGLE: ${strategy?.contentAngle || "Comprehensive coverage"}${geo}${neuron}
+SEARCH INTENT: ${strategy?.searchIntent || "Informational"}${geo}${neuron}
 
 KEYWORDS: ${keywords}
-
 GAPS TO FILL: ${gaps}
-
 LINK TARGETS: ${pages}
 
 STRUCTURE:
@@ -324,7 +332,6 @@ REQUIREMENTS:
 - 2500+ words
 - 8-15 [LINK_CANDIDATE: anchor text] links
 - 8+ visual HTML components
-- Zero fluff
 
 OUTPUT: HTML only.`;
     }
@@ -348,9 +355,9 @@ BANNED PHRASES: ${BANNED_AI_PHRASES.slice(0, 20).join(", ")}`,
       existingPages: ExistingPage[] = [],
       topic: string = ""
     ): string => {
-      const keywords = semanticKeywords?.slice(0, 25).join(", ") || "None";
-      const pages = existingPages?.slice(0, 15).map(p => p.title).join(", ") || "None";
-      const content = existingContent?.substring(0, 50000) || "No content";
+      const keywords = semanticKeywords?.slice(0, 20).join(", ") || "None";
+      const pages = existingPages?.slice(0, 10).map(p => p.title).join(", ") || "None";
+      const content = existingContent?.substring(0, 40000) || "No content";
       
       return `OPTIMIZE:
 
@@ -394,7 +401,7 @@ BANNED: ${BANNED_AI_PHRASES.slice(0, 15).join(", ")}`,
       topic: string = ""
     ): string => {
       const keywords = semanticKeywords?.slice(0, 10).join(", ") || "None";
-      const html = htmlFragment?.substring(0, 12000) || "<p>No content</p>";
+      const html = htmlFragment?.substring(0, 10000) || "<p>No content</p>";
       
       return `POLISH:
 
@@ -433,9 +440,9 @@ BANNED: ${BANNED_AI_PHRASES.slice(0, 15).join(", ")}`,
       topic: string = ""
     ): string => {
       const keywords = Array.isArray(semanticKeywords) 
-        ? semanticKeywords.slice(0, 15).join(", ") 
+        ? semanticKeywords.slice(0, 12).join(", ") 
         : "None";
-      const html = htmlFragment?.substring(0, 12000) || "";
+      const html = htmlFragment?.substring(0, 10000) || "";
       
       return `REFINE (preserve structure):
 
@@ -468,9 +475,9 @@ BANNED: ${BANNED_AI_PHRASES.slice(0, 20).join(", ")}`,
       topic: string = ""
     ): string => {
       const keywords = Array.isArray(semanticKeywords)
-        ? semanticKeywords.slice(0, 20).join(", ")
+        ? semanticKeywords.slice(0, 15).join(", ")
         : "None";
-      const html = htmlFragment?.substring(0, 12000) || "";
+      const html = htmlFragment?.substring(0, 10000) || "";
       
       return `TRANSMUTE:
 
@@ -526,7 +533,7 @@ Each must be:
       topic: string = "",
       content: string = ""
     ): string => {
-      const text = content?.substring(0, 5000) || "";
+      const text = content?.substring(0, 4000) || "";
       return `EXTRACT TAKEAWAYS:
 
 Topic: ${topic}
@@ -550,7 +557,7 @@ Each FAQ:
       semanticKeywords: string[] = []
     ): string => {
       const keywords = Array.isArray(semanticKeywords)
-        ? semanticKeywords.slice(0, 15).join(", ")
+        ? semanticKeywords.slice(0, 10).join(", ")
         : "None";
       
       return `GENERATE FAQ:
@@ -588,85 +595,32 @@ Output 150-200 word HTML conclusion.`;
     }
   },
 
-  // ==================== SEMANTIC KEYWORD GENERATOR ====================
-  semantic_keyword_generator: {
-    systemInstruction: `Generate semantic keyword clusters.
-
-OUTPUT FORMAT (JSON):
-{
-  "semanticKeywords": ["keyword1", "keyword2", ...]
-}
-
-Categories to include:
-1. Primary Variations (5-10)
-2. LSI Keywords (15-20)
-3. Question Keywords (10-15)
-4. Long-tail Keywords (15-20)
-
-Total: 60-90 keywords in the array`,
-
-    userPrompt: (
-      primaryKeyword: string = "",
-      topic: string = "",
-      serpData: SerpDataItem[] = []
-    ): string => {
-      const serp = serpData?.slice(0, 3).map(d => d.title).join("; ") || "None";
-      return `GENERATE KEYWORDS:
-
-Primary: ${primaryKeyword}
-Topic: ${topic || primaryKeyword}
-SERP: ${serp}
-
-Output JSON: { "semanticKeywords": [...] } with 60-90 keywords.`;
-    }
-  },
-
   // ==================== COMPETITOR GAP ANALYZER ====================
   competitor_gap_analyzer: {
-    systemInstruction: `Identify content gaps competitors miss.
+    systemInstruction: `Identify content gaps. Output COMPACT JSON only.
 
-OUTPUT FORMAT (JSON):
-{
-  "gaps": [
-    {
-      "topic": "Gap topic",
-      "reason": "Why valuable",
-      "difficulty": 5,
-      "contentType": "article|guide|listicle"
-    }
-  ]
-}
+CRITICAL: Keep response SHORT. Max 10 gaps.
 
-Find 10-15 opportunities.`,
+FORMAT:
+{"gaps":[{"topic":"...","reason":"...","difficulty":5}]}`,
 
     userPrompt: (
       topic: string = "",
       competitorContent: unknown[] = [],
       existingTitles: string = ""
     ): string => {
-      const competitors = Array.isArray(competitorContent)
-        ? competitorContent.slice(0, 5).map((c: any) => c?.title || c).filter(Boolean).join("; ")
-        : "None";
-      return `FIND GAPS:
+      return `TOPIC: ${topic}
 
-Topic: ${topic}
-Competitors: ${competitors}
-Our Content: ${existingTitles || "None"}
-
-Output JSON: { "gaps": [...] } with 10-15 opportunities.`;
+Output COMPACT JSON with max 10 gap opportunities.`;
     }
   },
 
   // ==================== SEO METADATA GENERATOR ====================
   seo_metadata_generator: {
-    systemInstruction: `Generate SEO metadata.
+    systemInstruction: `Generate SEO metadata. Output ONLY JSON.
 
-OUTPUT FORMAT (JSON):
-{
-  "seoTitle": "50-60 char title with keyword near start",
-  "metaDescription": "140-155 char description with benefit",
-  "slug": "lowercase-hyphenated-3-5-words"
-}`,
+FORMAT:
+{"seoTitle":"50-60 chars","metaDescription":"140-155 chars","slug":"lowercase-hyphenated"}`,
 
     userPrompt: (
       primaryKeyword: string = "",
@@ -675,61 +629,50 @@ OUTPUT FORMAT (JSON):
       competitorTitles: string[] = [],
       location: string | null = null
     ): string => {
-      const summary = contentSummary?.substring(0, 500) || "";
-      const geo = location ? `\nLocation: ${location}` : "";
-      return `GENERATE METADATA:
+      const summary = contentSummary?.substring(0, 300) || "";
+      return `KEYWORD: ${primaryKeyword}
+SUMMARY: ${summary}
 
-Keyword: ${primaryKeyword}
-Summary: ${summary}${geo}
-
-Output JSON: { "seoTitle": "...", "metaDescription": "...", "slug": "..." }`;
+Output JSON: {"seoTitle":"...","metaDescription":"...","slug":"..."}`;
     }
   },
 
   // ==================== CLUSTER PLANNER ====================
   cluster_planner: {
-    systemInstruction: `Create content cluster plans.
+    systemInstruction: `Create content cluster plans. Output COMPACT JSON.
 
-Output:
-1. ONE Pillar Page (3000+ words)
-2. 8-12 Cluster Pages (2000+ words each)`,
+FORMAT:
+{"pillarTitle":"...","pillarKeyword":"...","clusterPages":[{"title":"...","keyword":"..."}]}`,
 
     userPrompt: (
       topic: string = "",
       existingContent: string[] = [],
       businessContext: string = ""
     ): string => {
-      const existing = existingContent?.slice(0, 10).join("; ") || "None";
-      return `CREATE CLUSTER:
+      return `TOPIC: ${topic}
 
-Topic: ${topic}
-Context: ${businessContext || "Authority building"}
-Existing: ${existing}
-
-Output JSON: { pillarTitle, pillarKeyword, clusterPages: [{title, keyword, angle}] }`;
+Output JSON cluster plan with 1 pillar + 8-10 cluster pages.`;
     }
   },
 
   // ==================== GENERATE INTERNAL LINKS ====================
   generate_internal_links: {
-    systemInstruction: `Suggest internal links with rich anchor text.
+    systemInstruction: `Suggest internal links. Output JSON array.
 
-Anchor: 3-7 words, descriptive
-Never: click here, read more`,
+FORMAT:
+[{"anchorText":"3-7 words","targetSlug":"/slug","contextSentence":"..."}]`,
 
     userPrompt: (
       content: string = "",
       existingPages: ExistingPage[] = []
     ): string => {
-      const text = content?.substring(0, 6000) || "";
-      const pages = existingPages?.slice(0, 20).map(p => p.title + " (/" + p.slug + ")").join("; ") || "None";
+      const text = content?.substring(0, 5000) || "";
+      const pages = existingPages?.slice(0, 15).map(p => `${p.title} (/${p.slug})`).join("; ") || "None";
       
-      return `SUGGEST LINKS:
+      return `CONTENT: ${text}
+PAGES: ${pages}
 
-Content: ${text}
-Pages: ${pages}
-
-Output JSON: [{ anchorText, targetSlug, contextSentence }]`;
+Output JSON array with 8-12 link suggestions.`;
     }
   },
 
@@ -745,78 +688,51 @@ Recent: within 2 years`,
       claims: string[] = [],
       existingRefs: string[] = []
     ): string => {
-      const claimList = claims?.slice(0, 5).join("; ") || "General coverage";
-      return `GENERATE REFERENCES:
+      return `TOPIC: ${topic}
 
-Topic: ${topic}
-Claims: ${claimList}
-
-Output reference section HTML with 8-12 sources.`;
+Output reference section HTML with 6-8 sources.`;
     }
   },
 
   // ==================== HEALTH ANALYZER ====================
   health_analyzer: {
-    systemInstruction: `Analyze content health comprehensively.
+    systemInstruction: `Analyze content health. Output COMPACT JSON.
 
-OUTPUT FORMAT (JSON):
-{
-  "healthScore": 75,
-  "wordCount": 1500,
-  "issues": [
-    {"type": "seo", "issue": "Missing H2 tags", "fix": "Add 3-5 H2 headings"}
-  ],
-  "recommendations": ["Add more internal links", "Include FAQ section"],
-  "critique": "Overall assessment of content quality",
-  "strengths": ["Good keyword usage", "Clear structure"],
-  "weaknesses": ["Thin content", "No schema markup"]
-}
+CRITICAL: Keep response SHORT and valid JSON.
 
-Score: 0-100 based on:
-- Word count (target 2500+)
-- Keyword optimization
-- Readability
-- Structure (H2/H3)
-- Internal linking
-- Schema presence`,
+FORMAT:
+{"healthScore":75,"wordCount":1500,"issues":[{"type":"seo","issue":"...","fix":"..."}],"recommendations":["..."],"critique":"...","strengths":["..."],"weaknesses":["..."]}`,
 
     userPrompt: (
       url: string = "",
       content: string = "",
       targetKeyword: string = ""
     ): string => {
-      const text = content?.substring(0, 8000) || "";
-      return `ANALYZE:
+      const text = content?.substring(0, 6000) || "";
+      return `URL: ${url}
+KEYWORD: ${targetKeyword}
+CONTENT: ${text}
 
-URL: ${url}
-Keyword: ${targetKeyword}
-Content: ${text}
-
-Output JSON with healthScore, wordCount, issues array, recommendations array, critique, strengths, and weaknesses.`;
+Output COMPACT JSON health analysis. Max 5 issues, 5 recommendations.`;
     }
   },
 
   // ==================== SOTA IMAGE ALT OPTIMIZER ====================
   sota_image_alt_optimizer: {
-    systemInstruction: `Write SEO alt text.
+    systemInstruction: `Write SEO alt text. Output JSON array.
 
-Rules:
-- Describe image accurately
-- Include keyword naturally
-- 80-125 characters
-- No "image of" prefix`,
+FORMAT:
+[{"index":1,"altText":"80-125 char description"}]`,
 
     userPrompt: (
       images: ImageContext[] = [],
       primaryKeyword: string = ""
     ): string => {
-      const imgList = images?.map((img, i) => (i + 1) + ". " + img.context).join("; ") || "None";
-      return `GENERATE ALT TEXT:
+      const imgList = images?.slice(0, 10).map((img, i) => `${i + 1}. ${img.context}`).join("; ") || "None";
+      return `KEYWORD: ${primaryKeyword}
+IMAGES: ${imgList}
 
-Keyword: ${primaryKeyword}
-Images: ${imgList}
-
-Output JSON: [{ index, altText }]`;
+Output JSON array with alt text for each image.`;
     }
   },
 
@@ -824,62 +740,46 @@ Output JSON: [{ index, altText }]`;
   json_repair: {
     systemInstruction: `Repair malformed JSON. Return ONLY valid JSON, nothing else.`,
     userPrompt: (brokenJson: string = ""): string => {
-      const json = brokenJson?.substring(0, 5000) || "{}";
-      return `FIX THIS JSON AND RETURN ONLY VALID JSON:
-
-${json}`;
+      const json = brokenJson?.substring(0, 3000) || "{}";
+      return `FIX AND RETURN ONLY VALID JSON:\n${json}`;
     }
   },
 
   // ==================== SCHEMA GENERATOR ====================
   schema_generator: {
-    systemInstruction: `Generate valid JSON-LD schema markup for SEO.
-
-Types: Article, FAQPage, HowTo, Product, LocalBusiness`,
+    systemInstruction: `Generate valid JSON-LD schema. Output ONLY the schema JSON.`,
 
     userPrompt: (
       contentType: string = "",
       data: any = {}
     ): string => {
-      return `GENERATE SCHEMA:
+      return `TYPE: ${contentType || "Article"}
+DATA: ${JSON.stringify(data).substring(0, 500)}
 
-Type: ${contentType || "Article"}
-Data: ${JSON.stringify(data, null, 2)}
-
-Output valid JSON-LD schema markup.`;
+Output valid JSON-LD schema only.`;
     }
   }
 };
 
 // ==================== CREATE ALIASES FOR BACKWARD COMPATIBILITY ====================
-// This ensures both snake_case and camelCase/lowercase versions work
-
 const createAliases = (templates: Record<string, PromptTemplate>): Record<string, PromptTemplate> => {
   const result: Record<string, PromptTemplate> = { ...templates };
   
-  // Define explicit aliases (lowercase no underscores -> snake_case)
   const aliasMap: Record<string, string> = {
-    // Content generation
     "contentstrategygenerator": "content_strategy_generator",
     "ultrasotaarticlewriter": "ultra_sota_article_writer",
     "godmodeautonomousagent": "god_mode_autonomous_agent",
     "domcontentpolisher": "dom_content_polisher",
     "godmodestructuralguardian": "god_mode_structural_guardian",
     "godmodeultrainstinct": "god_mode_ultra_instinct",
-    
-    // Section generators
     "sotaintrogenerator": "sota_intro_generator",
     "sotatakeawaysgenerator": "sota_takeaways_generator",
     "sotafaqgenerator": "sota_faq_generator",
     "sotaconclusiongenerator": "sota_conclusion_generator",
-    
-    // SEO & Analysis
     "semantickeywordgenerator": "semantic_keyword_generator",
     "competitorgapanalyzer": "competitor_gap_analyzer",
     "seometadatagenerator": "seo_metadata_generator",
     "healthanalyzer": "health_analyzer",
-    
-    // Utilities
     "clusterplanner": "cluster_planner",
     "generateinternallinks": "generate_internal_links",
     "referencegenerator": "reference_generator",
@@ -888,7 +788,6 @@ const createAliases = (templates: Record<string, PromptTemplate>): Record<string
     "schemagenerator": "schema_generator",
   };
   
-  // Add all aliases pointing to the original templates
   for (const [alias, original] of Object.entries(aliasMap)) {
     if (templates[original]) {
       result[alias] = templates[original];
@@ -910,7 +809,7 @@ export function buildPrompt(
 
   if (!template) {
     console.error(`[buildPrompt] Unknown prompt key: "${promptKey}"`);
-    console.error(`[buildPrompt] Available keys:`, Object.keys(PROMPT_TEMPLATES).join(", "));
+    console.error(`[buildPrompt] Available keys:`, Object.keys(PROMPT_TEMPLATES).slice(0, 10).join(", "));
     
     return {
       systemInstruction: "You are a helpful assistant.",
@@ -941,7 +840,7 @@ export function buildPrompt(
   }
 }
 
-// ==================== EXPORTS ====================
+// ==================== UTILITY EXPORTS ====================
 export const PROMPT_CONSTANTS = {
   BANNED_PHRASES: BANNED_AI_PHRASES,
   MAX_TOKENS: 8192,
@@ -950,7 +849,8 @@ export const PROMPT_CONSTANTS = {
   MIN_WORD_COUNT: 2500,
   MAX_WORD_COUNT: 3500,
   INTERNAL_LINKS_MIN: 8,
-  INTERNAL_LINKS_MAX: 15
+  INTERNAL_LINKS_MAX: 15,
+  MAX_KEYWORDS: 35  // Reduced from 90 to prevent truncation
 };
 
 export function containsBannedPhrase(text: string): { contains: boolean; phrases: string[] } {
@@ -958,10 +858,7 @@ export function containsBannedPhrase(text: string): { contains: boolean; phrases
   const foundPhrases = BANNED_AI_PHRASES.filter(phrase => 
     lowerText.includes(phrase.toLowerCase())
   );
-  return {
-    contains: foundPhrases.length > 0,
-    phrases: foundPhrases
-  };
+  return { contains: foundPhrases.length > 0, phrases: foundPhrases };
 }
 
 export function getAvailablePromptKeys(): string[] {
@@ -970,22 +867,6 @@ export function getAvailablePromptKeys(): string[] {
 
 export function isValidPromptKey(key: string): key is keyof typeof PROMPT_TEMPLATES {
   return key in PROMPT_TEMPLATES;
-}
-
-// Utility to normalize prompt keys (for debugging)
-export function normalizePromptKey(key: string): string {
-  // Try exact match first
-  if (key in PROMPT_TEMPLATES) return key;
-  
-  // Try lowercase
-  const lower = key.toLowerCase();
-  if (lower in PROMPT_TEMPLATES) return lower;
-  
-  // Try snake_case conversion
-  const snake = key.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '');
-  if (snake in PROMPT_TEMPLATES) return snake;
-  
-  return key;
 }
 
 export default {
@@ -998,6 +879,5 @@ export default {
   PROMPT_CONSTANTS,
   containsBannedPhrase,
   getAvailablePromptKeys,
-  isValidPromptKey,
-  normalizePromptKey
+  isValidPromptKey
 };
