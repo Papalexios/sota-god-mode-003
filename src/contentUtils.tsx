@@ -757,10 +757,10 @@ export const forceNaturalInternalLinks = (
       if (i < titleWords.length - 2) {
         phrases.push(`${titleWords[i]} ${titleWords[i + 1]} ${titleWords[i + 2]}`);
       }
-          // Apply semantic expansion to keywords for better matching
-    const baseKeywords = [...new Set([...titleWords, ...slugWords, ...phrases])];
-    const keywords = expandKeywordsWithSemantics(baseKeywords);
-    }
+
+      
+    // Combine all keywords and expand with semantic variations
+    const keywords = [...new Set([...titleWords, ...slugWords, ...phrases])];
     
     if (keywords.length > 0) {
       // Higher priority for more specific pages (longer titles)
