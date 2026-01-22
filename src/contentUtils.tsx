@@ -5,6 +5,120 @@
 
 import { TARGET_MIN_WORDS, TARGET_MAX_WORDS, BLOCKED_REFERENCE_DOMAINS, BLOCKED_SPAM_DOMAINS } from './constants';
 import { injectEnterpriseInternalLinks } from './InternalLinkOrchestrator';
+
+// ==================== ENHANCED KEYWORD MATCHING ====================
+
+// Comprehensive stop words for better keyword extraction
+const ENHANCED_STOP_WORDS = new Set([
+  'with', 'from', 'that', 'this', 'your', 'what', 'when', 'where', 'which', 'have',
+  'been', 'were', 'will', 'would', 'could', 'should', 'about', 'into', 'through',
+  'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further',
+  'then', 'once', 'here', 'there', 'these', 'those', 'other', 'some', 'such',
+  'only', 'same', 'than', 'very', 'just', 'also', 'most', 'more', 'much',
+  'each', 'every', 'both', 'while', 'being', 'having', 'doing', 'made', 'make',
+  'like', 'even', 'back', 'still', 'well', 'take', 'come', 'over', 'think',
+  'good', 'know', 'want', 'give', 'find', 'tell', 'become', 'leave', 'feel',
+  'seem', 'look', 'need', 'keep', 'mean', 'help', 'show', 'hear', 'play',
+  'move', 'live', 'believe', 'hold', 'bring', 'happen', 'write', 'provide'
+]);
+
+// Semantic variations map for better keyword matching
+const SEMANTIC_VARIATIONS: Record<string, string[]> = {
+  // Common business terms
+  'price': ['cost', 'pricing', 'fee', 'rate', 'charge', 'expense'],
+  'cost': ['price', 'pricing', 'fee', 'expense', 'charge'],
+  'buy': ['purchase', 'acquire', 'order', 'shop', 'get'],
+  'purchase': ['buy', 'acquire', 'order', 'shop'],
+  'review': ['reviews', 'rating', 'ratings', 'feedback', 'opinion'],
+  'best': ['top', 'excellent', 'premium', 'quality', 'greatest'],
+  'guide': ['tutorial', 'howto', 'instructions', 'manual', 'tips'],
+  'tutorial': ['guide', 'howto', 'lesson', 'course', 'training'],
+  
+  // Common content terms
+  'benefits': ['advantages', 'pros', 'perks', 'upsides'],
+  'features': ['specs', 'specifications', 'capabilities', 'functions'],
+  'comparison': ['compare', 'versus', 'difference', 'alternative'],
+  'alternative': ['option', 'substitute', 'replacement', 'choice'],
+  
+  // Action terms
+  'install': ['setup', 'installation', 'configure', 'deploy'],
+  'setup': ['install', 'configure', 'installation', 'initialize'],
+  'start': ['begin', 'getting-started', 'introduction', 'basics'],
+  'learn': ['understand', 'discover', 'explore', 'study'],
+};
+
+// Simple stemming function to normalize words
+function simpleStem(word: string): string {
+  const w = word.toLowerCase();
+  // Remove common suffixes
+  if (w.endsWith('ing')) return w.slice(0, -3);
+  if (w.endsWith('tion')) return w.slice(0, -4);
+  if (w.endsWith('sion')) return w.slice(0, -4);
+  if (w.endsWith('ness')) return w.slice(0, -4);
+  if (w.endsWith('ment')) return w.slice(0, -4);
+  if (w.endsWith('able')) return w.slice(0, -4);
+  if (w.endsWith('ible')) return w.slice(0, -4);
+  if (w.endsWith('ies')) return w.slice(0, -3) + 'y';
+  if (w.endsWith('es') && w.length > 4) return w.slice(0, -2);
+  if (w.endsWith('ed') && w.length > 4) return w.slice(0, -2);
+  if (w.endsWith('ly') && w.length > 4) return w.slice(0, -2);
+  if (w.endsWith('s') && !w.endsWith('ss') && w.length > 3) return w.slice(0, -1);
+  return w;
+}
+
+// Calculate string similarity using Levenshtein-like approach
+function stringSimilarity(str1: string, str2: string): number {
+  const s1 = str1.toLowerCase();
+  const s2 = str2.toLowerCase();
+  
+  if (s1 === s2) return 1;
+  if (s1.includes(s2) || s2.includes(s1)) return 0.9;
+  
+  // Check stemmed versions
+  const stem1 = simpleStem(s1);
+  const stem2 = simpleStem(s2);
+  if (stem1 === stem2) return 0.85;
+  if (stem1.includes(stem2) || stem2.includes(stem1)) return 0.8;
+  
+  // Check semantic variations
+  const variations1 = SEMANTIC_VARIATIONS[s1] || [];
+  const variations2 = SEMANTIC_VARIATIONS[s2] || [];
+  if (variations1.includes(s2) || variations2.includes(s1)) return 0.75;
+  
+  // Calculate character overlap for fuzzy matching
+  const longer = s1.length > s2.length ? s1 : s2;
+  const shorter = s1.length > s2.length ? s2 : s1;
+  const longerLength = longer.length;
+  
+  if (longerLength === 0) return 1;
+  
+  // Simple edit distance approximation
+  let matches = 0;
+  for (let i = 0; i < shorter.length; i++) {
+    if (longer.includes(shorter[i])) matches++;
+  }
+  
+  return matches / longerLength;
+}
+
+// Get expanded keywords including semantic variations
+function getExpandedKeywords(words: string[]): string[] {
+  const expanded = new Set<string>(words);
+  
+  for (const word of words) {
+    const stem = simpleStem(word);
+    expanded.add(stem);
+    
+    // Add semantic variations
+    const variations = SEMANTIC_VARIATIONS[word.toLowerCase()];
+    if (variations) {
+      variations.forEach(v => expanded.add(v));
+    }
+  }
+  
+  return Array.from(expanded);
+}
+
 // ==================== CUSTOM ERRORS ====================
 
 export class ContentTooShortError extends Error {
