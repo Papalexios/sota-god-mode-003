@@ -1570,14 +1570,6 @@ export default {
   generateContent,
   publishItemToWordPress,
   fetchVerifiedReferences,
-};
-
-// ==================== UPDATE THE DEFAULT EXPORT ====================
-// Make sure to add these to the default export object:
-
-export default {
-  // AI Providers
-  callAI,
   callGeminiAPI,
   callOpenAIAPI,
   callAnthropicAPI,
