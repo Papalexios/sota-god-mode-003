@@ -1,6 +1,6 @@
 // =============================================================================
-// SOTA SERVICES V12.1 - ENTERPRISE GRADE CONTENT GENERATION ENGINE
-// CRITICAL FIX: t?.slice(...).join is not a function
+// SOTA SERVICES V12.2 - ENTERPRISE GRADE CONTENT GENERATION ENGINE
+// CRITICAL FIX: TSX generic syntax conflict with JSX parser
 // Complete AI Integration, WordPress Publishing, God Mode Maintenance Engine
 // =============================================================================
 
@@ -35,7 +35,7 @@ import {
 } from './contentUtils';
 
 
-console.log('[SOTA Services] Enterprise Engine v12.1 Initialized - CRITICAL FIX APPLIED');
+console.log('[SOTA Services] Enterprise Engine v12.2 Initialized - TSX GENERIC FIX APPLIED');
 
 // =============================================================================
 // TYPE DEFINITIONS
@@ -65,6 +65,7 @@ interface ReferenceLink {
 
 // =============================================================================
 // CRITICAL FIX: ARRAY TYPE SAFETY UTILITIES
+// Using function declarations to avoid TSX/JSX generic syntax conflicts
 // =============================================================================
 
 /**
@@ -72,11 +73,14 @@ interface ReferenceLink {
  * Ensures the input is ALWAYS a proper array, regardless of input type.
  * This fixes the "t?.slice(...).join is not a function" error.
  * 
+ * NOTE: Using function declaration instead of arrow function to avoid
+ * TSX parser interpreting <T> as a JSX element.
+ * 
  * @param value - Any value that should be an array
  * @param fallback - Default array if coercion fails
  * @returns Always returns a proper array
  */
-const ensureArray = <T>(value: unknown, fallback: T[] = []): T[] => {
+function ensureArray<T>(value: unknown, fallback: T[] = []): T[] {
   // Already an array - return as-is
   if (Array.isArray(value)) {
     return value;
@@ -122,7 +126,7 @@ const ensureArray = <T>(value: unknown, fallback: T[] = []): T[] => {
   
   // Any other value - wrap in array
   return [value] as T[];
-};
+}
 
 /**
  * Safe join operation that works even if input is not an array
@@ -130,22 +134,23 @@ const ensureArray = <T>(value: unknown, fallback: T[] = []): T[] => {
  * @param separator - Join separator
  * @returns Joined string
  */
-const safeJoin = (value: unknown, separator: string = ', '): string => {
+function safeJoin(value: unknown, separator: string = ', '): string {
   const arr = ensureArray<string>(value, []);
   return arr.filter(Boolean).join(separator);
-};
+}
 
 /**
  * Safe slice operation that works even if input is not an array
+ * Using function declaration to avoid TSX generic syntax issues
  * @param value - Value to slice (will be coerced to array if needed)
  * @param start - Start index
  * @param end - End index
  * @returns Sliced array
  */
-const safeSlice = <T>(value: unknown, start?: number, end?: number): T[] => {
+function safeSlice<T>(value: unknown, start?: number, end?: number): T[] {
   const arr = ensureArray<T>(value, []);
   return arr.slice(start, end);
-};
+}
 
 // =============================================================================
 // UTILITY FUNCTIONS
@@ -1431,7 +1436,7 @@ export const godModeStructuralGuardian = async (
   const hasFAQ = /faq|frequently asked/i.test(content);
   const hasKeyTakeaways = /key takeaway|takeaway/i.test(content);
   
-  let warnings: string[] = [];
+  const warnings: string[] = [];
   
   if (!hasH2) warnings.push('Missing H2 headings');
   if (!hasFAQ && requirements.requireFAQ) warnings.push('Missing FAQ section');
