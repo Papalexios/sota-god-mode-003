@@ -145,69 +145,71 @@ export const AEO_GEO_RULES = `
    - Article schema with all required fields
 `;
 
-// ==================== INTERNAL LINKING RULES (STRICT ENFORCEMENT) ====================
+// ==================== INTERNAL LINKING RULES (ULTRA STRICT) ====================
 export const INTERNAL_LINKING_RULES = `
 ═══════════════════════════════════════════════════════════════════════════════
-🔗 INTERNAL LINKING - CONTEXTUAL RICH ANCHOR TEXT (8-15 LINKS)
+🔗 INTERNAL LINKING - 4-7 WORD CONTEXTUAL RICH ANCHORS (8-15 LINKS)
 ═══════════════════════════════════════════════════════════════════════════════
 
-⛔ CRITICAL: YOUR ANCHOR TEXT QUALITY HAS BEEN POOR. FOLLOW THESE RULES EXACTLY.
+⛔⛔⛔ CRITICAL: YOUR PREVIOUS ANCHOR TEXT WAS TERRIBLE. FOLLOW THESE RULES EXACTLY OR FAIL. ⛔⛔⛔
 
-MANDATORY REQUIREMENTS:
-1. ALL anchor text MUST be 4-7 words (NO EXCEPTIONS)
-2. Anchor text MUST describe the destination page content
-3. NEVER start with: the, a, an, and, or, but, in, on, at, to, for, of, with, is, are, was, were
-4. NEVER end with: the, a, an, is, are, was, were, and, or, to, for, of, with
-5. MUST contain at least ONE descriptive/action word (guide, strategy, tips, method, training, care, health)
+MANDATORY ANCHOR TEXT REQUIREMENTS:
+1. EXACTLY 4-7 words per anchor (NO EXCEPTIONS)
+2. Must DESCRIBE what the reader will learn when clicking
+3. Must contain at least ONE of: guide, tips, strategies, methods, care, health, training, nutrition, behavior, practices
+4. CANNOT start with: the, a, an, and, or, but, in, on, at, to, for, of, with, this, that
+5. CANNOT end with: is, are, was, were, isn't, aren't, and, or, but, to, the, a, an, for, of
 
 FORMAT: [LINK_CANDIDATE: exactly four to seven descriptive words here]
 
-✅ EXCELLENT ANCHOR TEXT EXAMPLES (COPY THIS PATTERN):
-- "comprehensive French Bulldog care guide" ✓
-- "proven brachycephalic breed health strategies" ✓
-- "step-by-step puppy training methods" ✓
-- "essential French Bulldog nutrition tips" ✓
-- "complete guide to Frenchie grooming" ✓
-- "effective crate training techniques for puppies" ✓
-- "best practices for French Bulldog socialization" ✓
+✅ EXCELLENT EXAMPLES (COPY THESE PATTERNS EXACTLY):
+- [LINK_CANDIDATE: comprehensive French Bulldog care guide]
+- [LINK_CANDIDATE: proven brachycephalic breed health strategies]
+- [LINK_CANDIDATE: essential puppy nutrition best practices]
+- [LINK_CANDIDATE: effective crate training methods for puppies]
+- [LINK_CANDIDATE: complete French Bulldog grooming tips]
+- [LINK_CANDIDATE: professional dog behavior training techniques]
+- [LINK_CANDIDATE: beginner-friendly pet care fundamentals guide]
 
-❌ REJECTED ANCHOR TEXT (NEVER USE THESE PATTERNS):
-- "The French Bulldog isn't" ✗ (starts with THE, incomplete)
-- "French Bulldogs are" ✗ (ends with ARE, incomplete)
-- "a high-stakes commitment" ✗ (starts with A, generic)
-- "click here" ✗ (generic)
-- "read more" ✗ (generic)
-- "this article" ✗ (generic)
-- "is important for" ✗ (fragment)
-- "that can help" ✗ (fragment)
-- "and their owners" ✗ (fragment)
+❌ REJECTED EXAMPLES (NEVER WRITE THESE - THEY WILL BE DELETED):
+- "The French Bulldog isn't" ❌ (starts with THE, ends with ISN'T, fragment)
+- "French Bulldogs are" ❌ (ends with ARE, incomplete sentence)
+- "a high-stakes commitment" ❌ (starts with A, no descriptive word)
+- "that can help your" ❌ (starts with THAT, ends with YOUR)
+- "is important for owners" ❌ (starts with IS, fragment)
+- "and their unique needs" ❌ (starts with AND, no descriptive word)
+- "with proper training" ❌ (only 3 words, starts with WITH)
+- "click here" ❌ (generic toxic anchor)
+- "learn more about dogs" ❌ (starts with generic word)
 
-ANCHOR TEXT FORMULA:
-[Adjective/Action] + [Topic/Subject] + [Content Type]
-Examples:
-- "proven" + "French Bulldog health" + "strategies"
-- "comprehensive" + "puppy care" + "guide"
-- "effective" + "brachycephalic breed" + "tips"
+ANCHOR TEXT FORMULA (USE THIS):
+[Adjective] + [Topic Noun] + [Content Type Word]
 
-ZONE DISTRIBUTION (MANDATORY):
-┌─────────────────────┬──────────────┬─────────────┐
-│ ZONE                │ POSITION     │ MAX LINKS   │
-├─────────────────────┼──────────────┼─────────────┤
-│ INTRO               │ 0-10%        │ 0-1 links   │
-│ EARLY_BODY          │ 10-30%       │ 2-3 links   │
-│ MID_BODY            │ 30-60%       │ 3-4 links   │
-│ LATE_BODY           │ 60-80%       │ 2-3 links   │
-│ FAQ_CONCLUSION      │ 80-100%      │ 2-3 links   │
-└─────────────────────┴──────────────┴─────────────┘
+Examples using formula:
+- "comprehensive" + "French Bulldog health" + "guide" = "comprehensive French Bulldog health guide"
+- "proven" + "puppy training" + "strategies" = "proven puppy training strategies"  
+- "essential" + "brachycephalic care" + "tips" = "essential brachycephalic care tips"
 
-SPACING: Minimum 200 words between links. Max 1 link per paragraph.
+ZONE DISTRIBUTION:
+- INTRO (0-10%): Maximum 1 link
+- EARLY_BODY (10-30%): 2-3 links
+- MID_BODY (30-60%): 3-4 links  
+- LATE_BODY (60-80%): 2-3 links
+- FAQ/CONCLUSION (80-100%): 2-3 links
 
-⚠️ BEFORE WRITING EACH LINK_CANDIDATE, ASK YOURSELF:
-1. Does this anchor describe what the user will learn when they click?
-2. Is it 4-7 descriptive words?
-3. Does it NOT start or end with a stopword?
-4. Would this anchor text make sense as a search query?
+SPACING: Minimum 200 words between links. Maximum 1 link per paragraph.
+
+⚠️ SELF-CHECK BEFORE EACH LINK_CANDIDATE:
+□ Is it 4-7 words? (COUNT THEM)
+□ Does it describe what user learns by clicking?
+□ Does it contain guide/tips/strategies/methods/care/health/training?
+□ Does it NOT start with the/a/an/and/or/but/in/on/at/to/for/of/with/this/that?
+□ Does it NOT end with is/are/was/were/and/or/but/to/the/a/an?
+□ Would this make sense as a Google search query?
+
+If ANY check fails, REWRITE the anchor text until it passes ALL checks.
 `;
+
 
 // ==================== VISUAL HTML COMPONENTS v16.0 ====================
 export const SOTA_HTML_COMPONENTS = `
