@@ -1261,7 +1261,341 @@ export const fetchNeuronwriterData = async (
   }
 };
 
-// ==================== EXPORTS ====================
+// =============================================================================
+// MISSING EXPORTS - ADD THESE TO services.tsx
+// =============================================================================
+
+// ==================== MAINTENANCE ENGINE ====================
+
+export const maintenanceEngine = {
+  /**
+   * Check content freshness
+   */
+  checkFreshness: async (content: string, publishDate?: string): Promise<{
+    needsUpdate: boolean;
+    reasons: string[];
+    priority: 'high' | 'medium' | 'low';
+  }> => {
+    const reasons: string[] = [];
+    let priority: 'high' | 'medium' | 'low' = 'low';
+
+    // Check for outdated years
+    const currentYear = new Date().getFullYear();
+    const yearMatches = content.match(/\b(20\d{2})\b/g) || [];
+    const outdatedYears = yearMatches.filter(y => parseInt(y) < currentYear - 1);
+    
+    if (outdatedYears.length > 0) {
+      reasons.push(`Contains outdated years: ${[...new Set(outdatedYears)].join(', ')}`);
+      priority = 'high';
+    }
+
+    // Check word count
+    const wordCount = content.replace(/<[^>]*>/g, ' ').trim().split(/\s+/).length;
+    if (wordCount < 1500) {
+      reasons.push(`Content too short: ${wordCount} words (recommend 2500+)`);
+      priority = priority === 'high' ? 'high' : 'medium';
+    }
+
+    // Check for internal links
+    const linkCount = (content.match(/<a\s+[^>]*href/gi) || []).length;
+    if (linkCount < 5) {
+      reasons.push(`Too few internal links: ${linkCount} (recommend 8-15)`);
+      priority = priority === 'high' ? 'high' : 'medium';
+    }
+
+    // Check for images
+    const imageCount = (content.match(/<img\s/gi) || []).length;
+    if (imageCount < 2) {
+      reasons.push(`Too few images: ${imageCount} (recommend 3+)`);
+    }
+
+    // Check for FAQ section
+    if (!content.includes('FAQPage') && !content.includes('faq')) {
+      reasons.push('Missing FAQ section');
+    }
+
+    return {
+      needsUpdate: reasons.length > 0,
+      reasons,
+      priority,
+    };
+  },
+
+  /**
+   * Auto-update outdated dates
+   */
+  updateDates: (content: string): string => {
+    const currentYear = new Date().getFullYear();
+    
+    // Replace outdated years in text
+    let updated = content.replace(
+      /\b(20[12]\d)\b(?![^<]*>)/g,
+      (match) => {
+        const year = parseInt(match);
+        if (year < currentYear - 1) {
+          return String(currentYear);
+        }
+        return match;
+      }
+    );
+
+    // Update "Last updated" text
+    const currentDate = new Date().toISOString().split('T')[0];
+    updated = updated.replace(
+      /Last updated:\s*[\d\-]+/gi,
+      `Last updated: ${currentDate}`
+    );
+
+    return updated;
+  },
+
+  /**
+   * Analyze content for improvements
+   */
+  analyze: async (content: string): Promise<{
+    score: number;
+    issues: Array<{ type: string; message: string; priority: string }>;
+    suggestions: string[];
+  }> => {
+    const issues: Array<{ type: string; message: string; priority: string }> = [];
+    const suggestions: string[] = [];
+    let score = 100;
+
+    const text = content.replace(/<[^>]*>/g, ' ');
+    const wordCount = text.trim().split(/\s+/).length;
+
+    // Word count check
+    if (wordCount < 2000) {
+      issues.push({ type: 'content', message: `Word count low: ${wordCount}`, priority: 'high' });
+      score -= 20;
+      suggestions.push('Expand content to 2500-3200 words');
+    }
+
+    // Heading structure
+    const h2Count = (content.match(/<h2/gi) || []).length;
+    if (h2Count < 4) {
+      issues.push({ type: 'structure', message: `Only ${h2Count} H2 headings`, priority: 'medium' });
+      score -= 10;
+      suggestions.push('Add more H2 sections (recommend 5-7)');
+    }
+
+    // Internal links
+    const linkCount = (content.match(/<a\s+[^>]*href/gi) || []).length;
+    if (linkCount < 8) {
+      issues.push({ type: 'seo', message: `Only ${linkCount} internal links`, priority: 'high' });
+      score -= 15;
+      suggestions.push('Add 8-15 contextual internal links');
+    }
+
+    // Images
+    const imageCount = (content.match(/<img\s/gi) || []).length;
+    if (imageCount < 3) {
+      issues.push({ type: 'media', message: `Only ${imageCount} images`, priority: 'medium' });
+      score -= 10;
+      suggestions.push('Add relevant images with alt text');
+    }
+
+    // FAQ section
+    if (!content.toLowerCase().includes('faq') && !content.includes('FAQPage')) {
+      issues.push({ type: 'structure', message: 'Missing FAQ section', priority: 'medium' });
+      score -= 10;
+      suggestions.push('Add FAQ section with schema markup');
+    }
+
+    // Key takeaways
+    if (!content.toLowerCase().includes('takeaway')) {
+      issues.push({ type: 'structure', message: 'Missing key takeaways', priority: 'low' });
+      score -= 5;
+      suggestions.push('Add Key Takeaways section at top');
+    }
+
+    return {
+      score: Math.max(0, score),
+      issues,
+      suggestions,
+    };
+  },
+};
+
+// ==================== IMAGE GENERATION WITH FALLBACK ====================
+
+export const generateImageWithFallback = async (
+  apiKeys: ApiKeys,
+  prompt: string,
+  options: {
+    style?: string;
+    size?: string;
+    quality?: string;
+  } = {}
+): Promise<{ url: string; source: string } | null> => {
+  const { style = 'realistic', size = '1024x1024', quality = 'standard' } = options;
+
+  // Try OpenAI DALL-E first
+  if (apiKeys.openaiKey) {
+    try {
+      console.log('[generateImage] Trying OpenAI DALL-E...');
+      const response = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKeys.openaiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'dall-e-3',
+          prompt: `${prompt}. Style: ${style}. High quality, professional.`,
+          n: 1,
+          size,
+          quality,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const url = data.data?.[0]?.url;
+        if (url) {
+          return { url, source: 'openai' };
+        }
+      }
+    } catch (e: any) {
+      console.warn('[generateImage] OpenAI failed:', e.message);
+    }
+  }
+
+  // Try Gemini Imagen
+  if (apiKeys.geminiKey) {
+    try {
+      console.log('[generateImage] Trying Gemini Imagen...');
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKeys.geminiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instances: [{ prompt: `${prompt}. Style: ${style}. Professional quality.` }],
+            parameters: {
+              sampleCount: 1,
+              aspectRatio: '1:1',
+              safetyFilterLevel: 'block_some',
+            },
+          }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const base64 = data.predictions?.[0]?.bytesBase64Encoded;
+        if (base64) {
+          return { url: `data:image/png;base64,${base64}`, source: 'gemini' };
+        }
+      }
+    } catch (e: any) {
+      console.warn('[generateImage] Gemini failed:', e.message);
+    }
+  }
+
+  console.warn('[generateImage] All providers failed');
+  return null;
+};
+
+// ==================== FETCH VERIFIED REFERENCES ====================
+
+export const fetchVerifiedReferences = async (
+  topic: string,
+  serperKey: string,
+  count: number = 8
+): Promise<Array<{
+  title: string;
+  url: string;
+  snippet: string;
+  domain: string;
+  isAuthority: boolean;
+}>> => {
+  if (!serperKey) {
+    console.warn('[fetchVerifiedReferences] No Serper API key');
+    return [];
+  }
+
+  // Authority domains we prioritize
+  const authorityDomains = [
+    'nih.gov', 'cdc.gov', 'who.int', 'edu', 'gov',
+    'mayoclinic.org', 'webmd.com', 'healthline.com',
+    'harvard.edu', 'stanford.edu', 'mit.edu',
+    'nature.com', 'science.org', 'sciencedirect.com',
+    'forbes.com', 'hbr.org', 'wsj.com', 'nytimes.com',
+  ];
+
+  // Domains to exclude
+  const excludedDomains = [
+    'reddit.com', 'quora.com', 'pinterest.com',
+    'facebook.com', 'twitter.com', 'instagram.com',
+    'tiktok.com', 'youtube.com', 'medium.com',
+    'wordpress.com', 'blogspot.com', 'tumblr.com',
+  ];
+
+  try {
+    const response = await fetch('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': serperKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        q: `${topic} research study site:.edu OR site:.gov OR site:.org`,
+        num: 20,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Serper API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const results: Array<{
+      title: string;
+      url: string;
+      snippet: string;
+      domain: string;
+      isAuthority: boolean;
+    }> = [];
+
+    for (const result of data.organic || []) {
+      if (results.length >= count) break;
+
+      try {
+        const url = new URL(result.link);
+        const domain = url.hostname.replace('www.', '');
+
+        // Skip excluded domains
+        if (excludedDomains.some(d => domain.includes(d))) continue;
+
+        // Check if authority domain
+        const isAuthority = authorityDomains.some(d => domain.includes(d));
+
+        results.push({
+          title: result.title,
+          url: result.link,
+          snippet: result.snippet || '',
+          domain,
+          isAuthority,
+        });
+      } catch {
+        continue;
+      }
+    }
+
+    // Sort by authority first
+    results.sort((a, b) => (b.isAuthority ? 1 : 0) - (a.isAuthority ? 1 : 0));
+
+    console.log(`[fetchVerifiedReferences] Found ${results.length} references`);
+    return results;
+  } catch (error) {
+    console.error('[fetchVerifiedReferences] Error:', error);
+    return [];
+  }
+};
+
+// ==================== UPDATE THE DEFAULT EXPORT ====================
+// Make sure to add these to the default export object:
 
 export default {
   // AI Providers
@@ -1304,4 +1638,9 @@ export default {
   generateReferences,
   generateClusterPlan,
   fetchNeuronwriterData,
+
+  // MISSING EXPORTS - ADD THESE
+  maintenanceEngine,
+  generateImageWithFallback,
+  fetchVerifiedReferences,
 };
