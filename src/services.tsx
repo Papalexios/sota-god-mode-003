@@ -1594,6 +1594,30 @@ export const fetchVerifiedReferences = async (
   }
 };
 
+
+// ==================== GENERATE CONTENT ALIAS ====================
+
+/**
+ * generateContent - Alias for generateFullContent
+ * This is the main content generation function used by App.tsx
+ */
+export const generateContent = async (
+  apiKeys: ApiKeys,
+  topic: string,
+  existingPages: ExistingPage[],
+  wpConfig: WpConfig,
+  options: {
+    geoLocation?: string | null;
+    neuronData?: string | null;
+    includeVideos?: boolean;
+    includeReferences?: boolean;
+  } = {},
+  onProgress?: (message: string) => void
+): Promise<GeneratedContent> => {
+  return generateFullContent(apiKeys, topic, existingPages, wpConfig, options, onProgress);
+};
+
+
 // ==================== UPDATE THE DEFAULT EXPORT ====================
 // Make sure to add these to the default export object:
 
