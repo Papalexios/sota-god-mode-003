@@ -1,831 +1,522 @@
 // =============================================================================
-// SERVICES.TSX - IMPORTS SECTION (ADD ANY MISSING)
+// SOTA SERVICES V12.0 - ENTERPRISE GRADE CONTENT GENERATION ENGINE
+// Complete AI Integration, WordPress Publishing, God Mode Maintenance Engine
 // =============================================================================
 
+import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
+import { PROMPT_TEMPLATES } from './prompts';
+import { AI_MODELS, PROCESSING_LIMITS } from './constants';
 import { 
-  buildPrompt, 
-  PROMPT_TEMPLATES, 
-  BANNED_AI_PHRASES,
-  PROMPT_CONSTANTS 
-} from './prompts';
-
-import {
-  normalizeGeneratedContent,
-  convertMarkdownTablesToHtml,
-  removeDuplicateSections,
-  smartPostProcess,
-  countWords,
-  fetchWithProxies,
-  generateVerificationFooterHtml,
+  SitemapPage, 
+  ContentItem, 
+  GeneratedContent, 
+  GenerationContext,
+  WpConfig,
+  ApiClients,
+  ExpandedGeoTargeting,
+  NeuronConfig
+} from './types';
+import { 
+  extractSlugFromUrl, 
+  sanitizeTitle, 
+  parseJsonWithAiRepair,
+  processConcurrently,
+  delay
+} from './utils';
+import { 
+  fetchWithProxies, 
+  smartCrawl, 
+  processInternalLinks,
   performSurgicalUpdate,
-  getGuaranteedYoutubeVideos,
-  generateYoutubeEmbedHtml,
-  extractFaqForSchema,
-  isBlockedDomain,
-  processLinkCandidatesStrict,
-  forceNaturalInternalLinks,
-  validateAnchorTextStrict,
-  escapeRegExp,
+  escapeRegExp
 } from './contentUtils';
+import { getNeuronWriterData } from './neuronwriter';
 
-import {
-  AI_MODELS,
-  CACHE_TTL,
-  API_TIMEOUTS,
-  RETRY_CONFIG,
-  TARGET_MIN_WORDS,
-  TARGET_MAX_WORDS,
-  MIN_INTERNAL_LINKS,
-  MAX_INTERNAL_LINKS,
-} from './constants';
+console.log('[SOTA Services] Enterprise Engine v12.0 Initialized');
 
+// =============================================================================
+// TYPE DEFINITIONS
+// =============================================================================
 
-// ==================== TYPE DEFINITIONS ====================
-
-export interface ApiKeys {
-  geminiKey?: string;
-  openaiKey?: string;
-  anthropicKey?: string;
-  openrouterKey?: string;
-  groqKey?: string;
-  serperKey?: string;
-  imgurClientId?: string;
+interface AICallOptions {
+  format?: 'json' | 'html' | 'text';
+  grounding?: boolean;
+  maxTokens?: number;
+  temperature?: number;
 }
 
-export interface WpConfig {
+interface PublishResult {
+  success: boolean;
+  message?: string;
+  url?: string;
+  link?: string;
+  postId?: number;
+}
+
+interface ReferenceLink {
+  title: string;
   url: string;
-  username: string;
+  source: string;
+  description?: string;
 }
 
-export interface ContentItem {
-  id: string;
-  title: string;
-  originalUrl?: string;
-  status: 'pending' | 'processing' | 'done' | 'error';
-  generatedContent?: GeneratedContent;
-  error?: string;
-}
+// =============================================================================
+// UTILITY FUNCTIONS
+// =============================================================================
 
-export interface GeneratedContent {
-  title: string;
-  content: string;
-  metaDescription: string;
-  slug: string;
-  seoTitle?: string;
-  wordCount?: number;
-  internalLinksCount?: number;
-  faqItems?: Array<{ question: string; answer: string }>;
-}
+const sanitizeHtml = (html: string): string => {
+  if (!html) return '';
+  return html
+    .replace(/```html\s*/gi, '')
+    .replace(/```\s*/g, '')
+    .replace(/^\s*<\/?html[^>]*>\s*/gi, '')
+    .replace(/^\s*<\/?body[^>]*>\s*/gi, '')
+    .replace(/^\s*<\/?head[^>]*>[\s\S]*?<\/head>\s*/gi, '')
+    .trim();
+};
 
-export interface ExistingPage {
-  title: string;
-  slug: string;
-}
-
-export interface SerpResult {
-  title: string;
-  snippet: string;
-  link: string;
-  position: number;
-}
-
-export interface GapAnalysisResult {
-  uncoveredEntities: Array<{
-    entity: string;
-    priority: number;
-    searchIntent: string;
-    difficulty: string;
-    suggestedTitle: string;
-    suggestedAngle: string;
-  }>;
-  semanticCoverageScore: number;
-  recommendations: string[];
-}
-
-export interface ContentStrategy {
-  targetAudience: string;
-  searchIntent: string;
-  contentAngle: string;
-  keyMessages: string[];
-  estimatedWordCount: number;
-}
-
-// ==================== AI PROVIDER FUNCTIONS ====================
-
-/**
- * Call Gemini API
- */
-export const callGeminiAPI = async (
-  apiKey: string,
-  systemInstruction: string,
-  userPrompt: string,
-  model: string = AI_MODELS.GEMINI_FLASH
-): Promise<string> => {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: userPrompt }] }],
-      systemInstruction: { parts: [{ text: systemInstruction }] },
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 8192,
-        topP: 0.95,
-        topK: 40,
-      },
-      safetySettings: [
-        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(`Gemini API error: ${error.error?.message || response.statusText}`);
+const extractJsonFromResponse = (text: string): string => {
+  // Try to find JSON in code blocks first
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    return codeBlockMatch[1].trim();
   }
-
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  if (!text) {
-    throw new Error('No content generated from Gemini');
+  
+  // Try to find raw JSON
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    return jsonMatch[0];
   }
-
+  
   return text;
 };
 
-/**
- * Call OpenAI API
- */
-export const callOpenAIAPI = async (
-  apiKey: string,
-  systemInstruction: string,
-  userPrompt: string,
-  model: string = AI_MODELS.OPENAI_GPT4_TURBO
-): Promise<string> => {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemInstruction },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 8192,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(`OpenAI API error: ${error.error?.message || response.statusText}`);
-  }
-
-  const data = await response.json();
-  const text = data.choices?.[0]?.message?.content;
-
-  if (!text) {
-    throw new Error('No content generated from OpenAI');
-  }
-
-  return text;
+const surgicalSanitizer = (html: string): string => {
+  if (!html) return '';
+  
+  let cleaned = html
+    .replace(/```html\s*/gi, '')
+    .replace(/```\s*/g, '')
+    .replace(/<\/?html[^>]*>/gi, '')
+    .replace(/<\/?body[^>]*>/gi, '')
+    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+    .trim();
+  
+  // Remove any leading/trailing whitespace from each line
+  cleaned = cleaned.split('\n').map(line => line.trim()).filter(Boolean).join('\n');
+  
+  return cleaned;
 };
 
-/**
- * Call Anthropic API
- */
-export const callAnthropicAPI = async (
-  apiKey: string,
-  systemInstruction: string,
-  userPrompt: string,
-  model: string = AI_MODELS.ANTHROPIC_SONNET
-): Promise<string> => {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 8192,
-      system: systemInstruction,
-      messages: [{ role: 'user', content: userPrompt }],
-    }),
-  });
+// =============================================================================
+// MAIN AI CALLING FUNCTION
+// =============================================================================
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(`Anthropic API error: ${error.error?.message || response.statusText}`);
-  }
-
-  const data = await response.json();
-  const text = data.content?.[0]?.text;
-
-  if (!text) {
-    throw new Error('No content generated from Anthropic');
-  }
-
-  return text;
-};
-
-/**
- * Call OpenRouter API
- */
-export const callOpenRouterAPI = async (
-  apiKey: string,
-  systemInstruction: string,
-  userPrompt: string,
-  model: string = 'google/gemini-2.5-flash'
-): Promise<string> => {
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-      'HTTP-Referer': window.location.origin,
-      'X-Title': 'SOTA WP Content Optimizer',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemInstruction },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 8192,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(`OpenRouter API error: ${error.error?.message || response.statusText}`);
-  }
-
-  const data = await response.json();
-  const text = data.choices?.[0]?.message?.content;
-
-  if (!text) {
-    throw new Error('No content generated from OpenRouter');
-  }
-
-  return text;
-};
-
-/**
- * Call Groq API
- */
-export const callGroqAPI = async (
-  apiKey: string,
-  systemInstruction: string,
-  userPrompt: string,
-  model: string = 'llama3-70b-8192'
-): Promise<string> => {
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemInstruction },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 8192,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(`Groq API error: ${error.error?.message || response.statusText}`);
-  }
-
-  const data = await response.json();
-  const text = data.choices?.[0]?.message?.content;
-
-  if (!text) {
-    throw new Error('No content generated from Groq');
-  }
-
-  return text;
-};
-
-/**
- * Universal AI call with fallback chain
- */
 export const callAI = async (
-  apiKeys: ApiKeys,
-  systemInstruction: string,
-  userPrompt: string,
-  preferredModel?: string
+  apiClients: ApiClients,
+  selectedModel: string,
+  geoTargeting: ExpandedGeoTargeting,
+  openrouterModels: string[],
+  selectedGroqModel: string,
+  promptKey: keyof typeof PROMPT_TEMPLATES | string,
+  args: any[],
+  format: 'json' | 'html' | 'text' = 'json',
+  grounding: boolean = false
 ): Promise<string> => {
-  const errors: string[] = [];
+  const promptTemplate = PROMPT_TEMPLATES[promptKey as keyof typeof PROMPT_TEMPLATES];
+  
+  if (!promptTemplate) {
+    throw new Error(`[callAI] Unknown prompt key: ${promptKey}`);
+  }
 
-  // Try Gemini first (fastest)
-  if (apiKeys.geminiKey) {
+  const systemInstruction = promptTemplate.systemInstruction || '';
+  const userPrompt = typeof promptTemplate.userPrompt === 'function'
+    ? promptTemplate.userPrompt(...args)
+    : String(promptTemplate.userPrompt);
+
+  // Add geo-targeting context if enabled
+  let finalUserPrompt = userPrompt;
+  if (geoTargeting.enabled && geoTargeting.location) {
+    finalUserPrompt = `[GEO-TARGET: ${geoTargeting.location}, ${geoTargeting.region}, ${geoTargeting.country}]\n\n${userPrompt}`;
+  }
+
+  console.log(`[callAI] Calling ${selectedModel} with prompt: ${promptKey}`);
+
+  // Try selected model first, then fallback chain
+  const modelPriority = [selectedModel, 'gemini', 'openai', 'anthropic', 'openrouter', 'groq'];
+  const uniqueModels = [...new Set(modelPriority)];
+
+  for (const model of uniqueModels) {
+    const client = apiClients[model as keyof ApiClients];
+    if (!client) continue;
+
     try {
-      console.log('[AI] Trying Gemini...');
-      return await callGeminiAPI(apiKeys.geminiKey, systemInstruction, userPrompt, preferredModel || AI_MODELS.GEMINI_FLASH);
-    } catch (e: any) {
-      errors.push(`Gemini: ${e.message}`);
-      console.warn('[AI] Gemini failed:', e.message);
-    }
-  }
+      switch (model) {
+        case 'gemini': {
+          const geminiClient = client as InstanceType<typeof GoogleGenAI>;
+          const modelConfig: any = {
+            model: AI_MODELS.GEMINI_FLASH,
+            contents: finalUserPrompt,
+          };
+          
+          if (systemInstruction) {
+            modelConfig.config = { systemInstruction };
+          }
+          
+          if (format === 'json') {
+            modelConfig.config = {
+              ...modelConfig.config,
+              responseMimeType: 'application/json',
+            };
+          }
 
-  // Try Groq (fast and free)
-  if (apiKeys.groqKey) {
-    try {
-      console.log('[AI] Trying Groq...');
-      return await callGroqAPI(apiKeys.groqKey, systemInstruction, userPrompt);
-    } catch (e: any) {
-      errors.push(`Groq: ${e.message}`);
-      console.warn('[AI] Groq failed:', e.message);
-    }
-  }
-
-  // Try OpenRouter
-  if (apiKeys.openrouterKey) {
-    try {
-      console.log('[AI] Trying OpenRouter...');
-      return await callOpenRouterAPI(apiKeys.openrouterKey, systemInstruction, userPrompt);
-    } catch (e: any) {
-      errors.push(`OpenRouter: ${e.message}`);
-      console.warn('[AI] OpenRouter failed:', e.message);
-    }
-  }
-
-  // Try OpenAI
-  if (apiKeys.openaiKey) {
-    try {
-      console.log('[AI] Trying OpenAI...');
-      return await callOpenAIAPI(apiKeys.openaiKey, systemInstruction, userPrompt);
-    } catch (e: any) {
-      errors.push(`OpenAI: ${e.message}`);
-      console.warn('[AI] OpenAI failed:', e.message);
-    }
-  }
-
-  // Try Anthropic
-  if (apiKeys.anthropicKey) {
-    try {
-      console.log('[AI] Trying Anthropic...');
-      return await callAnthropicAPI(apiKeys.anthropicKey, systemInstruction, userPrompt);
-    } catch (e: any) {
-      errors.push(`Anthropic: ${e.message}`);
-      console.warn('[AI] Anthropic failed:', e.message);
-    }
-  }
-
-  throw new Error(`All AI providers failed:\n${errors.join('\n')}`);
-};
-
-// ==================== CONTENT GENERATION ====================
-
-/**
- * Generate semantic keywords
- */
-export const generateSemanticKeywords = async (
-  apiKeys: ApiKeys,
-  primaryKeyword: string
-): Promise<string[]> => {
-  try {
-    const { system, user } = buildPrompt('semantic_keyword_generator', [primaryKeyword]);
-    const response = await callAI(apiKeys, system, user);
-
-    // Parse JSON response
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return parsed.semanticKeywords || [];
-    }
-
-    return [];
-  } catch (error) {
-    console.error('[generateSemanticKeywords] Error:', error);
-    return [];
-  }
-};
-
-/**
- * Generate content strategy
- */
-export const generateContentStrategy = async (
-  apiKeys: ApiKeys,
-  topic: string,
-  semanticKeywords: string[]
-): Promise<ContentStrategy> => {
-  try {
-    const { system, user } = buildPrompt('content_strategy_generator', [topic, semanticKeywords]);
-    const response = await callAI(apiKeys, system, user);
-
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-
-    return {
-      targetAudience: 'General audience',
-      searchIntent: 'informational',
-      contentAngle: 'Comprehensive guide',
-      keyMessages: [],
-      estimatedWordCount: 2800,
-    };
-  } catch (error) {
-    console.error('[generateContentStrategy] Error:', error);
-    return {
-      targetAudience: 'General audience',
-      searchIntent: 'informational',
-      contentAngle: 'Comprehensive guide',
-      keyMessages: [],
-      estimatedWordCount: 2800,
-    };
-  }
-};
-
-/**
- * Perform gap analysis - returns 15 uncovered entities
- */
-export const performGapAnalysis = async (
-  apiKeys: ApiKeys,
-  primaryKeyword: string,
-  serpContent: string,
-  existingPages: string
-): Promise<GapAnalysisResult> => {
-  try {
-    const { system, user } = buildPrompt('sota_gap_analysis', [primaryKeyword, serpContent, existingPages]);
-    const response = await callAI(apiKeys, system, user);
-
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        uncoveredEntities: parsed.uncoveredEntities || [],
-        semanticCoverageScore: parsed.semanticCoverageScore || 0,
-        recommendations: parsed.recommendations || [],
-      };
-    }
-
-    return {
-      uncoveredEntities: [],
-      semanticCoverageScore: 0,
-      recommendations: [],
-    };
-  } catch (error) {
-    console.error('[performGapAnalysis] Error:', error);
-    return {
-      uncoveredEntities: [],
-      semanticCoverageScore: 0,
-      recommendations: [],
-    };
-  }
-};
-
-/**
- * Generate SEO metadata
- */
-export const generateSeoMetadata = async (
-  apiKeys: ApiKeys,
-  primaryKeyword: string,
-  contentSummary: string,
-  targetAudience: string,
-  geoLocation?: string | null
-): Promise<{ seoTitle: string; metaDescription: string; slug: string }> => {
-  try {
-    const { system, user } = buildPrompt('seo_metadata_generator', [
-      primaryKeyword,
-      contentSummary,
-      targetAudience,
-      [],
-      geoLocation,
-    ]);
-    const response = await callAI(apiKeys, system, user);
-
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-
-    // Fallback
-    const slug = primaryKeyword.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    return {
-      seoTitle: `${primaryKeyword} - Complete Guide ${new Date().getFullYear()}`,
-      metaDescription: `Discover everything about ${primaryKeyword}. Expert insights, tips, and strategies. Updated for ${new Date().getFullYear()}.`,
-      slug,
-    };
-  } catch (error) {
-    console.error('[generateSeoMetadata] Error:', error);
-    const slug = primaryKeyword.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    return {
-      seoTitle: `${primaryKeyword} - Complete Guide ${new Date().getFullYear()}`,
-      metaDescription: `Discover everything about ${primaryKeyword}. Expert insights, tips, and strategies.`,
-      slug,
-    };
-  }
-};
-
-/**
- * Generate FAQ section
- */
-export const generateFaqSection = async (
-  apiKeys: ApiKeys,
-  topic: string,
-  semanticKeywords: string[]
-): Promise<string> => {
-  try {
-    const { system, user } = buildPrompt('sota_faq_generator', [topic, semanticKeywords]);
-    const response = await callAI(apiKeys, system, user);
-    return normalizeGeneratedContent(response);
-  } catch (error) {
-    console.error('[generateFaqSection] Error:', error);
-    return '';
-  }
-};
-
-/**
- * Generate Key Takeaways section
- */
-export const generateKeyTakeaways = async (
-  apiKeys: ApiKeys,
-  topic: string,
-  content: string
-): Promise<string> => {
-  try {
-    const { system, user } = buildPrompt('sota_takeaways_generator', [topic, content]);
-    const response = await callAI(apiKeys, system, user);
-    return normalizeGeneratedContent(response);
-  } catch (error) {
-    console.error('[generateKeyTakeaways] Error:', error);
-    return '';
-  }
-};
-
-/**
- * Generate article content - MAIN CONTENT GENERATION FUNCTION
- */
-export const generateArticleContent = async (
-  apiKeys: ApiKeys,
-  topic: string,
-  semanticKeywords: string[],
-  strategy: ContentStrategy,
-  existingPages: ExistingPage[],
-  competitorGaps: string[],
-  geoLocation?: string | null,
-  neuronData?: string | null,
-  onProgress?: (message: string) => void
-): Promise<string> => {
-  onProgress?.('Generating enterprise-grade content...');
-
-  const { system, user } = buildPrompt('ultra_sota_article_writer', [
-    topic,
-    semanticKeywords,
-    strategy,
-    existingPages,
-    competitorGaps,
-    geoLocation,
-    neuronData,
-  ]);
-
-  let content = await callAI(apiKeys, system, user);
-
-  // Post-process content
-  onProgress?.('Post-processing content...');
-  content = normalizeGeneratedContent(content);
-  content = convertMarkdownTablesToHtml(content);
-  content = removeDuplicateSections(content);
-
-  return content;
-};
-
-/**
- * Process and inject internal links with STRICT validation
- */
-export const processInternalLinks = (
-  content: string,
-  existingPages: ExistingPage[],
-  baseUrl: string,
-  targetLinks: number = 12
-): { content: string; stats: { injected: number; rejected: number; rejectedAnchors: string[] } } => {
-  console.log('[processInternalLinks] Starting STRICT link processing...');
-
-  // First, process [LINK_CANDIDATE:] markers with strict validation
-  const { 
-    content: processedContent, 
-    injectedCount, 
-    rejectedCount, 
-    rejectedAnchors,
-    acceptedAnchors 
-  } = processLinkCandidatesStrict(content, existingPages, baseUrl);
-
-  console.log(`[processInternalLinks] Processed markers: ${injectedCount} accepted, ${rejectedCount} rejected`);
-
-  // Calculate remaining links needed
-  const remainingLinks = Math.max(0, targetLinks - injectedCount);
-
-  let finalContent = processedContent;
-
-  // Force additional natural links if needed
-  if (remainingLinks > 0 && existingPages.length > injectedCount) {
-    console.log(`[processInternalLinks] Forcing ${remainingLinks} additional natural links...`);
-    
-    // Get pages that haven't been linked yet
-    const usedSlugs = new Set(acceptedAnchors.map(a => a.toLowerCase()));
-    const remainingPages = existingPages.filter(p => !usedSlugs.has(p.slug.toLowerCase()));
-    
-    if (remainingPages.length > 0) {
-      finalContent = forceNaturalInternalLinks(
-        finalContent,
-        remainingPages,
-        baseUrl,
-        remainingLinks
-      );
-    }
-  }
-
-  return {
-    content: finalContent,
-    stats: {
-      injected: injectedCount,
-      rejected: rejectedCount,
-      rejectedAnchors,
-    },
-  };
-};
-
-/**
- * Full content generation pipeline
- */
-export const generateFullContent = async (
-  apiKeys: ApiKeys,
-  topic: string,
-  existingPages: ExistingPage[],
-  wpConfig: WpConfig,
-  options: {
-    geoLocation?: string | null;
-    neuronData?: string | null;
-    includeVideos?: boolean;
-    includeReferences?: boolean;
-  } = {},
-  onProgress?: (message: string) => void
-): Promise<GeneratedContent> => {
-  const startTime = Date.now();
-
-  try {
-    // Step 1: Generate semantic keywords
-    onProgress?.('Generating semantic keywords...');
-    const semanticKeywords = await generateSemanticKeywords(apiKeys, topic);
-    console.log(`[generateFullContent] Generated ${semanticKeywords.length} semantic keywords`);
-
-    // Step 2: Generate content strategy
-    onProgress?.('Analyzing content strategy...');
-    const strategy = await generateContentStrategy(apiKeys, topic, semanticKeywords);
-
-    // Step 3: Perform gap analysis for 15 uncovered entities
-    onProgress?.('Performing gap analysis...');
-    const existingTitles = existingPages.map(p => p.title).join(', ');
-    const gapAnalysis = await performGapAnalysis(apiKeys, topic, '', existingTitles);
-    const competitorGaps = gapAnalysis.uncoveredEntities.slice(0, 15).map(e => e.entity);
-    console.log(`[generateFullContent] Found ${competitorGaps.length} content gaps to cover`);
-
-    // Step 4: Generate main article content
-    onProgress?.('Generating article content (this may take 30-60 seconds)...');
-    let content = await generateArticleContent(
-      apiKeys,
-      topic,
-      semanticKeywords,
-      strategy,
-      existingPages,
-      competitorGaps,
-      options.geoLocation,
-      options.neuronData,
-      onProgress
-    );
-
-    // Step 5: Process internal links with STRICT validation
-    onProgress?.('Processing internal links with strict validation...');
-    const { content: linkedContent, stats: linkStats } = processInternalLinks(
-      content,
-      existingPages,
-      wpConfig.url,
-      12
-    );
-    content = linkedContent;
-    console.log(`[generateFullContent] Links: ${linkStats.injected} injected, ${linkStats.rejected} rejected`);
-
-    if (linkStats.rejectedAnchors.length > 0) {
-      console.warn('[generateFullContent] Rejected anchors (bad quality):');
-      linkStats.rejectedAnchors.forEach(a => console.warn(`  - ${a}`));
-    }
-
-    // Step 6: Add YouTube videos if enabled
-    if (options.includeVideos && apiKeys.serperKey) {
-      onProgress?.('Finding relevant YouTube videos...');
-      const videos = await getGuaranteedYoutubeVideos(topic, apiKeys.serperKey, 2);
-      if (videos.length > 0) {
-        const videoHtml = generateYoutubeEmbedHtml(videos);
-        // Insert videos before FAQ section
-        const faqIndex = content.indexOf('<!-- SOTA-FAQ-START -->');
-        if (faqIndex > -1) {
-          content = content.slice(0, faqIndex) + videoHtml + content.slice(faqIndex);
-        } else {
-          content += videoHtml;
+          const response = await geminiClient.models.generateContent(modelConfig);
+          const text = response.text || '';
+          return format === 'json' ? extractJsonFromResponse(text) : text;
         }
+
+        case 'openai': {
+          const openaiClient = client as OpenAI;
+          const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+          
+          if (systemInstruction) {
+            messages.push({ role: 'system', content: systemInstruction });
+          }
+          messages.push({ role: 'user', content: finalUserPrompt });
+
+          const completion = await openaiClient.chat.completions.create({
+            model: AI_MODELS.OPENAI_GPT4O,
+            messages,
+            max_tokens: 16000,
+            temperature: 0.7,
+            response_format: format === 'json' ? { type: 'json_object' } : undefined,
+          });
+
+          return completion.choices[0]?.message?.content || '';
+        }
+
+        case 'anthropic': {
+          const anthropicClient = client as Anthropic;
+          const message = await anthropicClient.messages.create({
+            model: AI_MODELS.ANTHROPIC_SONNET,
+            max_tokens: 16000,
+            system: systemInstruction,
+            messages: [{ role: 'user', content: finalUserPrompt }],
+          });
+
+          const textBlock = message.content.find((b: any) => b.type === 'text');
+          const text = textBlock ? (textBlock as any).text : '';
+          return format === 'json' ? extractJsonFromResponse(text) : text;
+        }
+
+        case 'openrouter': {
+          const openrouterClient = client as OpenAI;
+          const modelsToTry = openrouterModels.length > 0 
+            ? openrouterModels 
+            : AI_MODELS.OPENROUTER_DEFAULT;
+
+          for (const orModel of modelsToTry) {
+            try {
+              const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+              if (systemInstruction) {
+                messages.push({ role: 'system', content: systemInstruction });
+              }
+              messages.push({ role: 'user', content: finalUserPrompt });
+
+              const completion = await openrouterClient.chat.completions.create({
+                model: orModel,
+                messages,
+                max_tokens: 16000,
+              });
+
+              const responseText = completion.choices[0]?.message?.content || '';
+              return format === 'json' ? extractJsonFromResponse(responseText) : responseText;
+            } catch (e) {
+              console.warn(`[callAI] OpenRouter model ${orModel} failed, trying next...`);
+              continue;
+            }
+          }
+          throw new Error('All OpenRouter models failed');
+        }
+
+        case 'groq': {
+          const groqClient = client as OpenAI;
+          const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+          
+          if (systemInstruction) {
+            messages.push({ role: 'system', content: systemInstruction });
+          }
+          messages.push({ role: 'user', content: finalUserPrompt });
+
+          const completion = await groqClient.chat.completions.create({
+            model: selectedGroqModel || AI_MODELS.GROQ_MODELS[0],
+            messages,
+            max_tokens: 8000,
+          });
+
+          const responseText = completion.choices[0]?.message?.content || '';
+          return format === 'json' ? extractJsonFromResponse(responseText) : responseText;
+        }
+      }
+    } catch (error: any) {
+      console.error(`[callAI] ${model} failed:`, error.message);
+      continue;
+    }
+  }
+
+  throw new Error(`[callAI] All AI providers failed for prompt: ${promptKey}`);
+};
+
+// =============================================================================
+// REFERENCE VALIDATION SYSTEM
+// =============================================================================
+
+const BLOCKED_DOMAINS = [
+  'youtube.com', 'youtu.be', 'facebook.com', 'twitter.com', 'x.com',
+  'instagram.com', 'tiktok.com', 'pinterest.com', 'linkedin.com',
+  'reddit.com', 'quora.com', 'medium.com', 'wikipedia.org',
+];
+
+export const fetchVerifiedReferences = async (
+  keyword: string,
+  serperApiKey: string,
+  wpUrl?: string,
+  semanticKeywords: string[] = []
+): Promise<string> => {
+  if (!serperApiKey) {
+    console.warn('[fetchVerifiedReferences] No Serper API key provided');
+    return '';
+  }
+
+  try {
+    let userDomain = '';
+    if (wpUrl) {
+      try {
+        userDomain = new URL(wpUrl).hostname.replace('www.', '');
+      } catch (e) {}
+    }
+
+    const currentYear = new Date().getFullYear();
+    const query = `${keyword} "research" "study" "data" ${currentYear} -site:youtube.com -site:reddit.com`;
+
+    console.log(`[fetchVerifiedReferences] Searching: ${query}`);
+
+    const response = await fetchWithProxies('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': serperApiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ q: query, num: 20 }),
+    });
+
+    const data = await response.json();
+    const potentialLinks = data.organic || [];
+    const validatedLinks: ReferenceLink[] = [];
+
+    for (const link of potentialLinks) {
+      if (validatedLinks.length >= 8) break;
+
+      try {
+        const urlObj = new URL(link.link);
+        const domain = urlObj.hostname.replace('www.', '');
+
+        // Skip blocked domains
+        if (BLOCKED_DOMAINS.some(blocked => domain.includes(blocked))) continue;
+        
+        // Skip user's own domain
+        if (userDomain && domain.includes(userDomain)) continue;
+
+        // Validate link with HEAD request
+        const checkRes = await Promise.race([
+          fetch(link.link, {
+            method: 'HEAD',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+          }),
+          new Promise<Response>((_, reject) => 
+            setTimeout(() => reject(new Error('timeout')), 5000)
+          ),
+        ]) as Response;
+
+        if (checkRes.status === 200) {
+          validatedLinks.push({
+            title: link.title || 'Reference Source',
+            url: link.link,
+            source: domain,
+            description: link.snippet || '',
+          });
+          console.log(`[fetchVerifiedReferences] ✅ Validated: ${domain}`);
+        }
+      } catch (e) {
+        continue;
       }
     }
 
-    // Step 7: Add verification footer
-    content += generateVerificationFooterHtml();
+    if (validatedLinks.length === 0) {
+      console.warn('[fetchVerifiedReferences] No valid references found');
+      return '';
+    }
 
-    // Step 8: Final cleanup
-    onProgress?.('Finalizing content...');
-    content = smartPostProcess(content);
+    // Generate HTML for references section
+    const referencesHtml = `
+<div class="sota-references-section" style="margin-top: 3rem; padding: 2rem; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-radius: 16px; border: 1px solid #e2e8f0;">
+  <h2 style="color: #1e293b; font-size: 1.5rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+    📚 References & Further Reading
+  </h2>
+  <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 1rem;">
+    All sources verified operational with 200 status codes.
+  </p>
+  <ul style="list-style: none; padding: 0; display: grid; gap: 1rem;">
+    ${validatedLinks.map(link => `
+    <li style="background: white; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0;">
+      <a href="${link.url}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; font-weight: 600;">
+        ${link.title}
+      </a>
+      <span style="color: #94a3b8; font-size: 0.8rem; display: block; margin-top: 0.25rem;">
+        (${link.source})
+      </span>
+      ${link.description ? `<p style="color: #64748b; font-size: 0.85rem; margin-top: 0.5rem;">${link.description.substring(0, 150)}...</p>` : ''}
+    </li>
+    `).join('')}
+  </ul>
+</div>`;
 
-    // Step 9: Generate SEO metadata
-    onProgress?.('Generating SEO metadata...');
-    const contentSummary = content.replace(/<[^>]*>/g, ' ').substring(0, 500);
-    const seoMetadata = await generateSeoMetadata(
-      apiKeys,
-      topic,
-      contentSummary,
-      strategy.targetAudience,
-      options.geoLocation
-    );
-
-    // Step 10: Extract FAQ for schema
-    const faqItems = extractFaqForSchema(content);
-
-    const wordCount = countWords(content);
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[generateFullContent] Complete in ${elapsed}s - ${wordCount} words`);
-
-    return {
-      title: seoMetadata.seoTitle,
-      content,
-      metaDescription: seoMetadata.metaDescription,
-      slug: seoMetadata.slug,
-      seoTitle: seoMetadata.seoTitle,
-      wordCount,
-      internalLinksCount: linkStats.injected,
-      faqItems,
-    };
+    return referencesHtml;
   } catch (error: any) {
-    console.error('[generateFullContent] Error:', error);
-    throw error;
+    console.error('[fetchVerifiedReferences] Error:', error.message);
+    return '';
   }
 };
 
-// ==================== WORDPRESS PUBLISHING ====================
+// =============================================================================
+// IMAGE GENERATION
+// =============================================================================
 
-/**
- * Publish content to WordPress
- */
-export const publishToWordPress = async (
-  content: GeneratedContent,
-  wpConfig: WpConfig,
+export const generateImageWithFallback = async (
+  apiClients: ApiClients,
+  prompt: string
+): Promise<string | null> => {
+  console.log('[generateImageWithFallback] Generating image for prompt:', prompt.substring(0, 50));
+
+  // Try DALL-E 3 first
+  if (apiClients.openai) {
+    try {
+      const openaiClient = apiClients.openai as OpenAI;
+      const response = await openaiClient.images.generate({
+        model: 'dall-e-3',
+        prompt: prompt,
+        n: 1,
+        size: '1024x1024',
+        quality: 'standard',
+        response_format: 'b64_json',
+      });
+
+      const base64 = response.data[0]?.b64_json;
+      if (base64) {
+        return `data:image/png;base64,${base64}`;
+      }
+    } catch (error: any) {
+      console.warn('[generateImageWithFallback] DALL-E 3 failed:', error.message);
+    }
+  }
+
+  // Try Gemini Imagen
+  if (apiClients.gemini) {
+    try {
+      const geminiClient = apiClients.gemini as InstanceType<typeof GoogleGenAI>;
+      const response = await geminiClient.models.generateContent({
+        model: 'gemini-2.0-flash-exp',
+        contents: `Generate an image: ${prompt}`,
+        config: {
+          responseModalities: ['image', 'text'],
+        },
+      });
+
+      const parts = response.candidates?.[0]?.content?.parts || [];
+      for (const part of parts) {
+        if ((part as any).inlineData?.mimeType?.startsWith('image/')) {
+          const base64 = (part as any).inlineData.data;
+          return `data:image/png;base64,${base64}`;
+        }
+      }
+    } catch (error: any) {
+      console.warn('[generateImageWithFallback] Gemini Imagen failed:', error.message);
+    }
+  }
+
+  console.error('[generateImageWithFallback] All image generation methods failed');
+  return null;
+};
+
+// =============================================================================
+// WORDPRESS PUBLISHING
+// =============================================================================
+
+export const publishItemToWordPress = async (
+  item: ContentItem,
   wpPassword: string,
-  status: 'publish' | 'draft' | 'pending' = 'publish',
-  existingPostId?: number
-): Promise<{ success: boolean; url?: string; postId?: number; message?: string }> => {
+  publishStatus: 'publish' | 'draft' | 'pending',
+  fetchWithRetry: typeof fetch,
+  wpConfig: WpConfig
+): Promise<PublishResult> => {
+  if (!wpConfig.url || !wpConfig.username || !wpPassword) {
+    return { success: false, message: 'WordPress credentials not configured' };
+  }
+
+  if (!item.generatedContent) {
+    return { success: false, message: 'No generated content to publish' };
+  }
+
+  const baseUrl = wpConfig.url.replace(/\/+$/, '');
+  const authHeader = `Basic ${btoa(`${wpConfig.username}:${wpPassword}`)}`;
+
   try {
-    if (!wpConfig.url || !wpConfig.username || !wpPassword) {
-      return { success: false, message: 'WordPress credentials not configured' };
-    }
-
-    const baseUrl = wpConfig.url.replace(/\/+$/, '');
-    const authHeader = 'Basic ' + btoa(`${wpConfig.username}:${wpPassword}`);
-
-    const postData: Record<string, any> = {
-      title: content.title || content.seoTitle,
-      content: content.content,
-      status,
-      excerpt: content.metaDescription,
-    };
-
-    if (content.slug) {
-      postData.slug = content.slug;
-    }
-
+    const { title, content, metaDescription, slug } = item.generatedContent;
+    
+    // Determine if this is an update or new post
+    let postId: number | null = null;
     let endpoint = `${baseUrl}/wp-json/wp/v2/posts`;
     let method = 'POST';
 
-    if (existingPostId) {
-      endpoint = `${baseUrl}/wp-json/wp/v2/posts/${existingPostId}`;
-      method = 'PUT';
+    // Check if updating existing post
+    if (item.originalUrl) {
+      const originalSlug = extractSlugFromUrl(item.originalUrl);
+      
+      // Search for existing post by slug
+      const searchResponse = await fetchWithRetry(
+        `${baseUrl}/wp-json/wp/v2/posts?slug=${originalSlug}&status=any`,
+        {
+          method: 'GET',
+          headers: { 'Authorization': authHeader },
+        }
+      );
+
+      const searchData = await searchResponse.json();
+      if (Array.isArray(searchData) && searchData.length > 0) {
+        postId = searchData[0].id;
+        endpoint = `${baseUrl}/wp-json/wp/v2/posts/${postId}`;
+        method = 'PUT';
+      }
     }
 
-    const response = await fetch(endpoint, {
+    const postData: any = {
+      title: title,
+      content: content,
+      status: publishStatus,
+      excerpt: metaDescription || '',
+    };
+
+    if (!postId && slug) {
+      postData.slug = slug;
+    }
+
+    console.log(`[publishItemToWordPress] ${method} to ${endpoint}`);
+
+    const response = await fetchWithRetry(endpoint, {
       method,
       headers: {
         'Authorization': authHeader,
@@ -835,786 +526,1050 @@ export const publishToWordPress = async (
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMessage = errorData.message || `HTTP ${response.status}: ${response.statusText}`;
-      console.error('[publishToWordPress] Error:', errorMessage);
-      return { success: false, message: errorMessage };
+      const errorText = await response.text();
+      throw new Error(`WordPress API error: ${response.status} - ${errorText}`);
     }
 
     const result = await response.json();
-    console.log(`[publishToWordPress] Success: ${result.link} (ID: ${result.id})`);
-
+    
     return {
       success: true,
+      message: `Successfully ${postId ? 'updated' : 'created'} post`,
       url: result.link,
+      link: result.link,
       postId: result.id,
-      message: 'Published successfully',
     };
   } catch (error: any) {
-    console.error('[publishToWordPress] Exception:', error);
-    return { success: false, message: error.message || 'Unknown error' };
-  }
-};
-
-/**
- * Publish single item from ContentItem
- */
-export const publishItemToWordPress = async (
-  item: ContentItem,
-  wpPassword: string,
-  status: 'publish' | 'draft' | 'pending',
-  wpConfig: WpConfig
-): Promise<{ success: boolean; message?: string; url?: string; postId?: number }> => {
-  if (!item.generatedContent) {
-    return { success: false, message: 'No generated content to publish' };
-  }
-
-  return publishToWordPress(item.generatedContent, wpConfig, wpPassword, status);
-};
-
-// ==================== SERP ANALYSIS ====================
-
-/**
- * Get SERP results for keyword
- */
-export const getSerpResults = async (
-  keyword: string,
-  serperKey: string,
-  count: number = 10
-): Promise<SerpResult[]> => {
-  if (!serperKey) return [];
-
-  try {
-    const response = await fetch('https://google.serper.dev/search', {
-      method: 'POST',
-      headers: {
-        'X-API-KEY': serperKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ q: keyword, num: count }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Serper API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return (data.organic || []).map((result: any, index: number) => ({
-      title: result.title,
-      snippet: result.snippet || '',
-      link: result.link,
-      position: index + 1,
-    }));
-  } catch (error) {
-    console.error('[getSerpResults] Error:', error);
-    return [];
-  }
-};
-
-// ==================== SITEMAP PARSING ====================
-
-/**
- * Parse WordPress sitemap
- */
-export const parseSitemap = async (
-  sitemapUrl: string
-): Promise<ExistingPage[]> => {
-  try {
-    const response = await fetchWithProxies(sitemapUrl);
-    const xml = await response.text();
-
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xml, 'text/xml');
-
-    const pages: ExistingPage[] = [];
-    const urls = doc.querySelectorAll('url loc');
-
-    urls.forEach(loc => {
-      const url = loc.textContent || '';
-      if (url && !url.includes('/wp-content/') && !url.includes('/tag/') && !url.includes('/category/')) {
-        const slug = url.split('/').filter(Boolean).pop() || '';
-        if (slug && slug !== 'sitemap.xml') {
-          // Create title from slug
-          const title = slug
-            .replace(/-/g, ' ')
-            .replace(/\b\w/g, c => c.toUpperCase());
-          pages.push({ title, slug });
-        }
-      }
-    });
-
-    console.log(`[parseSitemap] Found ${pages.length} pages`);
-    return pages;
-  } catch (error) {
-    console.error('[parseSitemap] Error:', error);
-    return [];
-  }
-};
-
-/**
- * Get existing pages from WordPress
- */
-export const getExistingPages = async (
-  wpConfig: WpConfig,
-  wpPassword: string
-): Promise<ExistingPage[]> => {
-  try {
-    const baseUrl = wpConfig.url.replace(/\/+$/, '');
-    const authHeader = 'Basic ' + btoa(`${wpConfig.username}:${wpPassword}`);
-
-    const pages: ExistingPage[] = [];
-    let page = 1;
-    const perPage = 100;
-
-    while (true) {
-      const response = await fetch(
-        `${baseUrl}/wp-json/wp/v2/posts?per_page=${perPage}&page=${page}&status=publish`,
-        {
-          headers: { 'Authorization': authHeader },
-        }
-      );
-
-      if (!response.ok) break;
-
-      const posts = await response.json();
-      if (posts.length === 0) break;
-
-      posts.forEach((post: any) => {
-        pages.push({
-          title: post.title.rendered,
-          slug: post.slug,
-        });
-      });
-
-      if (posts.length < perPage) break;
-      page++;
-    }
-
-    console.log(`[getExistingPages] Found ${pages.length} published pages`);
-    return pages;
-  } catch (error) {
-    console.error('[getExistingPages] Error:', error);
-    return [];
-  }
-};
-
-// ==================== HEALTH ANALYSIS ====================
-
-/**
- * Analyze content health
- */
-export const analyzeContentHealth = async (
-  apiKeys: ApiKeys,
-  url: string,
-  content: string,
-  targetKeyword: string
-): Promise<{
-  healthScore: number;
-  wordCount: number;
-  issues: Array<{ type: string; issue: string; fix: string }>;
-  recommendations: string[];
-  strengths: string[];
-  weaknesses: string[];
-}> => {
-  try {
-    const { system, user } = buildPrompt('health_analyzer', [url, content, targetKeyword]);
-    const response = await callAI(apiKeys, system, user);
-
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-
-    return {
-      healthScore: 50,
-      wordCount: countWords(content),
-      issues: [],
-      recommendations: [],
-      strengths: [],
-      weaknesses: [],
-    };
-  } catch (error) {
-    console.error('[analyzeContentHealth] Error:', error);
-    return {
-      healthScore: 50,
-      wordCount: countWords(content),
-      issues: [],
-      recommendations: [],
-      strengths: [],
-      weaknesses: [],
-    };
-  }
-};
-
-// ==================== JSON REPAIR ====================
-
-/**
- * Repair malformed JSON
- */
-export const repairJson = async (
-  apiKeys: ApiKeys,
-  brokenJson: string
-): Promise<any> => {
-  try {
-    // First try direct parse
-    return JSON.parse(brokenJson);
-  } catch {
-    // Use AI to repair
-    const { system, user } = buildPrompt('json_repair', [brokenJson]);
-    const response = await callAI(apiKeys, system, user);
-
-    const jsonMatch = response.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-
-    throw new Error('Failed to repair JSON');
-  }
-};
-
-// ==================== GOD MODE FUNCTIONS ====================
-
-/**
- * God Mode autonomous content optimization
- */
-export const godModeOptimize = async (
-  apiKeys: ApiKeys,
-  existingContent: string,
-  semanticKeywords: string[],
-  existingPages: ExistingPage[],
-  topic: string,
-  onProgress?: (message: string) => void
-): Promise<string> => {
-  onProgress?.('God Mode: Analyzing content structure...');
-
-  const { system, user } = buildPrompt('god_mode_autonomous_agent', [
-    existingContent,
-    semanticKeywords,
-    existingPages,
-    topic,
-  ]);
-
-  let optimized = await callAI(apiKeys, system, user);
-
-  onProgress?.('God Mode: Post-processing...');
-  optimized = normalizeGeneratedContent(optimized);
-  optimized = convertMarkdownTablesToHtml(optimized);
-  optimized = removeDuplicateSections(optimized);
-
-  return optimized;
-};
-
-/**
- * God Mode structural guardian
- */
-export const godModeStructuralGuardian = async (
-  apiKeys: ApiKeys,
-  htmlFragment: string,
-  semanticKeywords: string[],
-  topic: string
-): Promise<string> => {
-  const { system, user } = buildPrompt('god_mode_structural_guardian', [
-    htmlFragment,
-    semanticKeywords,
-    topic,
-  ]);
-
-  let refined = await callAI(apiKeys, system, user);
-  refined = normalizeGeneratedContent(refined);
-  refined = convertMarkdownTablesToHtml(refined);
-
-  return refined;
-};
-
-// ==================== IMAGE SERVICES ====================
-
-/**
- * Upload image to Imgur
- */
-export const uploadToImgur = async (
-  imageData: string,
-  clientId: string
-): Promise<string> => {
-  const response = await fetch('https://api.imgur.com/3/image', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Client-ID ${clientId}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      image: imageData.replace(/^data:image\/\w+;base64,/, ''),
-      type: 'base64',
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to upload image to Imgur');
-  }
-
-  const data = await response.json();
-  return data.data.link;
-};
-
-/**
- * Generate image alt text
- */
-export const generateImageAltText = async (
-  apiKeys: ApiKeys,
-  images: Array<{ src: string; context: string }>,
-  primaryKeyword: string
-): Promise<Array<{ index: number; altText: string }>> => {
-  try {
-    const { system, user } = buildPrompt('sota_image_alt_optimizer', [images, primaryKeyword]);
-    const response = await callAI(apiKeys, system, user);
-
-    const jsonMatch = response.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-
-    return [];
-  } catch (error) {
-    console.error('[generateImageAltText] Error:', error);
-    return [];
-  }
-};
-
-// ==================== REFERENCES GENERATION ====================
-
-/**
- * Generate authoritative references
- */
-export const generateReferences = async (
-  apiKeys: ApiKeys,
-  topic: string
-): Promise<string> => {
-  try {
-    const { system, user } = buildPrompt('reference_generator', [topic]);
-    const response = await callAI(apiKeys, system, user);
-    return normalizeGeneratedContent(response);
-  } catch (error) {
-    console.error('[generateReferences] Error:', error);
-    return '';
-  }
-};
-
-// ==================== CLUSTER PLANNING ====================
-
-/**
- * Generate content cluster plan
- */
-export const generateClusterPlan = async (
-  apiKeys: ApiKeys,
-  topic: string
-): Promise<any> => {
-  try {
-    const { system, user } = buildPrompt('cluster_planner', [topic]);
-    const response = await callAI(apiKeys, system, user);
-
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-
-    return null;
-  } catch (error) {
-    console.error('[generateClusterPlan] Error:', error);
-    return null;
-  }
-};
-
-// ==================== NEURONWRITER INTEGRATION ====================
-
-/**
- * Fetch NeuronWriter NLP data
- */
-export const fetchNeuronwriterData = async (
-  queryId: string,
-  apiKey: string
-): Promise<string | null> => {
-  if (!queryId || !apiKey) return null;
-
-  try {
-    const response = await fetch(`https://app.neuronwriter.com/api/query/${queryId}`, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`NeuronWriter API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    
-    // Extract NLP terms
-    const nlpTerms = data.nlp_terms || data.terms || [];
-    if (Array.isArray(nlpTerms) && nlpTerms.length > 0) {
-      return nlpTerms.slice(0, 50).map((t: any) => t.term || t).join(', ');
-    }
-
-    return null;
-  } catch (error) {
-    console.error('[fetchNeuronwriterData] Error:', error);
-    return null;
+    console.error('[publishItemToWordPress] Error:', error);
+    return { success: false, message: error.message };
   }
 };
 
 // =============================================================================
-// MISSING EXPORTS - ADD THESE TO services.tsx
+// CONTENT ANALYSIS FUNCTIONS
 // =============================================================================
 
-// ==================== MAINTENANCE ENGINE ====================
+/**
+ * CRITICAL: analyzePages function - This was MISSING and causing the error!
+ * Analyzes selected pages for content health and optimization opportunities
+ */
+const analyzePages = async (
+  pagesToAnalyze: SitemapPage[],
+  callAIService: (promptKey: string, args: any[], format?: 'json' | 'html', grounding?: boolean) => Promise<string>,
+  setExistingPages: React.Dispatch<React.SetStateAction<SitemapPage[]>>,
+  onProgress?: (progress: { current: number; total: number }) => void,
+  shouldStop?: () => boolean
+): Promise<void> => {
+  const total = pagesToAnalyze.length;
+  console.log(`[analyzePages] Starting analysis of ${total} pages`);
 
-export const maintenanceEngine = {
-  /**
-   * Check content freshness
-   */
-  checkFreshness: async (content: string, publishDate?: string): Promise<{
-    needsUpdate: boolean;
-    reasons: string[];
-    priority: 'high' | 'medium' | 'low';
-  }> => {
-    const reasons: string[] = [];
-    let priority: 'high' | 'medium' | 'low' = 'low';
-
-    // Check for outdated years
-    const currentYear = new Date().getFullYear();
-    const yearMatches = content.match(/\b(20\d{2})\b/g) || [];
-    const outdatedYears = yearMatches.filter(y => parseInt(y) < currentYear - 1);
-    
-    if (outdatedYears.length > 0) {
-      reasons.push(`Contains outdated years: ${[...new Set(outdatedYears)].join(', ')}`);
-      priority = 'high';
+  for (let i = 0; i < total; i++) {
+    // Check if should stop
+    if (shouldStop && shouldStop()) {
+      console.log('[analyzePages] Stopped by user');
+      break;
     }
 
-    // Check word count
-    const wordCount = content.replace(/<[^>]*>/g, ' ').trim().split(/\s+/).length;
-    if (wordCount < 1500) {
-      reasons.push(`Content too short: ${wordCount} words (recommend 2500+)`);
-      priority = priority === 'high' ? 'high' : 'medium';
+    const page = pagesToAnalyze[i];
+
+    // Update progress
+    if (onProgress) {
+      onProgress({ current: i + 1, total });
     }
 
-    // Check for internal links
-    const linkCount = (content.match(/<a\s+[^>]*href/gi) || []).length;
-    if (linkCount < 5) {
-      reasons.push(`Too few internal links: ${linkCount} (recommend 8-15)`);
-      priority = priority === 'high' ? 'high' : 'medium';
-    }
+    // Mark as analyzing
+    setExistingPages(prev => prev.map(p =>
+      p.id === page.id ? { ...p, status: 'analyzing' as const } : p
+    ));
 
-    // Check for images
-    const imageCount = (content.match(/<img\s/gi) || []).length;
-    if (imageCount < 2) {
-      reasons.push(`Too few images: ${imageCount} (recommend 3+)`);
-    }
-
-    // Check for FAQ section
-    if (!content.includes('FAQPage') && !content.includes('faq')) {
-      reasons.push('Missing FAQ section');
-    }
-
-    return {
-      needsUpdate: reasons.length > 0,
-      reasons,
-      priority,
-    };
-  },
-
-  /**
-   * Auto-update outdated dates
-   */
-  updateDates: (content: string): string => {
-    const currentYear = new Date().getFullYear();
-    
-    // Replace outdated years in text
-    let updated = content.replace(
-      /\b(20[12]\d)\b(?![^<]*>)/g,
-      (match) => {
-        const year = parseInt(match);
-        if (year < currentYear - 1) {
-          return String(currentYear);
-        }
-        return match;
-      }
-    );
-
-    // Update "Last updated" text
-    const currentDate = new Date().toISOString().split('T')[0];
-    updated = updated.replace(
-      /Last updated:\s*[\d\-]+/gi,
-      `Last updated: ${currentDate}`
-    );
-
-    return updated;
-  },
-
-  /**
-   * Analyze content for improvements
-   */
-  analyze: async (content: string): Promise<{
-    score: number;
-    issues: Array<{ type: string; message: string; priority: string }>;
-    suggestions: string[];
-  }> => {
-    const issues: Array<{ type: string; message: string; priority: string }> = [];
-    const suggestions: string[] = [];
-    let score = 100;
-
-    const text = content.replace(/<[^>]*>/g, ' ');
-    const wordCount = text.trim().split(/\s+/).length;
-
-    // Word count check
-    if (wordCount < 2000) {
-      issues.push({ type: 'content', message: `Word count low: ${wordCount}`, priority: 'high' });
-      score -= 20;
-      suggestions.push('Expand content to 2500-3200 words');
-    }
-
-    // Heading structure
-    const h2Count = (content.match(/<h2/gi) || []).length;
-    if (h2Count < 4) {
-      issues.push({ type: 'structure', message: `Only ${h2Count} H2 headings`, priority: 'medium' });
-      score -= 10;
-      suggestions.push('Add more H2 sections (recommend 5-7)');
-    }
-
-    // Internal links
-    const linkCount = (content.match(/<a\s+[^>]*href/gi) || []).length;
-    if (linkCount < 8) {
-      issues.push({ type: 'seo', message: `Only ${linkCount} internal links`, priority: 'high' });
-      score -= 15;
-      suggestions.push('Add 8-15 contextual internal links');
-    }
-
-    // Images
-    const imageCount = (content.match(/<img\s/gi) || []).length;
-    if (imageCount < 3) {
-      issues.push({ type: 'media', message: `Only ${imageCount} images`, priority: 'medium' });
-      score -= 10;
-      suggestions.push('Add relevant images with alt text');
-    }
-
-    // FAQ section
-    if (!content.toLowerCase().includes('faq') && !content.includes('FAQPage')) {
-      issues.push({ type: 'structure', message: 'Missing FAQ section', priority: 'medium' });
-      score -= 10;
-      suggestions.push('Add FAQ section with schema markup');
-    }
-
-    // Key takeaways
-    if (!content.toLowerCase().includes('takeaway')) {
-      issues.push({ type: 'structure', message: 'Missing key takeaways', priority: 'low' });
-      score -= 5;
-      suggestions.push('Add Key Takeaways section at top');
-    }
-
-    return {
-      score: Math.max(0, score),
-      issues,
-      suggestions,
-    };
-  },
-};
-
-// ==================== IMAGE GENERATION WITH FALLBACK ====================
-
-export const generateImageWithFallback = async (
-  apiKeys: ApiKeys,
-  prompt: string,
-  options: {
-    style?: string;
-    size?: string;
-    quality?: string;
-  } = {}
-): Promise<{ url: string; source: string } | null> => {
-  const { style = 'realistic', size = '1024x1024', quality = 'standard' } = options;
-
-  // Try OpenAI DALL-E first
-  if (apiKeys.openaiKey) {
     try {
-      console.log('[generateImage] Trying OpenAI DALL-E...');
-      const response = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKeys.openaiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'dall-e-3',
-          prompt: `${prompt}. Style: ${style}. High quality, professional.`,
-          n: 1,
-          size,
-          quality,
-        }),
-      });
+      // Crawl page content if not already crawled
+      let contentToAnalyze = page.crawledContent;
 
-      if (response.ok) {
-        const data = await response.json();
-        const url = data.data?.[0]?.url;
-        if (url) {
-          return { url, source: 'openai' };
-        }
-      }
-    } catch (e: any) {
-      console.warn('[generateImage] OpenAI failed:', e.message);
-    }
-  }
-
-  // Try Gemini Imagen
-  if (apiKeys.geminiKey) {
-    try {
-      console.log('[generateImage] Trying Gemini Imagen...');
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKeys.geminiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            instances: [{ prompt: `${prompt}. Style: ${style}. Professional quality.` }],
-            parameters: {
-              sampleCount: 1,
-              aspectRatio: '1:1',
-              safetyFilterLevel: 'block_some',
+      if (!contentToAnalyze) {
+        try {
+          console.log(`[analyzePages] Crawling: ${page.id}`);
+          const response = await fetchWithProxies(page.id, {
+            method: 'GET',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             },
-          }),
-        }
-      );
+          });
+          const html = await response.text();
 
-      if (response.ok) {
-        const data = await response.json();
-        const base64 = data.predictions?.[0]?.bytesBase64Encoded;
-        if (base64) {
-          return { url: `data:image/png;base64,${base64}`, source: 'gemini' };
+          // Extract main content
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+
+          // Remove scripts, styles, nav, footer
+          const elementsToRemove = doc.querySelectorAll(
+            'script, style, nav, footer, header, aside, .sidebar, .comments, .advertisement, .cookie-notice'
+          );
+          elementsToRemove.forEach(el => el.remove());
+
+          // Get main content
+          const mainContent = doc.querySelector('main, article, .content, .post-content, .entry-content, #content');
+          contentToAnalyze = mainContent?.innerHTML || doc.body.innerHTML;
+
+          // Update crawled content
+          setExistingPages(prev => prev.map(p =>
+            p.id === page.id ? { ...p, crawledContent: contentToAnalyze } : p
+          ));
+        } catch (crawlError: any) {
+          console.error(`[analyzePages] Failed to crawl ${page.id}:`, crawlError.message);
+
+          setExistingPages(prev => prev.map(p =>
+            p.id === page.id ? {
+              ...p,
+              status: 'error' as const,
+              justification: `Crawl failed: ${crawlError.message}`,
+            } : p
+          ));
+          continue;
         }
       }
-    } catch (e: any) {
-      console.warn('[generateImage] Gemini failed:', e.message);
-    }
-  }
 
-  console.warn('[generateImage] All providers failed');
-  return null;
-};
+      // Skip if content is too short
+      const textContent = contentToAnalyze?.replace(/<[^>]*>/g, ' ').trim() || '';
+      const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length;
 
-// ==================== FETCH VERIFIED REFERENCES ====================
-
-export const fetchVerifiedReferences = async (
-  topic: string,
-  serperKey: string,
-  count: number = 8
-): Promise<Array<{
-  title: string;
-  url: string;
-  snippet: string;
-  domain: string;
-  isAuthority: boolean;
-}>> => {
-  if (!serperKey) {
-    console.warn('[fetchVerifiedReferences] No Serper API key');
-    return [];
-  }
-
-  // Authority domains we prioritize
-  const authorityDomains = [
-    'nih.gov', 'cdc.gov', 'who.int', 'edu', 'gov',
-    'mayoclinic.org', 'webmd.com', 'healthline.com',
-    'harvard.edu', 'stanford.edu', 'mit.edu',
-    'nature.com', 'science.org', 'sciencedirect.com',
-    'forbes.com', 'hbr.org', 'wsj.com', 'nytimes.com',
-  ];
-
-  // Domains to exclude
-  const excludedDomains = [
-    'reddit.com', 'quora.com', 'pinterest.com',
-    'facebook.com', 'twitter.com', 'instagram.com',
-    'tiktok.com', 'youtube.com', 'medium.com',
-    'wordpress.com', 'blogspot.com', 'tumblr.com',
-  ];
-
-  try {
-    const response = await fetch('https://google.serper.dev/search', {
-      method: 'POST',
-      headers: {
-        'X-API-KEY': serperKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        q: `${topic} research study site:.edu OR site:.gov OR site:.org`,
-        num: 20,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Serper API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    const results: Array<{
-      title: string;
-      url: string;
-      snippet: string;
-      domain: string;
-      isAuthority: boolean;
-    }> = [];
-
-    for (const result of data.organic || []) {
-      if (results.length >= count) break;
-
-      try {
-        const url = new URL(result.link);
-        const domain = url.hostname.replace('www.', '');
-
-        // Skip excluded domains
-        if (excludedDomains.some(d => domain.includes(d))) continue;
-
-        // Check if authority domain
-        const isAuthority = authorityDomains.some(d => domain.includes(d));
-
-        results.push({
-          title: result.title,
-          url: result.link,
-          snippet: result.snippet || '',
-          domain,
-          isAuthority,
-        });
-      } catch {
+      if (textContent.length < 200) {
+        setExistingPages(prev => prev.map(p =>
+          p.id === page.id ? {
+            ...p,
+            status: 'analyzed' as const,
+            healthScore: 30,
+            updatePriority: 'Critical',
+            wordCount: wordCount,
+            justification: 'Content too short or empty',
+            analysis: {
+              wordCount: wordCount,
+              issues: ['Content is too short'],
+              recommendations: ['Add comprehensive content (2000+ words)'],
+              score: 30,
+            },
+          } : p
+        ));
         continue;
       }
+
+      // Analyze content with AI
+      const analysisPrompt = `Analyze this webpage content for SEO health and content quality. Return JSON only:
+{
+  "healthScore": 0-100,
+  "updatePriority": "Critical" | "High" | "Medium" | "Healthy",
+  "issues": ["issue1", "issue2"],
+  "recommendations": ["rec1", "rec2"],
+  "wordCount": number,
+  "hasStructuredData": boolean,
+  "hasFAQ": boolean,
+  "hasKeyTakeaways": boolean,
+  "internalLinksCount": number,
+  "outdatedInfo": boolean,
+  "readabilityScore": 0-100
+}
+
+Content (first 4000 chars):
+${textContent.substring(0, 4000)}`;
+
+      let analysisResult: any;
+
+      try {
+        const aiResponse = await callAIService(
+          'content_analyzer',
+          [analysisPrompt],
+          'json',
+          false
+        );
+
+        // Try to parse JSON response
+        try {
+          analysisResult = JSON.parse(aiResponse);
+        } catch {
+          // If JSON parsing fails, create default analysis based on content
+          analysisResult = createDefaultAnalysis(textContent, contentToAnalyze || '');
+        }
+      } catch (aiError: any) {
+        console.warn(`[analyzePages] AI analysis failed for ${page.id}:`, aiError.message);
+        // Fallback to basic analysis
+        analysisResult = createDefaultAnalysis(textContent, contentToAnalyze || '');
+      }
+
+      // Update page with analysis results
+      setExistingPages(prev => prev.map(p =>
+        p.id === page.id ? {
+          ...p,
+          status: 'analyzed' as const,
+          healthScore: analysisResult.healthScore,
+          updatePriority: analysisResult.updatePriority,
+          wordCount: analysisResult.wordCount,
+          justification: analysisResult.issues?.join('; ') || 'Analysis complete',
+          analysis: {
+            wordCount: analysisResult.wordCount,
+            issues: analysisResult.issues || [],
+            recommendations: analysisResult.recommendations || [],
+            score: analysisResult.healthScore,
+            hasStructuredData: analysisResult.hasStructuredData,
+            hasFAQ: analysisResult.hasFAQ,
+            hasKeyTakeaways: analysisResult.hasKeyTakeaways,
+            internalLinksCount: analysisResult.internalLinksCount,
+            outdatedInfo: analysisResult.outdatedInfo,
+          },
+        } : p
+      ));
+
+    } catch (error: any) {
+      console.error(`[analyzePages] Error analyzing ${page.id}:`, error.message);
+
+      setExistingPages(prev => prev.map(p =>
+        p.id === page.id ? {
+          ...p,
+          status: 'error' as const,
+          justification: `Analysis failed: ${error.message}`,
+        } : p
+      ));
     }
 
-    // Sort by authority first
-    results.sort((a, b) => (b.isAuthority ? 1 : 0) - (a.isAuthority ? 1 : 0));
+    // Small delay between analyses to avoid rate limiting
+    await delay(500);
+  }
 
-    console.log(`[fetchVerifiedReferences] Found ${results.length} references`);
-    return results;
-  } catch (error) {
-    console.error('[fetchVerifiedReferences] Error:', error);
+  console.log(`[analyzePages] Completed. Analyzed ${pagesToAnalyze.length} pages.`);
+};
+
+/**
+ * Create default analysis when AI analysis fails
+ */
+const createDefaultAnalysis = (textContent: string, htmlContent: string): any => {
+  const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length;
+  const hasH2 = /<h2[^>]*>/i.test(htmlContent);
+  const hasFAQ = /faq|frequently asked/i.test(htmlContent);
+  const hasKeyTakeaways = /key takeaway|takeaway|summary/i.test(htmlContent);
+  const internalLinksCount = (htmlContent.match(/<a[^>]+href=["'][^"']*["']/gi) || []).length;
+
+  let healthScore = 50;
+  const issues: string[] = [];
+  const recommendations: string[] = [];
+
+  if (wordCount < 1000) {
+    healthScore -= 20;
+    issues.push('Content is too short');
+    recommendations.push('Expand content to 2000+ words');
+  } else if (wordCount >= 2000) {
+    healthScore += 15;
+  }
+
+  if (!hasH2) {
+    healthScore -= 10;
+    issues.push('Missing H2 headings');
+    recommendations.push('Add H2 subheadings for better structure');
+  }
+
+  if (!hasFAQ) {
+    healthScore -= 5;
+    recommendations.push('Consider adding FAQ section');
+  }
+
+  if (!hasKeyTakeaways) {
+    healthScore -= 5;
+    recommendations.push('Add Key Takeaways section');
+  }
+
+  if (internalLinksCount < 3) {
+    healthScore -= 10;
+    issues.push('Too few internal links');
+    recommendations.push('Add 8-15 internal links');
+  }
+
+  healthScore = Math.max(0, Math.min(100, healthScore));
+
+  let updatePriority: string;
+  if (healthScore >= 80) updatePriority = 'Healthy';
+  else if (healthScore >= 60) updatePriority = 'Medium';
+  else if (healthScore >= 40) updatePriority = 'High';
+  else updatePriority = 'Critical';
+
+  return {
+    healthScore,
+    updatePriority,
+    issues,
+    recommendations,
+    wordCount,
+    hasStructuredData: false,
+    hasFAQ,
+    hasKeyTakeaways,
+    internalLinksCount,
+    outdatedInfo: false,
+    readabilityScore: 65,
+  };
+};
+
+// =============================================================================
+// CONTENT GAP ANALYSIS
+// =============================================================================
+
+const analyzeContentGaps = async (
+  existingPages: SitemapPage[],
+  topic: string,
+  callAIService: (promptKey: string, args: any[], format?: 'json' | 'html', grounding?: boolean) => Promise<string>,
+  context: GenerationContext
+): Promise<any[]> => {
+  console.log('[analyzeContentGaps] Starting gap analysis for topic:', topic);
+
+  const existingTitles = existingPages.map(p => p.title).filter(Boolean).slice(0, 50);
+  const existingTitlesStr = existingTitles.join('\n- ');
+
+  try {
+    const responseText = await callAIService(
+      'gap_analysis',
+      [topic, existingTitlesStr],
+      'json'
+    );
+
+    const parsed = JSON.parse(responseText);
+    const suggestions = parsed.suggestions || parsed.gaps || [];
+
+    console.log(`[analyzeContentGaps] Found ${suggestions.length} content gaps`);
+
+    return suggestions.map((s: any) => ({
+      keyword: s.keyword || s.topic || s.title,
+      opportunity: s.opportunity || s.description || s.reason,
+      priority: s.priority || 'medium',
+      searchVolume: s.searchVolume || null,
+      difficulty: s.difficulty || null,
+    }));
+  } catch (error: any) {
+    console.error('[analyzeContentGaps] Error:', error.message);
     return [];
   }
 };
 
+// =============================================================================
+// CONTENT GENERATION
+// =============================================================================
 
-// ==================== GENERATE CONTENT ALIAS ====================
+const generateItems = async (
+  items: ContentItem[],
+  callAIService: (promptKey: string, args: any[], format?: 'json' | 'html', grounding?: boolean) => Promise<string>,
+  generateImage: (prompt: string) => Promise<string | null>,
+  context: GenerationContext,
+  onProgress: (progress: { current: number; total: number }) => void,
+  stopRef: React.MutableRefObject<Set<string>>
+): Promise<void> => {
+  const { dispatch, existingPages, siteInfo, wpConfig, geoTargeting, serperApiKey, neuronConfig } = context;
 
-/**
- * generateContent - Alias for generateFullContent
- * This is the main content generation function used by App.tsx
- */
-export const generateContent = async (
-  apiKeys: ApiKeys,
-  topic: string,
-  existingPages: ExistingPage[],
-  wpConfig: WpConfig,
-  options: {
-    geoLocation?: string | null;
-    neuronData?: string | null;
-    includeVideos?: boolean;
-    includeReferences?: boolean;
-  } = {},
-  onProgress?: (message: string) => void
-): Promise<GeneratedContent> => {
-  return generateFullContent(apiKeys, topic, existingPages, wpConfig, options, onProgress);
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+
+    if (stopRef.current.has(item.id)) {
+      console.log(`[generateItems] Skipping stopped item: ${item.title}`);
+      continue;
+    }
+
+    onProgress({ current: i + 1, total: items.length });
+
+    dispatch({
+      type: 'UPDATE_STATUS',
+      payload: { id: item.id, status: 'generating', statusText: 'Starting generation...' },
+    });
+
+    try {
+      // Step 1: Get NeuronWriter data if enabled
+      let neuronData = null;
+      if (neuronConfig?.enabled && neuronConfig?.apiKey && neuronConfig?.projectId) {
+        dispatch({
+          type: 'UPDATE_STATUS',
+          payload: { id: item.id, status: 'generating', statusText: 'Fetching NeuronWriter data...' },
+        });
+
+        try {
+          neuronData = await getNeuronWriterData(neuronConfig.apiKey, neuronConfig.projectId, item.title);
+        } catch (e) {
+          console.warn('[generateItems] NeuronWriter fetch failed, continuing without');
+        }
+      }
+
+      // Step 2: Generate semantic keywords
+      dispatch({
+        type: 'UPDATE_STATUS',
+        payload: { id: item.id, status: 'generating', statusText: 'Generating semantic keywords...' },
+      });
+
+      let semanticKeywords: string[] = [];
+      try {
+        const keywordsResponse = await callAIService(
+          'semantic_keywords',
+          [item.title, geoTargeting.location || null],
+          'json'
+        );
+        const keywordsData = JSON.parse(keywordsResponse);
+        semanticKeywords = keywordsData.keywords || keywordsData.semanticKeywords || [];
+      } catch (e) {
+        console.warn('[generateItems] Semantic keywords generation failed');
+        semanticKeywords = [item.title];
+      }
+
+      // Step 3: Generate content outline
+      dispatch({
+        type: 'UPDATE_STATUS',
+        payload: { id: item.id, status: 'generating', statusText: 'Creating content outline...' },
+      });
+
+      let outline: any = null;
+      try {
+        const outlineResponse = await callAIService(
+          'content_outline',
+          [item.title, semanticKeywords.join(', '), item.type],
+          'json'
+        );
+        outline = JSON.parse(outlineResponse);
+      } catch (e) {
+        console.warn('[generateItems] Outline generation failed, using default');
+      }
+
+      // Step 4: Generate main content
+      dispatch({
+        type: 'UPDATE_STATUS',
+        payload: { id: item.id, status: 'generating', statusText: 'Writing article content...' },
+      });
+
+      const internalPagesContext = existingPages
+        .slice(0, 30)
+        .map(p => `- ${p.title} (/${extractSlugFromUrl(p.id)}/)`);
+
+      const contentResponse = await callAIService(
+        'ultra_sota_article_writer',
+        [
+          item.title,
+          semanticKeywords.join(', '),
+          JSON.stringify(outline || {}),
+          internalPagesContext.join('\n'),
+          neuronData ? JSON.stringify(neuronData) : null,
+          null, // recent news
+        ],
+        'html'
+      );
+
+      let htmlContent = sanitizeHtml(contentResponse);
+
+      // Step 5: Process internal links
+      dispatch({
+        type: 'UPDATE_STATUS',
+        payload: { id: item.id, status: 'generating', statusText: 'Adding internal links...' },
+      });
+
+      htmlContent = processInternalLinks(htmlContent, existingPages, wpConfig.url);
+
+      // Step 6: Generate and add references
+      dispatch({
+        type: 'UPDATE_STATUS',
+        payload: { id: item.id, status: 'generating', statusText: 'Validating references...' },
+      });
+
+      if (serperApiKey) {
+        const referencesHtml = await fetchVerifiedReferences(item.title, serperApiKey, wpConfig.url, semanticKeywords);
+        if (referencesHtml) {
+          htmlContent += referencesHtml;
+        }
+      }
+
+      // Step 7: Generate meta description
+      let metaDescription = '';
+      try {
+        const metaResponse = await callAIService(
+          'meta_description',
+          [item.title, semanticKeywords.slice(0, 3).join(', ')],
+          'text'
+        );
+        metaDescription = metaResponse.replace(/"/g, '').trim().substring(0, 160);
+      } catch (e) {
+        metaDescription = `Learn everything about ${item.title}. Comprehensive guide with expert insights and actionable tips.`;
+      }
+
+      // Step 8: Generate schema
+      dispatch({
+        type: 'UPDATE_STATUS',
+        payload: { id: item.id, status: 'generating', statusText: 'Generating schema...' },
+      });
+
+      let schemaMarkup = '';
+      try {
+        const schemaResponse = await callAIService(
+          'schema_generator',
+          [item.title, metaDescription, htmlContent.substring(0, 2000)],
+          'json'
+        );
+        schemaMarkup = schemaResponse;
+      } catch (e) {
+        console.warn('[generateItems] Schema generation failed');
+      }
+
+      // Calculate word count
+      const textOnly = htmlContent.replace(/<[^>]*>/g, ' ');
+      const wordCount = textOnly.split(/\s+/).filter(w => w.length > 0).length;
+
+      // Create generated content object
+      const generatedContent: GeneratedContent = {
+        title: item.title,
+        content: htmlContent,
+        metaDescription,
+        slug: item.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        primaryKeyword: item.title,
+        semanticKeywords,
+        wordCount,
+        schemaMarkup,
+        faqSchema: null,
+        images: [],
+      };
+
+      dispatch({
+        type: 'SET_CONTENT',
+        payload: { id: item.id, content: generatedContent },
+      });
+
+      dispatch({
+        type: 'UPDATE_STATUS',
+        payload: { id: item.id, status: 'done', statusText: `Complete (${wordCount} words)` },
+      });
+
+      console.log(`[generateItems] ✅ Generated: ${item.title} (${wordCount} words)`);
+
+    } catch (error: any) {
+      console.error(`[generateItems] ❌ Failed: ${item.title}`, error);
+      dispatch({
+        type: 'UPDATE_STATUS',
+        payload: { id: item.id, status: 'error', statusText: error.message },
+      });
+    }
+
+    // Delay between items
+    await delay(1000);
+  }
+};
+
+// =============================================================================
+// CONTENT REFRESH
+// =============================================================================
+
+const refreshItem = async (
+  item: ContentItem,
+  callAIService: (promptKey: string, args: any[], format?: 'json' | 'html', grounding?: boolean) => Promise<string>,
+  context: GenerationContext,
+  aiRepairer: (brokenJson: string) => Promise<string>
+): Promise<void> => {
+  const { dispatch, existingPages, siteInfo, wpConfig, geoTargeting, serperApiKey, neuronConfig } = context;
+
+  console.log(`[refreshItem] Starting refresh for: ${item.title}`);
+
+  try {
+    // Get existing content
+    let existingContent = item.crawledContent;
+
+    if (!existingContent && item.originalUrl) {
+      dispatch({
+        type: 'UPDATE_STATUS',
+        payload: { id: item.id, status: 'generating', statusText: 'Crawling existing content...' },
+      });
+
+      existingContent = await smartCrawl(item.originalUrl);
+      dispatch({
+        type: 'SET_CRAWLED_CONTENT',
+        payload: { id: item.id, content: existingContent },
+      });
+    }
+
+    if (!existingContent || existingContent.length < 500) {
+      throw new Error('Existing content too short or unavailable');
+    }
+
+    // Extract title from content
+    const titleMatch = existingContent.match(/<h1[^>]*>(.*?)<\/h1>/i);
+    const pageTitle = titleMatch ? titleMatch[1].replace(/<[^>]*>/g, '').trim() : item.title;
+
+    // Generate semantic keywords
+    dispatch({
+      type: 'UPDATE_STATUS',
+      payload: { id: item.id, status: 'generating', statusText: 'Analyzing content...' },
+    });
+
+    let semanticKeywords: string[] = [];
+    try {
+      const keywordsResponse = await callAIService(
+        'semantic_keywords',
+        [pageTitle, geoTargeting.location || null],
+        'json'
+      );
+      const keywordsData = JSON.parse(keywordsResponse);
+      semanticKeywords = keywordsData.keywords || [];
+    } catch (e) {
+      semanticKeywords = [pageTitle];
+    }
+
+    // Perform surgical DOM optimization
+    dispatch({
+      type: 'UPDATE_STATUS',
+      payload: { id: item.id, status: 'generating', statusText: 'Optimizing content...' },
+    });
+
+    let optimizedContent = existingContent;
+
+    try {
+      // Parse and optimize DOM
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(existingContent, 'text/html');
+
+      // Find text nodes to optimize
+      const paragraphs = doc.querySelectorAll('p, li');
+      const nodesToProcess = Array.from(paragraphs)
+        .filter(node => {
+          const text = node.textContent || '';
+          if (text.length < 50) return false;
+          if (node.closest('table, .amazon-box, .key-takeaways-box, .faq-section')) return false;
+          if (node.querySelectorAll('a').length > 2) return false;
+          return true;
+        })
+        .slice(0, 20);
+
+      // Process in batches
+      const batchSize = 4;
+      for (let i = 0; i < nodesToProcess.length; i += batchSize) {
+        const batch = nodesToProcess.slice(i, i + batchSize);
+        const batchHtml = batch.map(n => n.outerHTML).join('\n');
+
+        try {
+          const optimizedBatch = await callAIService(
+            'dom_content_polisher',
+            [batchHtml, semanticKeywords.join(', '), pageTitle],
+            'html'
+          );
+
+          const cleanedBatch = surgicalSanitizer(optimizedBatch);
+          if (cleanedBatch && cleanedBatch.length > batchHtml.length * 0.5) {
+            // Apply optimizations
+            const tempDoc = parser.parseFromString(cleanedBatch, 'text/html');
+            const newNodes = tempDoc.body.children;
+
+            for (let j = 0; j < Math.min(batch.length, newNodes.length); j++) {
+              if (batch[j].parentNode) {
+                batch[j].innerHTML = newNodes[j]?.innerHTML || batch[j].innerHTML;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[refreshItem] Batch optimization failed, skipping');
+        }
+
+        await delay(300);
+      }
+
+      optimizedContent = doc.body.innerHTML;
+    } catch (domError: any) {
+      console.warn('[refreshItem] DOM optimization failed:', domError.message);
+    }
+
+    // Process internal links
+    dispatch({
+      type: 'UPDATE_STATUS',
+      payload: { id: item.id, status: 'generating', statusText: 'Updating internal links...' },
+    });
+
+    optimizedContent = processInternalLinks(optimizedContent, existingPages, wpConfig.url);
+
+    // Add/update references
+    if (serperApiKey) {
+      dispatch({
+        type: 'UPDATE_STATUS',
+        payload: { id: item.id, status: 'generating', statusText: 'Validating references...' },
+      });
+
+      // Remove existing references section
+      optimizedContent = optimizedContent.replace(
+        /<div[^>]*class="[^"]*references[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
+        ''
+      );
+
+      const referencesHtml = await fetchVerifiedReferences(pageTitle, serperApiKey, wpConfig.url, semanticKeywords);
+      if (referencesHtml) {
+        optimizedContent += referencesHtml;
+      }
+    }
+
+    // Generate meta description
+    let metaDescription = '';
+    try {
+      const metaResponse = await callAIService(
+        'meta_description',
+        [pageTitle, semanticKeywords.slice(0, 3).join(', ')],
+        'text'
+      );
+      metaDescription = metaResponse.replace(/"/g, '').trim().substring(0, 160);
+    } catch (e) {
+      metaDescription = `Updated guide on ${pageTitle}. Expert insights and comprehensive information.`;
+    }
+
+    // Calculate word count
+    const textOnly = optimizedContent.replace(/<[^>]*>/g, ' ');
+    const wordCount = textOnly.split(/\s+/).filter(w => w.length > 0).length;
+
+    const generatedContent: GeneratedContent = {
+      title: pageTitle,
+      content: optimizedContent,
+      metaDescription,
+      slug: extractSlugFromUrl(item.originalUrl || item.id),
+      primaryKeyword: pageTitle,
+      semanticKeywords,
+      wordCount,
+      schemaMarkup: '',
+      faqSchema: null,
+      images: [],
+    };
+
+    dispatch({
+      type: 'SET_CONTENT',
+      payload: { id: item.id, content: generatedContent },
+    });
+
+    dispatch({
+      type: 'UPDATE_STATUS',
+      payload: { id: item.id, status: 'done', statusText: `Refreshed (${wordCount} words)` },
+    });
+
+    console.log(`[refreshItem] ✅ Refreshed: ${pageTitle} (${wordCount} words)`);
+
+  } catch (error: any) {
+    console.error('[refreshItem] Error:', error);
+    dispatch({
+      type: 'UPDATE_STATUS',
+      payload: { id: item.id, status: 'error', statusText: error.message },
+    });
+  }
+};
+
+// =============================================================================
+// GENERATE CONTENT EXPORT OBJECT
+// =============================================================================
+
+export const generateContent = {
+  generateItems,
+  refreshItem,
+  analyzeContentGaps,
+  analyzePages, // ✅ CRITICAL: This was the missing function!
+};
+
+// =============================================================================
+// GOD MODE MAINTENANCE ENGINE
+// =============================================================================
+
+class MaintenanceEngine {
+  isRunning: boolean = false;
+  logCallback: (msg: string) => void = console.log;
+  private context: GenerationContext | null = null;
+  private stopRequested: boolean = false;
+  private cycleInterval: ReturnType<typeof setInterval> | null = null;
+
+  start(context: GenerationContext): void {
+    if (this.isRunning) {
+      this.logCallback('⚠️ God Mode is already running');
+      return;
+    }
+
+    // Validate API clients
+    const selectedClient = context.apiClients[context.selectedModel as keyof ApiClients];
+    if (!selectedClient) {
+      const availableClients = Object.entries(context.apiClients)
+        .filter(([_, client]) => client !== null)
+        .map(([name]) => name);
+
+      if (availableClients.length === 0) {
+        this.logCallback('❌ CRITICAL ERROR: No AI API clients initialized!');
+        this.logCallback('🔧 REQUIRED: Configure at least one API key in Settings');
+        this.logCallback('🛑 STOPPING: God Mode requires a valid AI API client');
+        return;
+      }
+
+      this.logCallback(`⚠️ Selected model "${context.selectedModel}" not available`);
+      this.logCallback(`📋 Available: ${availableClients.join(', ')}`);
+    }
+
+    this.isRunning = true;
+    this.stopRequested = false;
+    this.context = context;
+    this.logCallback('🚀 God Mode Activated: Autonomous Optimization Engine Starting...');
+
+    // Start the optimization cycle
+    this.runOptimizationCycle();
+
+    // Set up interval for continuous optimization (every 5 minutes)
+    this.cycleInterval = setInterval(() => {
+      if (this.isRunning && !this.stopRequested) {
+        this.runOptimizationCycle();
+      }
+    }, 5 * 60 * 1000);
+  }
+
+  stop(): void {
+    this.stopRequested = true;
+    this.isRunning = false;
+
+    if (this.cycleInterval) {
+      clearInterval(this.cycleInterval);
+      this.cycleInterval = null;
+    }
+
+    this.logCallback('🛑 God Mode Stopped');
+  }
+
+  updateContext(context: GenerationContext): void {
+    this.context = context;
+    this.logCallback('🔄 Context Updated');
+  }
+
+  private async runOptimizationCycle(): Promise<void> {
+    if (!this.context || this.stopRequested) return;
+
+    const { existingPages, excludedUrls, excludedCategories, priorityUrls, priorityOnlyMode } = this.context;
+
+    // Filter pages
+    let pagesToProcess = existingPages.filter(page => {
+      // Exclude specified URLs
+      if (excludedUrls?.some(url => page.id.includes(url))) return false;
+
+      // Exclude specified categories
+      if (excludedCategories?.some(cat => page.id.includes(cat))) return false;
+
+      // Check if recently processed
+      const lastProcessed = localStorage.getItem(`sota_last_proc_${page.id}`);
+      if (lastProcessed) {
+        const hoursSince = (Date.now() - parseInt(lastProcessed)) / (1000 * 60 * 60);
+        if (hoursSince < 24) return false; // Skip if processed in last 24 hours
+      }
+
+      return true;
+    });
+
+    // Apply priority mode
+    if (priorityOnlyMode && priorityUrls && priorityUrls.length > 0) {
+      pagesToProcess = pagesToProcess.filter(page =>
+        priorityUrls.some(url => page.id.includes(url))
+      );
+      this.logCallback(`🎯 Priority Mode: ${pagesToProcess.length} priority URLs to process`);
+    } else if (priorityUrls && priorityUrls.length > 0) {
+      // Sort priority URLs first
+      pagesToProcess.sort((a, b) => {
+        const aIsPriority = priorityUrls.some(url => a.id.includes(url));
+        const bIsPriority = priorityUrls.some(url => b.id.includes(url));
+        if (aIsPriority && !bIsPriority) return -1;
+        if (!aIsPriority && bIsPriority) return 1;
+        return 0;
+      });
+    }
+
+    if (pagesToProcess.length === 0) {
+      this.logCallback('💤 No pages available for optimization (all recently processed or excluded)');
+      return;
+    }
+
+    this.logCallback(`📋 Found ${pagesToProcess.length} pages eligible for optimization`);
+
+    // Process one page at a time
+    const pageToOptimize = pagesToProcess[0];
+    await this.optimizePage(pageToOptimize);
+  }
+
+  private async optimizePage(page: SitemapPage): Promise<void> {
+    if (!this.context || this.stopRequested) return;
+
+    this.logCallback(`🎯 Target Acquired: "${page.title || page.id}"`);
+
+    try {
+      // Create AI service caller
+      const serviceCallAI = (
+        promptKey: string,
+        args: any[],
+        format: 'json' | 'html' | 'text' = 'json',
+        grounding: boolean = false
+      ) => callAI(
+        this.context!.apiClients,
+        this.context!.selectedModel,
+        this.context!.geoTargeting || { enabled: false, location: '', region: '', country: '', postalCode: '' },
+        this.context!.openrouterModels || [],
+        this.context!.selectedGroqModel || '',
+        promptKey,
+        args,
+        format,
+        grounding
+      );
+
+      // Crawl the page
+      this.logCallback(`📄 Crawling: ${page.id}`);
+      let pageContent = page.crawledContent;
+
+      if (!pageContent) {
+        try {
+          pageContent = await smartCrawl(page.id);
+        } catch (e: any) {
+          this.logCallback(`❌ Crawl failed: ${e.message}`);
+          return;
+        }
+      }
+
+      if (!pageContent || pageContent.length < 500) {
+        this.logCallback(`⚠️ Content too short, skipping`);
+        return;
+      }
+
+      // Extract title
+      const titleMatch = pageContent.match(/<h1[^>]*>(.*?)<\/h1>/i);
+      const pageTitle = titleMatch ? titleMatch[1].replace(/<[^>]*>/g, '').trim() : page.title || 'Untitled';
+
+      // Generate semantic keywords
+      this.logCallback(`🔍 Analyzing: "${pageTitle}"`);
+      let semanticKeywords: string[] = [];
+
+      try {
+        const kwResponse = await serviceCallAI('semantic_keywords', [pageTitle], 'json');
+        const kwData = JSON.parse(kwResponse);
+        semanticKeywords = kwData.keywords || [pageTitle];
+      } catch (e) {
+        semanticKeywords = [pageTitle];
+      }
+
+      // Optimize content
+      this.logCallback(`⚡ Optimizing content...`);
+      let optimizedContent = pageContent;
+      let changesMade = 0;
+
+      try {
+        // Parse DOM
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(pageContent, 'text/html');
+
+        // Find paragraphs to optimize
+        const paragraphs = Array.from(doc.querySelectorAll('p, li'))
+          .filter(node => {
+            const text = node.textContent || '';
+            if (text.length < 60) return false;
+            if (node.closest('table, .amazon-box, blockquote')) return false;
+            if (node.querySelectorAll('a').length > 2) return false;
+            return true;
+          })
+          .slice(0, 16);
+
+        // Process in batches
+        const batchSize = 4;
+        let consecutiveErrors = 0;
+
+        for (let i = 0; i < paragraphs.length && consecutiveErrors < 3; i += batchSize) {
+          if (this.stopRequested) break;
+
+          const batch = paragraphs.slice(i, i + batchSize);
+          const batchHtml = batch.map(n => n.outerHTML).join('\n');
+
+          try {
+            const optimized = await serviceCallAI(
+              'dom_content_polisher',
+              [batchHtml, semanticKeywords.join(', '), pageTitle],
+              'html'
+            );
+
+            const cleaned = surgicalSanitizer(optimized);
+            if (cleaned && cleaned.length > batchHtml.length * 0.5) {
+              const tempDoc = parser.parseFromString(cleaned, 'text/html');
+              const newNodes = tempDoc.body.children;
+
+              for (let j = 0; j < Math.min(batch.length, newNodes.length); j++) {
+                if (batch[j].parentNode && newNodes[j]) {
+                  const newContent = newNodes[j].innerHTML;
+                  if (newContent && newContent !== batch[j].innerHTML) {
+                    batch[j].innerHTML = newContent;
+                    changesMade++;
+                  }
+                }
+              }
+              consecutiveErrors = 0;
+            }
+          } catch (e: any) {
+            consecutiveErrors++;
+            this.logCallback(`⚠️ Batch ${Math.floor(i / batchSize) + 1} failed: ${e.message}`);
+
+            if (e.message?.includes('not initialized')) {
+              this.logCallback(`❌ FATAL: API Client error. Stopping.`);
+              break;
+            }
+          }
+
+          await delay(500);
+        }
+
+        optimizedContent = doc.body.innerHTML;
+      } catch (domError: any) {
+        this.logCallback(`⚠️ DOM optimization error: ${domError.message}`);
+      }
+
+      // Add internal links
+      this.logCallback(`🔗 Adding internal links...`);
+      optimizedContent = processInternalLinks(
+        optimizedContent,
+        this.context!.existingPages,
+        this.context!.wpConfig.url
+      );
+
+      // Verify changes were made
+      if (changesMade === 0) {
+        this.logCallback(`⚠️ No changes made to "${pageTitle}". Not marking as optimized.`);
+        this.logCallback(`💡 This page will be retried on next cycle.`);
+        return;
+      }
+
+      // Publish to WordPress
+      this.logCallback(`💾 Publishing ${changesMade} improvements...`);
+
+      const generatedContent: GeneratedContent = {
+        title: pageTitle,
+        content: optimizedContent,
+        metaDescription: '',
+        slug: extractSlugFromUrl(page.id),
+        primaryKeyword: pageTitle,
+        semanticKeywords,
+        wordCount: optimizedContent.replace(/<[^>]*>/g, ' ').split(/\s+/).length,
+        schemaMarkup: '',
+        faqSchema: null,
+        images: [],
+      };
+
+      const publishResult = await publishItemToWordPress(
+        { ...page, generatedContent } as any,
+        localStorage.getItem('sota_wp_password') || '',
+        'publish',
+        fetch,
+        this.context!.wpConfig
+      );
+
+      if (publishResult.success) {
+        localStorage.setItem(`sota_last_proc_${page.id}`, Date.now().toString());
+        this.logCallback(`✅ SUCCESS|${pageTitle}|${publishResult.link || page.id}`);
+      } else {
+        this.logCallback(`❌ Publish failed: ${publishResult.message}`);
+      }
+
+    } catch (error: any) {
+      this.logCallback(`❌ GOD MODE ERROR: ${error.message}`);
+    }
+  }
+}
+
+// Export singleton instance
+export const maintenanceEngine = new MaintenanceEngine();
+
+// =============================================================================
+// DEFAULT EXPORT
+// =============================================================================
+
+export default {
+  callAI,
+  generateContent,
+  publishItemToWordPress,
+  fetchVerifiedReferences,
 };
 
 // ==================== UPDATE THE DEFAULT EXPORT ====================
@@ -1628,9 +1583,6 @@ export default {
   callAnthropicAPI,
   callOpenRouterAPI,
   callGroqAPI,
-
-  // Content Generation
-  generateContent,  // <-- ADD THIS
   generateSemanticKeywords,
   generateContentStrategy,
   performGapAnalysis,
@@ -1643,7 +1595,6 @@ export default {
 
   // WordPress
   publishToWordPress,
-  publishItemToWordPress,
   getExistingPages,
   parseSitemap,
 
@@ -1666,5 +1617,4 @@ export default {
   // Additional exports
   maintenanceEngine,
   generateImageWithFallback,
-  fetchVerifiedReferences,
 };
