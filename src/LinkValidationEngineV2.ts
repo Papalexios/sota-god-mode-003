@@ -1,11 +1,11 @@
 // =============================================================================
 // ULTRA PREMIUM ANCHOR ENGINE V2.0 - SOTA Enterprise Contextual Rich Anchor Text
-// 10000x Quality Upgrade - Deep Semantic NLP + ML-Grade Anchor Generation
+// 4-7 Word Quality Anchor Text with Deep Semantic Analysis
 // =============================================================================
 
 import { escapeRegExp } from './contentUtils';
 
-// ==================== ENHANCED TYPE DEFINITIONS ====================
+// ==================== TYPE DEFINITIONS ====================
 
 export interface SemanticEntity {
   text: string;
@@ -82,11 +82,11 @@ export interface AnchorInjectionResult {
   reasoning: string;
 }
 
-// ==================== ULTRA PREMIUM CONSTANTS ====================
+// ==================== CONFIGURATION ====================
 
 export const ULTRA_CONFIG: UltraAnchorConfig = {
-  minWords: 3,
-  maxWords: 8,
+  minWords: 4,
+  maxWords: 7,
   idealWordRange: [4, 6],
   minQualityScore: 75,
   semanticWeight: 0.30,
@@ -100,7 +100,7 @@ export const ULTRA_CONFIG: UltraAnchorConfig = {
   maxOverlapWithHeading: 0.4,
 };
 
-// SOTA: Comprehensive stopword list for anchor boundaries
+// Stopwords for anchor boundaries
 const BOUNDARY_STOPWORDS = new Set([
   'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of',
   'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have',
@@ -114,7 +114,7 @@ const BOUNDARY_STOPWORDS = new Set([
   'once', 'any', 'about', 'over', 'being', 'you', 'your', 'we', 'our', 'us',
 ]);
 
-// CRITICAL: Generic anchors that destroy SEO value
+// Generic anchors to avoid
 const TOXIC_GENERIC_ANCHORS = new Set([
   'click here', 'read more', 'learn more', 'find out more', 'check it out',
   'this article', 'this guide', 'this post', 'this page', 'this link',
@@ -122,7 +122,7 @@ const TOXIC_GENERIC_ANCHORS = new Set([
   'click', 'tap here', 'go here', 'see more', 'view more', 'continue reading',
 ]);
 
-// SOTA: SEO power phrases that boost anchor value
+// SEO power patterns
 const SEO_POWER_PATTERNS = [
   { pattern: /\b(complete|comprehensive|ultimate|definitive)\s+guide\b/i, boost: 15 },
   { pattern: /\b(step[- ]by[- ]step|how[- ]to)\s+\w+/i, boost: 12 },
@@ -133,24 +133,19 @@ const SEO_POWER_PATTERNS = [
   { pattern: /\b(essential|critical|important|key)\s+\w+/i, boost: 9 },
 ];
 
-// Descriptive action verbs that create compelling anchors
+// Descriptive verbs
 const DESCRIPTIVE_VERBS = new Set([
   'implementing', 'optimizing', 'building', 'creating', 'developing', 'mastering',
   'understanding', 'leveraging', 'scaling', 'automating', 'streamlining',
   'maximizing', 'improving', 'enhancing', 'accelerating', 'transforming',
 ]);
 
-console.log('[UltraPremiumAnchorEngineV2] SOTA Module Initialized');
+console.log('[UltraPremiumAnchorEngineV2] SOTA Module Initialized - 4-7 Word Enforcement');
 
-// ==================== DEEP SEMANTIC ANALYSIS ====================
+// ==================== INTERNAL HELPER FUNCTIONS ====================
 
-/**
- * Extract semantic entities from text using advanced NLP patterns
- */
 const extractSemanticEntities = (text: string): SemanticEntity[] => {
   const entities: SemanticEntity[] = [];
-  
-  // Topic extraction (noun phrases)
   const topicPatterns = [
     /\b([a-z]+\s+){1,3}(strategy|technique|method|approach|framework|system|process)/gi,
     /\b([a-z]+\s+){1,2}(marketing|optimization|development|management|analysis)/gi,
@@ -164,8 +159,8 @@ const extractSemanticEntities = (text: string): SemanticEntity[] => {
         text: match.trim(),
         type: 'topic',
         confidence: 0.85,
-        synonyms: generateSynonyms(match),
-        relatedConcepts: findRelatedConcepts(match),
+        synonyms: [],
+        relatedConcepts: [],
       });
     });
   });
@@ -173,46 +168,6 @@ const extractSemanticEntities = (text: string): SemanticEntity[] => {
   return entities;
 };
 
-const generateSynonyms = (term: string): string[] => {
-  const synonymMap: Record<string, string[]> = {
-    'strategy': ['approach', 'method', 'technique', 'tactic'],
-    'optimization': ['improvement', 'enhancement', 'refinement'],
-    'marketing': ['promotion', 'advertising', 'outreach'],
-    'development': ['creation', 'building', 'implementation'],
-    'guide': ['tutorial', 'walkthrough', 'handbook'],
-  };
-  
-  const synonyms: string[] = [];
-  Object.entries(synonymMap).forEach(([key, values]) => {
-    if (term.toLowerCase().includes(key)) {
-      synonyms.push(...values);
-    }
-  });
-  return synonyms;
-};
-
-const findRelatedConcepts = (term: string): string[] => {
-  const conceptMap: Record<string, string[]> = {
-    'seo': ['search rankings', 'organic traffic', 'keyword optimization'],
-    'content': ['blogging', 'copywriting', 'content strategy'],
-    'email': ['newsletters', 'automation', 'subscriber engagement'],
-    'conversion': ['landing pages', 'cta optimization', 'user experience'],
-  };
-  
-  const concepts: string[] = [];
-  Object.entries(conceptMap).forEach(([key, values]) => {
-    if (term.toLowerCase().includes(key)) {
-      concepts.push(...values);
-    }
-  });
-  return concepts;
-};
-
-// ==================== ULTRA QUALITY SCORING SYSTEM ====================
-
-/**
- * Calculate deep semantic similarity using TF-IDF inspired weighting
- */
 const calculateDeepSemanticScore = (
   anchor: string,
   targetPage: PageContext,
@@ -222,7 +177,6 @@ const calculateDeepSemanticScore = (
   const titleLower = targetPage.title.toLowerCase();
   const descLower = (targetPage.description || '').toLowerCase();
   
-  // Extract meaningful words (remove stopwords)
   const getWords = (text: string): string[] => 
     text.split(/\s+/).filter(w => w.length > 2 && !BOUNDARY_STOPWORDS.has(w));
   
@@ -231,17 +185,14 @@ const calculateDeepSemanticScore = (
   const descWords = new Set(getWords(descLower));
   const contextWords = new Set(getWords(paragraphContext.toLowerCase()));
   
-  // Calculate intersection scores
   const titleOverlap = [...anchorWords].filter(w => titleWords.has(w)).length;
   const descOverlap = [...anchorWords].filter(w => descWords.has(w)).length;
   const contextOverlap = [...anchorWords].filter(w => contextWords.has(w)).length;
   
-  // Weighted semantic score
   const titleScore = anchorWords.size > 0 ? (titleOverlap / anchorWords.size) * 40 : 0;
   const descScore = anchorWords.size > 0 ? (descOverlap / anchorWords.size) * 25 : 0;
   const contextScore = anchorWords.size > 0 ? (contextOverlap / anchorWords.size) * 20 : 0;
   
-  // Keyword match bonus
   let keywordBonus = 0;
   if (targetPage.primaryKeyword && anchorLower.includes(targetPage.primaryKeyword.toLowerCase())) {
     keywordBonus = 15;
@@ -253,35 +204,28 @@ const calculateDeepSemanticScore = (
   return Math.min(100, titleScore + descScore + contextScore + keywordBonus);
 };
 
-/**
- * Evaluate naturalness of anchor in sentence context
- */
 const calculateNaturalnessScore = (
   anchor: string,
   sentence: string
 ): number => {
-  let score = 50; // Base score
+  let score = 50;
   const anchorLower = anchor.toLowerCase();
   const words = anchor.split(/\s+/);
   
-  // Check word count (4-6 words ideal)
+  // Word count scoring (4-6 ideal)
   if (words.length >= 4 && words.length <= 6) score += 15;
   else if (words.length === 3 || words.length === 7) score += 8;
   else if (words.length < 3) score -= 20;
   else if (words.length > 8) score -= 15;
   
-  // Check for proper sentence boundaries
   const sentenceLower = sentence.toLowerCase();
   const anchorPos = sentenceLower.indexOf(anchorLower);
   
   if (anchorPos > -1) {
-    // Not at very start of sentence
     if (anchorPos > 10) score += 8;
-    // Not at very end (leave room for punctuation)
     if (anchorPos < sentenceLower.length - anchor.length - 5) score += 5;
   }
   
-  // Check first/last word quality
   const firstWord = words[0]?.toLowerCase();
   const lastWord = words[words.length - 1]?.toLowerCase();
   
@@ -291,49 +235,40 @@ const calculateNaturalnessScore = (
   if (!BOUNDARY_STOPWORDS.has(lastWord)) score += 8;
   else score -= 10;
   
-  // Bonus for descriptive first words
   if (DESCRIPTIVE_VERBS.has(firstWord)) score += 12;
   
   return Math.max(0, Math.min(100, score));
 };
 
-/**
- * Calculate SEO value of anchor text
- */
 const calculateSEOScore = (
   anchor: string,
   targetPage: PageContext
 ): number => {
-  let score = 40; // Base score
+  let score = 40;
   const anchorLower = anchor.toLowerCase();
   
-  // Check for toxic generic anchors
   for (const toxic of TOXIC_GENERIC_ANCHORS) {
     if (anchorLower.includes(toxic)) {
-      return 0; // Instant fail for generic anchors
+      return 0;
     }
   }
   
-  // Apply SEO power pattern boosts
   SEO_POWER_PATTERNS.forEach(({ pattern, boost }) => {
     if (pattern.test(anchor)) {
       score += boost;
     }
   });
   
-  // Primary keyword presence
   if (targetPage.primaryKeyword) {
     const kw = targetPage.primaryKeyword.toLowerCase();
     if (anchorLower.includes(kw)) score += 20;
     else {
-      // Partial keyword match
       const kwWords = kw.split(/\s+/);
       const matchCount = kwWords.filter(w => anchorLower.includes(w)).length;
       score += (matchCount / kwWords.length) * 10;
     }
   }
   
-  // Descriptiveness bonus
   const words = anchor.split(/\s+/);
   const meaningfulWords = words.filter(w => 
     !BOUNDARY_STOPWORDS.has(w.toLowerCase()) && w.length > 3
@@ -343,8 +278,6 @@ const calculateSEOScore = (
   
   return Math.min(100, score);
 };
-
-// ==================== ULTRA ANCHOR EXTRACTION ====================
 
 const extractParagraphTheme = (text: string): string => {
   const words = text.toLowerCase().split(/\s+/);
@@ -360,9 +293,6 @@ const extractParagraphTheme = (text: string): string => {
   return sorted.slice(0, 3).map(([w]) => w).join(' ');
 };
 
-/**
- * Extract premium anchor candidates from paragraph
- */
 const extractUltraAnchorCandidates = (
   paragraph: string,
   targetPage: PageContext,
@@ -375,7 +305,6 @@ const extractUltraAnchorCandidates = (
   
   if (words.length < config.minWords) return candidates;
   
-  // Generate phrase candidates
   for (let len = config.minWords; len <= config.maxWords; len++) {
     for (let start = 0; start <= words.length - len; start++) {
       const phraseWords = words.slice(start, start + len);
@@ -384,20 +313,16 @@ const extractUltraAnchorCandidates = (
       
       if (cleanPhrase.length < 12) continue;
       
-      // Find containing sentence
       const containingSentence = sentences.find(s => 
         s.toLowerCase().includes(cleanPhrase.toLowerCase())
       ) || text;
       
-      // Calculate all scores
       const semanticScore = calculateDeepSemanticScore(cleanPhrase, targetPage, text);
       const naturalScore = calculateNaturalnessScore(cleanPhrase, containingSentence);
       const seoScore = calculateSEOScore(cleanPhrase, targetPage);
       
-      // Skip if SEO score is 0 (toxic anchor)
       if (seoScore === 0) continue;
       
-      // Calculate weighted quality score
       const qualityScore = (
         semanticScore * config.semanticWeight +
         naturalScore * config.naturalWeight +
@@ -406,7 +331,6 @@ const extractUltraAnchorCandidates = (
       
       if (qualityScore < config.minQualityScore) continue;
       
-      // Determine position
       const posRatio = start / words.length;
       const position = posRatio < 0.3 ? 'early' : posRatio > 0.7 ? 'late' : 'middle';
       
@@ -435,7 +359,6 @@ const extractUltraAnchorCandidates = (
     }
   }
   
-  // Sort by quality and deduplicate
   candidates.sort((a, b) => b.qualityScore - a.qualityScore);
   
   const seen = new Set<string>();
@@ -460,7 +383,7 @@ export class UltraPremiumAnchorEngineV2 {
     this.usedAnchors = new Set();
     this.usedTargets = new Set();
     this.injectionHistory = [];
-    console.log('[UltraPremiumAnchorEngineV2] Engine initialized with SOTA config');
+    console.log(`[UltraPremiumAnchorEngineV2] Engine initialized with ${this.config.minWords}-${this.config.maxWords} word enforcement`);
   }
   
   reset(): void {
@@ -476,7 +399,6 @@ export class UltraPremiumAnchorEngineV2 {
   ): UltraAnchorCandidate | null {
     const candidates = extractUltraAnchorCandidates(paragraph, targetPage, this.config);
     
-    // Filter used anchors
     const available = candidates.filter(c => {
       const key = c.normalizedText.replace(/[^a-z0-9]/g, '');
       return !this.usedAnchors.has(key);
@@ -484,7 +406,6 @@ export class UltraPremiumAnchorEngineV2 {
     
     if (available.length === 0) return null;
     
-    // Check heading overlap if provided
     if (nearbyHeading && this.config.maxOverlapWithHeading < 1) {
       const headingWords = new Set(
         nearbyHeading.toLowerCase().split(/\s+/).filter(w => w.length > 3)
