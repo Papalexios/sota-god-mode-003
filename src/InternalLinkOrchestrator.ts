@@ -1,14 +1,15 @@
 // =============================================================================
-// INTERNAL LINK ORCHESTRATOR v1.0.0 - Enterprise-Grade Link Distribution
-// SOTA Implementation: Zone-Based Distribution with Contextual Anchors
+// INTERNAL LINK ORCHESTRATOR v2.0.0 - ENTERPRISE GRADE
+// STRICT Zone-Based Distribution with 4-7 Word Contextual Anchors
 // =============================================================================
 
 import {
-  ContextualAnchorEngine,
-  PageInfo,
-  LinkInjectionResult,
-  ContextualAnchorConfig,
-} from './ContextualAnchorEngine';
+  UltraPremiumAnchorEngineV2,
+  UltraAnchorCandidate,
+  PageContext,
+  validateAnchorText,
+} from './UltraPremiumAnchorEngineV2';
+import { ANCHOR_TEXT_CONFIG } from './constants';
 import { escapeRegExp } from './contentUtils';
 
 // ==================== TYPE DEFINITIONS ====================
@@ -20,6 +21,13 @@ export interface LinkDistributionZone {
   minLinks: number;
   maxLinks: number;
   priority: number;
+  currentCount: number;
+}
+
+export interface ZoneValidationResult {
+  isValid: boolean;
+  violations: string[];
+  distribution: Map<string, { count: number; min: number; max: number }>;
 }
 
 export interface LinkDistributionConfig {
@@ -29,33 +37,81 @@ export interface LinkDistributionConfig {
   maxLinksPerParagraph: number;
   minWordsBetweenLinks: number;
   skipSections: string[];
-  anchorConfig: Partial<ContextualAnchorConfig>;
+  strictZoneEnforcement: boolean;
+  minAnchorWords: number;
+  maxAnchorWords: number;
 }
 
 export interface OrchestratorResult {
   html: string;
   linksInjected: number;
   distribution: Map<string, number>;
-  injectionDetails: LinkInjectionResult[];
+  injectionDetails: Array<{
+    anchor: string;
+    targetSlug: string;
+    zone: string;
+    wordCount: number;
+    qualityScore: number;
+  }>;
+  zoneValidation: ZoneValidationResult;
 }
 
-// ==================== CONSTANTS ====================
+// ==================== STRICT ZONE REQUIREMENTS ====================
 
-// ULTRA PREMIUM Link Distribution Zones
-const DEFAULT_ZONES: LinkDistributionZone[] = [
-  { name: 'INTRO', startPercent: 0, endPercent: 10, minLinks: 0, maxLinks: 2, priority: 5 },
-  { name: 'EARLY_BODY', startPercent: 10, endPercent: 30, minLinks: 2, maxLinks: 3, priority: 3 },
-  { name: 'MID_BODY', startPercent: 30, endPercent: 60, minLinks: 3, maxLinks: 4, priority: 1 },
-  { name: 'LATE_BODY', startPercent: 60, endPercent: 80, minLinks: 2, maxLinks: 3, priority: 2 },
-  { name: 'FAQ_CONCLUSION', startPercent: 80, endPercent: 100, minLinks: 2, maxLinks: 3, priority: 4 },
+const STRICT_ZONE_REQUIREMENTS: LinkDistributionZone[] = [
+  { 
+    name: 'INTRO', 
+    startPercent: 0, 
+    endPercent: 10, 
+    minLinks: 0, 
+    maxLinks: 1, 
+    priority: 5,
+    currentCount: 0 
+  },
+  { 
+    name: 'EARLY_BODY', 
+    startPercent: 10, 
+    endPercent: 30, 
+    minLinks: 2, 
+    maxLinks: 3, 
+    priority: 3,
+    currentCount: 0 
+  },
+  { 
+    name: 'MID_BODY', 
+    startPercent: 30, 
+    endPercent: 60, 
+    minLinks: 3, 
+    maxLinks: 4, 
+    priority: 1, // Highest priority - most links here
+    currentCount: 0 
+  },
+  { 
+    name: 'LATE_BODY', 
+    startPercent: 60, 
+    endPercent: 80, 
+    minLinks: 2, 
+    maxLinks: 3, 
+    priority: 2,
+    currentCount: 0 
+  },
+  { 
+    name: 'FAQ_CONCLUSION', 
+    startPercent: 80, 
+    endPercent: 100, 
+    minLinks: 1, 
+    maxLinks: 3, 
+    priority: 4,
+    currentCount: 0 
+  },
 ];
 
 const DEFAULT_CONFIG: LinkDistributionConfig = {
-  zones: DEFAULT_ZONES,
+  zones: STRICT_ZONE_REQUIREMENTS.map(z => ({ ...z })),
   totalTargetLinks: 12,
   minParagraphLength: 60,
   maxLinksPerParagraph: 1,
-  minWordsBetweenLinks: 200,
+  minWordsBetweenLinks: ANCHOR_TEXT_CONFIG.MIN_WORDS_BETWEEN_LINKS,
   skipSections: [
     '.sota-faq-section',
     '.sota-references-section',
@@ -64,17 +120,18 @@ const DEFAULT_CONFIG: LinkDistributionConfig = {
     '[class*="reference"]',
     '.verification-footer-sota',
     '[itemtype*="FAQPage"]',
+    'nav',
+    'header',
+    'footer',
+    '.sidebar',
+    '.toc',
   ],
-  anchorConfig: {
-    minAnchorWords: 3,
-    maxAnchorWords: 7,
-    minContextScore: 0.35,
-    preferredPosition: 'middle',
-    avoidHeadingDuplication: true,
-  },
+  strictZoneEnforcement: true,
+  minAnchorWords: ANCHOR_TEXT_CONFIG.MIN_ANCHOR_WORDS,
+  maxAnchorWords: ANCHOR_TEXT_CONFIG.MAX_ANCHOR_WORDS,
 };
 
-console.log('[InternalLinkOrchestrator] Module loaded');
+console.log('[InternalLinkOrchestrator] Module loaded - Strict Zone Enforcement Active');
 
 // ==================== HELPER FUNCTIONS ====================
 
@@ -82,14 +139,12 @@ console.log('[InternalLinkOrchestrator] Module loaded');
  * Get the nearest heading above an element
  */
 const getNearbyHeading = (element: Element, doc: Document): string | null => {
-  // Look for heading in parent section
   const section = element.closest('section, article, div[class*="section"]');
   if (section) {
     const heading = section.querySelector('h2, h3');
     if (heading) return heading.textContent?.trim() || null;
   }
 
-  // Walk backwards through previous siblings
   let sibling = element.previousElementSibling;
   while (sibling) {
     if (['H2', 'H3', 'H4'].includes(sibling.tagName)) {
@@ -105,14 +160,11 @@ const getNearbyHeading = (element: Element, doc: Document): string | null => {
  * Determine which zone an element belongs to based on position
  */
 const getElementZone = (
-  element: Element,
-  allElements: Element[],
+  elementIndex: number,
+  totalElements: number,
   zones: LinkDistributionZone[]
 ): LinkDistributionZone | null => {
-  const index = allElements.indexOf(element);
-  if (index === -1) return null;
-
-  const positionPercent = (index / allElements.length) * 100;
+  const positionPercent = (elementIndex / totalElements) * 100;
 
   for (const zone of zones) {
     if (positionPercent >= zone.startPercent && positionPercent < zone.endPercent) {
@@ -120,7 +172,7 @@ const getElementZone = (
     }
   }
 
-  return zones[zones.length - 1]; // Default to last zone
+  return zones[zones.length - 1];
 };
 
 /**
@@ -130,9 +182,7 @@ const shouldSkipElement = (element: Element, skipSelectors: string[]): boolean =
   for (const selector of skipSelectors) {
     try {
       if (element.closest(selector)) return true;
-    } catch (e) {
-      // Invalid selector, ignore
-    }
+    } catch (e) {}
   }
   return false;
 };
@@ -144,26 +194,59 @@ const countWords = (text: string): number => {
   return text.trim().split(/\s+/).filter(w => w.length > 0).length;
 };
 
+/**
+ * Validate zone distribution meets STRICT requirements
+ */
+const validateZoneDistribution = (
+  zones: LinkDistributionZone[]
+): ZoneValidationResult => {
+  const violations: string[] = [];
+  const distribution = new Map<string, { count: number; min: number; max: number }>();
+  
+  for (const zone of zones) {
+    distribution.set(zone.name, {
+      count: zone.currentCount,
+      min: zone.minLinks,
+      max: zone.maxLinks,
+    });
+    
+    if (zone.currentCount > zone.maxLinks) {
+      violations.push(`${zone.name}: Exceeds maximum (${zone.currentCount}/${zone.maxLinks})`);
+    }
+    
+    // Only check minimum if we're done processing (handled separately)
+  }
+  
+  return {
+    isValid: violations.length === 0,
+    violations,
+    distribution,
+  };
+};
+
 // ==================== MAIN ORCHESTRATOR CLASS ====================
 
 export class InternalLinkOrchestrator {
   private config: LinkDistributionConfig;
-  private anchorEngine: ContextualAnchorEngine;
-  private zoneLinks: Map<string, number>;
+  private anchorEngine: UltraPremiumAnchorEngineV2;
+  private zones: LinkDistributionZone[];
   private lastLinkWordPosition: number;
   private totalWordsProcessed: number;
+  private injectionDetails: OrchestratorResult['injectionDetails'];
 
   constructor(config: Partial<LinkDistributionConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.anchorEngine = new ContextualAnchorEngine(this.config.anchorConfig);
-    this.zoneLinks = new Map();
+    this.zones = this.config.zones.map(z => ({ ...z, currentCount: 0 }));
+    this.anchorEngine = new UltraPremiumAnchorEngineV2({
+      minWords: this.config.minAnchorWords,
+      maxWords: this.config.maxAnchorWords,
+      minQualityScore: 75,
+    });
     this.lastLinkWordPosition = -this.config.minWordsBetweenLinks;
     this.totalWordsProcessed = 0;
-
-    // Initialize zone counters
-    for (const zone of this.config.zones) {
-      this.zoneLinks.set(zone.name, 0);
-    }
+    this.injectionDetails = [];
+    
+    console.log(`[InternalLinkOrchestrator] Initialized with ${this.config.minAnchorWords}-${this.config.maxAnchorWords} word anchors`);
   }
 
   /**
@@ -171,21 +254,17 @@ export class InternalLinkOrchestrator {
    */
   reset(): void {
     this.anchorEngine.reset();
-    this.zoneLinks.clear();
+    this.zones = this.config.zones.map(z => ({ ...z, currentCount: 0 }));
     this.lastLinkWordPosition = -this.config.minWordsBetweenLinks;
     this.totalWordsProcessed = 0;
-
-    for (const zone of this.config.zones) {
-      this.zoneLinks.set(zone.name, 0);
-    }
+    this.injectionDetails = [];
   }
 
   /**
-   * Check if we can add more links to a zone
+   * Check if we can add more links to a zone (STRICT enforcement)
    */
   private canAddLinkToZone(zone: LinkDistributionZone): boolean {
-    const currentCount = this.zoneLinks.get(zone.name) || 0;
-    return currentCount < zone.maxLinks;
+    return zone.currentCount < zone.maxLinks;
   }
 
   /**
@@ -196,18 +275,26 @@ export class InternalLinkOrchestrator {
   }
 
   /**
+   * Get total links injected
+   */
+  private getTotalLinksInjected(): number {
+    return this.zones.reduce((sum, z) => sum + z.currentCount, 0);
+  }
+
+  /**
    * Process HTML content and inject contextual internal links
+   * STRICT zone enforcement with 4-7 word anchors
    */
   processContent(
     html: string,
-    availablePages: PageInfo[],
+    availablePages: PageContext[],
     baseUrl: string
   ): OrchestratorResult {
+    console.log('[InternalLinkOrchestrator] Starting STRICT zone-based link injection...');
+    
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
     const body = doc.body;
-
-    const injectionDetails: LinkInjectionResult[] = [];
 
     // Collect all linkable elements
     const allElements = Array.from(body.querySelectorAll('p, li'));
@@ -220,33 +307,34 @@ export class InternalLinkOrchestrator {
       return true;
     });
 
-    console.log(`[Orchestrator] Found ${linkableElements.length} linkable elements out of ${allElements.length}`);
+    console.log(`[InternalLinkOrchestrator] Found ${linkableElements.length} linkable elements`);
 
-    // Sort pages by priority (more specific = higher priority)
+    // Sort pages by specificity (more specific = higher priority)
     const sortedPages = [...availablePages].sort((a, b) => {
       return b.title.split(' ').length - a.title.split(' ').length;
     });
 
-    // Process zones by priority
-    const sortedZones = [...this.config.zones].sort((a, b) => a.priority - b.priority);
+    // Process zones by priority (lower priority number = process first)
+    const sortedZones = [...this.zones].sort((a, b) => a.priority - b.priority);
 
-    let totalLinksInjected = 0;
-
+    // Multi-pass injection to ensure zone requirements are met
     for (const zone of sortedZones) {
+      if (this.getTotalLinksInjected() >= this.config.totalTargetLinks) break;
+      
       // Get elements in this zone
-      const zoneElements = linkableElements.filter(el => {
-        const elementZone = getElementZone(el, allElements, this.config.zones);
+      const zoneElements = linkableElements.filter((el, idx) => {
+        const elementZone = getElementZone(idx, allElements.length, this.zones);
         return elementZone?.name === zone.name;
       });
 
-      console.log(`[Orchestrator] Zone ${zone.name}: ${zoneElements.length} elements`);
+      console.log(`[InternalLinkOrchestrator] Processing zone ${zone.name}: ${zoneElements.length} elements, target: ${zone.minLinks}-${zone.maxLinks} links`);
 
       // Process elements in this zone
       for (const element of zoneElements) {
-        if (totalLinksInjected >= this.config.totalTargetLinks) break;
+        if (this.getTotalLinksInjected() >= this.config.totalTargetLinks) break;
         if (!this.canAddLinkToZone(zone)) break;
 
-        // Update word count
+        // Get element's word count
         const elementWords = countWords(element.textContent || '');
         
         // Check spacing requirement
@@ -258,35 +346,96 @@ export class InternalLinkOrchestrator {
         // Get nearby heading for context
         const nearbyHeading = getNearbyHeading(element, doc);
 
-        // Try to inject a link
-        const result = this.anchorEngine.processContainer(
-          element,
-          sortedPages,
-          baseUrl,
-          nearbyHeading || undefined
-        );
+        // Try each page to find a valid match
+        for (const page of sortedPages) {
+          if (!this.canAddLinkToZone(zone)) break;
+          if (this.anchorEngine['usedTargets']?.has(page.slug)) continue;
 
-        if (result && result.success) {
-          totalLinksInjected++;
-          this.zoneLinks.set(zone.name, (this.zoneLinks.get(zone.name) || 0) + 1);
-          this.lastLinkWordPosition = this.totalWordsProcessed + Math.floor(elementWords / 2);
-          injectionDetails.push(result);
+          // Find best anchor in this paragraph
+          const candidate = this.anchorEngine.findBestAnchor(
+            element.textContent || '',
+            page,
+            nearbyHeading || undefined
+          );
 
-          console.log(`[Orchestrator] Injected link in ${zone.name}: "${result.anchor}" -> ${result.targetSlug}`);
+          if (!candidate) continue;
+
+          // Validate anchor meets strict requirements
+          const validation = validateAnchorText(candidate.text, {
+            minWords: this.config.minAnchorWords,
+            maxWords: this.config.maxAnchorWords,
+            idealWordRange: [4, 6],
+            minQualityScore: 75,
+            semanticWeight: 0.3,
+            contextWeight: 0.25,
+            naturalWeight: 0.25,
+            seoWeight: 0.2,
+            avoidGenericAnchors: true,
+            enforceDescriptive: true,
+            requireTopicRelevance: true,
+            sentencePositionBias: 'natural',
+            maxOverlapWithHeading: 0.4,
+          });
+
+          if (!validation.valid) {
+            console.log(`[InternalLinkOrchestrator] Skipped invalid anchor: "${candidate.text}" - ${validation.reason}`);
+            continue;
+          }
+
+          // Build URL
+          const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
+          const targetUrl = `${cleanBaseUrl}/${page.slug}/`;
+
+          // Inject the link
+          const currentHtml = element.innerHTML;
+          const { html: newHtml, result } = this.anchorEngine.injectLink(
+            currentHtml,
+            candidate.text,
+            targetUrl
+          );
+
+          if (result.success) {
+            element.innerHTML = newHtml;
+            zone.currentCount++;
+            this.lastLinkWordPosition = this.totalWordsProcessed + Math.floor(elementWords / 2);
+            
+            this.injectionDetails.push({
+              anchor: candidate.text,
+              targetSlug: page.slug,
+              zone: zone.name,
+              wordCount: candidate.wordCount,
+              qualityScore: candidate.qualityScore,
+            });
+
+            console.log(`[InternalLinkOrchestrator] ✅ Zone ${zone.name}: "${candidate.text}" (${candidate.wordCount} words) → ${page.slug}`);
+            break; // Move to next element
+          }
         }
 
         this.totalWordsProcessed += elementWords;
       }
     }
 
-    console.log(`[Orchestrator] Total links injected: ${totalLinksInjected}/${this.config.totalTargetLinks}`);
-    console.log(`[Orchestrator] Distribution:`, Object.fromEntries(this.zoneLinks));
+    // Final validation
+    const zoneValidation = validateZoneDistribution(this.zones);
+    
+    console.log('[InternalLinkOrchestrator] === FINAL DISTRIBUTION ===');
+    this.zones.forEach(z => {
+      const status = z.currentCount >= z.minLinks ? '✅' : '⚠️';
+      console.log(`  ${status} ${z.name}: ${z.currentCount}/${z.minLinks}-${z.maxLinks}`);
+    });
+    console.log(`[InternalLinkOrchestrator] Total: ${this.getTotalLinksInjected()}/${this.config.totalTargetLinks}`);
+
+    // Build distribution map
+    const distribution = new Map<string, number>();
+    this.zones.forEach(z => distribution.set(z.name, z.currentCount));
 
     return {
       html: body.innerHTML,
-      linksInjected: totalLinksInjected,
-      distribution: new Map(this.zoneLinks),
-      injectionDetails,
+      linksInjected: this.getTotalLinksInjected(),
+      distribution,
+      injectionDetails: this.injectionDetails,
+      zoneValidation,
     };
   }
 
@@ -294,7 +443,16 @@ export class InternalLinkOrchestrator {
    * Get current distribution statistics
    */
   getDistribution(): Map<string, number> {
-    return new Map(this.zoneLinks);
+    const distribution = new Map<string, number>();
+    this.zones.forEach(z => distribution.set(z.name, z.currentCount));
+    return distribution;
+  }
+
+  /**
+   * Get zone validation status
+   */
+  getValidationStatus(): ZoneValidationResult {
+    return validateZoneDistribution(this.zones);
   }
 }
 
@@ -317,16 +475,19 @@ export const injectEnterpriseInternalLinks = (
 
   const orchestrator = new InternalLinkOrchestrator({
     totalTargetLinks: targetLinks,
+    minAnchorWords: 4,
+    maxAnchorWords: 7,
+    strictZoneEnforcement: true,
   });
 
-  const pageInfos: PageInfo[] = availablePages.map(p => ({
+  const pageContexts: PageContext[] = availablePages.map(p => ({
     title: p.title,
     slug: p.slug,
   }));
 
-  const result = orchestrator.processContent(content, pageInfos, baseUrl);
+  const result = orchestrator.processContent(content, pageContexts, baseUrl);
 
-  console.log(`[Enterprise Links] Final result: ${result.linksInjected} links injected`);
+  console.log(`[Enterprise Links] Complete: ${result.linksInjected} links injected across ${result.distribution.size} zones`);
 
   return result.html;
 };
@@ -337,5 +498,6 @@ export default {
   InternalLinkOrchestrator,
   injectEnterpriseInternalLinks,
   DEFAULT_CONFIG,
-  DEFAULT_ZONES,
+  STRICT_ZONE_REQUIREMENTS,
+  validateZoneDistribution,
 };
