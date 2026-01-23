@@ -272,6 +272,64 @@ export const getMissingNeuronTerms = (
   return missing;
 };
 
+
+// =============================================================================
+// GET NEURONWRITER DATA FOR CONTENT GENERATION
+// =============================================================================
+
+export interface NeuronWriterData {
+  terms: string[];
+  competitors: string[];
+  questions: string[];
+  headings: string[];
+}
+
+export const getNeuronWriterData = async (
+  apiKey: string,
+  projectId: string,
+  keyword: string
+): Promise<NeuronWriterData | null> => {
+  if (!apiKey || !projectId) {
+    console.warn('[getNeuronWriterData] Missing API key or project ID');
+    return null;
+  }
+
+  try {
+    // NeuronWriter API endpoint
+    const response = await fetch(`https://app.neuronwriter.com/api/v1/projects/${projectId}/content-editor`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        keyword: keyword,
+        language: 'en',
+        country: 'us',
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn(`[getNeuronWriterData] API returned ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+
+    // Extract NLP terms and competitor data
+    return {
+      terms: data.terms?.map((t: any) => t.term || t.name || t) || [],
+      competitors: data.competitors?.map((c: any) => c.url || c) || [],
+      questions: data.questions || data.paa || [],
+      headings: data.headings || [],
+    };
+  } catch (error: any) {
+    console.error('[getNeuronWriterData] Error:', error.message);
+    return null;
+  }
+};
+
+
 // ==================== EXPORTS ====================
 
 export default {
