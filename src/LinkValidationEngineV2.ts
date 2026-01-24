@@ -290,8 +290,7 @@ const extractParagraphTheme = (text: string): string => {
   });
   
   const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
-  return sorted.slice(0, 3).map(([w]) => w).join(' ');
-};
+  return Array.isArray(sorted) && sorted.length > 0 ? sorted.slice(0, 3).map(([w]) => w).join(' ') : '';};
 
 const extractUltraAnchorCandidates = (
   paragraph: string,
