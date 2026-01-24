@@ -1,7 +1,7 @@
 # Deployment Trigger File
 # This file forces Cloudflare to rebuild with a fresh clone
-# Timestamp: 2026-01-16 13:50:00 UTC
-# Trigger reason: Clear cache and rebuild after fixing services.tsx syntax error
+# Timestamp: 2026-01-24 12:00:00 UTC
+# Trigger reason: CRITICAL FIX for t?.slice(...).join is not a function error
 
-DEPLOY_ID=202601161350
+DEPLOY_ID=202601241200
 STATUS=active
