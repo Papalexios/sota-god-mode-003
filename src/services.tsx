@@ -1513,12 +1513,12 @@ const createDefaultAnalysis = (textContent: string, htmlContent: string): any =>
   const internalLinksCount = (htmlContent.match(/<a[^>]+href=["'][^"']*["']/gi) || []).length;
 
   let healthScore = 50;
-  const issues: string[] = [];
+  const keyIssues: string[] = [];
   const recommendations: string[] = [];
 
   if (wordCount < 1000) {
     healthScore -= 20;
-    issues.push('Content is too short');
+    keyIssues.push('Content is too short');
     recommendations.push('Expand content to 2000+ words');
   } else if (wordCount >= 2000) {
     healthScore += 15;
@@ -1526,7 +1526,7 @@ const createDefaultAnalysis = (textContent: string, htmlContent: string): any =>
 
   if (!hasH2) {
     healthScore -= 10;
-    issues.push('Missing H2 headings');
+    keyIssues.push('Missing H2 headings');
     recommendations.push('Add H2 subheadings');
   }
 
@@ -1542,7 +1542,7 @@ const createDefaultAnalysis = (textContent: string, htmlContent: string): any =>
 
   if (internalLinksCount < 3) {
     healthScore -= 10;
-    issues.push('Too few internal links');
+    keyIssues.push('Too few internal links');
     recommendations.push('Add 8-15 internal links');
   }
 
@@ -1554,7 +1554,7 @@ const createDefaultAnalysis = (textContent: string, htmlContent: string): any =>
   else if (healthScore >= 40) updatePriority = 'High';
   else updatePriority = 'Critical';
 
-  return { healthScore, updatePriority, issues, recommendations, wordCount, hasFAQ, hasKeyTakeaways, internalLinksCount };
+  return { healthScore, updatePriority, keyIssues, recommendations, wordCount, hasFAQ, hasKeyTakeaways, internalLinksCount };
 };
 
 // =============================================================================
