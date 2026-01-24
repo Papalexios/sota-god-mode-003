@@ -12,7 +12,7 @@ import ReactQuill from 'react-quill';
 // This ensures arrays are ALWAYS valid before calling .slice(), .join(), etc.
 // =============================================================================
 
-const ensureArraySafe = <T,>(value: unknown, fallback: T[] = []): T[] => {
+function ensureArraySafe<T>(value: unknown, fallback: T[] = []): T[] {
   if (Array.isArray(value)) return value;
   if (value === null || value === undefined) return fallback;
   if (typeof value === 'string') {
@@ -28,7 +28,7 @@ const ensureArraySafe = <T,>(value: unknown, fallback: T[] = []): T[] => {
     return [trimmed] as T[];
   }
   return [value] as T[];
-};
+}
 
 export const CheckIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
