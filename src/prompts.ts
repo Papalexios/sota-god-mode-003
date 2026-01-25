@@ -412,7 +412,7 @@ Use this HTML:
 - Returns strictly HTML5 body content (starting with <p>Intro...</p>).
 - **NO <h1> TAGS**.
 - **NO MARKDOWN**.
-- **NO ``` blocks**.
+- **NO Markdown Code Blocks**.
 - Use the provided SOTA classes and inline styles.`,
 
     userPrompt: (
@@ -423,21 +423,21 @@ Use this HTML:
       neuronData: any,
       recentNews: any
     ) => {
-      const keywordsStr = Array.isArray(semanticKeywords) 
-        ? semanticKeywords.join(', ') 
+      const keywordsStr = Array.isArray(semanticKeywords)
+        ? semanticKeywords.join(', ')
         : semanticKeywords || '';
-      
+
       const pagesStr = existingPages?.slice(0, 25)
-        .map(p => `< a href="/${p.slug}/" > ${ p.title }</a>`)
+        .map(p => `< a href = "/${p.slug}/" > ${p.title} </a>`)
         .join('\n') || 'No existing pages';
 
-// Advanced Gap Analysis Simulation
-const missingEntities = [
-  "2026 regulations", "expert consensus", "cost-benefit analysis",
-  "long-term side effects", "user case studies", "step-by-step implementation"
-].join(", ");
+      // Advanced Gap Analysis Simulation
+      const missingEntities = [
+        "2026 regulations", "expert consensus", "cost-benefit analysis",
+        "long-term side effects", "user case studies", "step-by-step implementation"
+      ].join(", ");
 
-return `## PRIMARY KEYWORD
+      return `## PRIMARY KEYWORD
 ${keyword}
 
 ## TOPIC AUTHORITY KEYWORDS (Integrate Naturally)
@@ -461,9 +461,9 @@ Write the Ultimate Guide now.`;
     }
   },
 
-// ==================== GOD MODE STRUCTURAL GUARDIAN ====================
-god_mode_structural_guardian: {
-  systemInstruction: `You are the STRUCTURAL GUARDIAN - an elite content refinement system.
+  // ==================== GOD MODE STRUCTURAL GUARDIAN ====================
+  god_mode_structural_guardian: {
+    systemInstruction: `You are the STRUCTURAL GUARDIAN - an elite content refinement system.
 
 Refine text content for ${TARGET_YEAR} SEO/E-E-A-T, but PRESERVE THE HTML SKELETON.
 
@@ -492,11 +492,11 @@ ${htmlFragment}
 
 Refine content, preserve HTML structure. Return HTML only.`;
     }
-},
+  },
 
-// ==================== GOD MODE ULTRA INSTINCT ====================
-god_mode_ultra_instinct: {
-  systemInstruction: `You are ULTRA INSTINCT - the apex content transmutation system.
+  // ==================== GOD MODE ULTRA INSTINCT ====================
+  god_mode_ultra_instinct: {
+    systemInstruction: `You are ULTRA INSTINCT - the apex content transmutation system.
 
 Replace generic terms with Named Entities.
 Convert vague claims to specific metrics.
@@ -521,11 +521,11 @@ ${htmlFragment}
 
 Transmute this content. Return refined HTML only.`;
     }
-},
+  },
 
-// ==================== GOD MODE AUTONOMOUS AGENT ====================
-god_mode_autonomous_agent: {
-  systemInstruction: `You are the GOD MODE AUTONOMOUS CONTENT RECONSTRUCTION ENGINE.
+  // ==================== GOD MODE AUTONOMOUS AGENT ====================
+  god_mode_autonomous_agent: {
+    systemInstruction: `You are the GOD MODE AUTONOMOUS CONTENT RECONSTRUCTION ENGINE.
 
 Transform existing content into SOTA-optimized masterpieces with STUNNING visual design.
 
@@ -570,11 +570,11 @@ ${existingContent?.substring(0, 10000) || 'No content'}
 
 Reconstruct as SOTA-optimized HTML5 with beautiful design elements.`;
     }
-},
+  },
 
-// ==================== SOTA TAKEAWAYS GENERATOR ====================
-sota_takeaways_generator: {
-  systemInstruction: `You are a Key Takeaways extraction specialist.
+  // ==================== SOTA TAKEAWAYS GENERATOR ====================
+  sota_takeaways_generator: {
+    systemInstruction: `You are a Key Takeaways extraction specialist.
 
 Extract 5-7 most important insights.
 Start each bullet with ACTION VERBS or SPECIFIC NUMBERS.
@@ -597,11 +597,11 @@ Extract 5-7 key takeaways. Return this EXACT HTML with inline styles:
     <li style="padding: 0.875rem 0; padding-left: 2rem; position: relative; color: #e2e8f0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); line-height: 1.6;"><span style="position: absolute; left: 0; color: #8b5cf6; font-weight: 700;">→</span> <strong>Start with action verb or number</strong> - rest of insight</li>
   </ul>
 </div>`
-},
+  },
 
-// ==================== SOTA FAQ GENERATOR ====================
-sota_faq_generator: {
-  systemInstruction: `You are a FAQ generator optimizing for People Also Ask.
+  // ==================== SOTA FAQ GENERATOR ====================
+  sota_faq_generator: {
+    systemInstruction: `You are a FAQ generator optimizing for People Also Ask.
 
 Generate 5-7 highly relevant questions.
 Questions should be EXACTLY how users type in search.
@@ -623,11 +623,11 @@ Generate 5-7 FAQs. Return this EXACT HTML:
     <p style="padding: 0 1.5rem 1.5rem; margin: 0; color: #94a3b8; line-height: 1.7;">Direct answer first (40-60 words).</p>
   </details>
 </div>`
-},
+  },
 
-// ==================== SOTA CONCLUSION GENERATOR ====================
-sota_conclusion_generator: {
-  systemInstruction: `You are a conclusion writer creating powerful closers.
+  // ==================== SOTA CONCLUSION GENERATOR ====================
+  sota_conclusion_generator: {
+    systemInstruction: `You are a conclusion writer creating powerful closers.
 
 Length: 150-200 words.
 NO NEW INFORMATION.
@@ -649,11 +649,11 @@ Write conclusion. Return this EXACT HTML:
     <p style="margin: 0; color: #d1fae5; font-weight: 600;">👉 <strong>Do this now:</strong> Specific action.</p>
   </div>
 </div>`
-},
+  },
 
-// ==================== GENERATE INTERNAL LINKS ====================
-generate_internal_links: {
-  systemInstruction: `You are an internal linking strategist.
+  // ==================== GENERATE INTERNAL LINKS ====================
+  generate_internal_links: {
+    systemInstruction: `You are an internal linking strategist.
 
 REQUIREMENTS:
 1. Generate 10-15 contextual internal links
@@ -687,11 +687,11 @@ Generate 10-15 internal links. Return ONLY JSON (no markdown):
   ]
 }`;
     }
-},
+  },
 
-// ==================== REFERENCE VALIDATOR ====================
-reference_validator: {
-  systemInstruction: `You are a research reference specialist.
+  // ==================== REFERENCE VALIDATOR ====================
+  reference_validator: {
+    systemInstruction: `You are a research reference specialist.
 
 TIER 1 SOURCES (Prioritize):
 - .edu domains
@@ -716,11 +716,11 @@ Generate 8-12 reference suggestions. Return ONLY JSON:
     "authority": "high"
   }
 ]`
-},
+  },
 
-// ==================== TITLE OPTIMIZER ====================
-title_optimizer: {
-  systemInstruction: `You are a title optimization expert.
+  // ==================== TITLE OPTIMIZER ====================
+  title_optimizer: {
+    systemInstruction: `You are a title optimization expert.
 
 Include primary keyword near beginning.
 50-60 characters optimal.
@@ -737,11 +737,11 @@ Generate 5 optimized titles. Return ONLY JSON:
     {"title": "Optimized title", "characters": 55, "reasoning": "Why"}
   ]
 }`
-},
+  },
 
-// ==================== META DESCRIPTION GENERATOR ====================
-meta_description_generator: {
-  systemInstruction: `You are a meta description writer.
+  // ==================== META DESCRIPTION GENERATOR ====================
+  meta_description_generator: {
+    systemInstruction: `You are a meta description writer.
 
 150-160 characters.
 Include primary keyword.
@@ -758,11 +758,11 @@ Generate 3 meta descriptions. Return ONLY JSON:
     {"text": "Meta description...", "characters": 155, "cta": "CTA used"}
   ]
 }`
-},
+  },
 
-// ==================== CONTENT REFRESHER ====================
-content_refresher: {
-  systemInstruction: `You are a content refresh specialist.
+  // ==================== CONTENT REFRESHER ====================
+  content_refresher: {
+    systemInstruction: `You are a content refresh specialist.
 
 Update dates to ${TARGET_YEAR}.
 Improve readability (Grade 6-7).
@@ -784,11 +784,11 @@ ${existingContent.substring(0, 12000)}
 
 Refresh for ${TARGET_YEAR}. Return HTML only.`;
     }
-},
+  },
 
-// ==================== SEMANTIC KEYWORD EXTRACTOR ====================
-semantic_keyword_extractor: {
-  systemInstruction: `Extract keywords from content. Return ONLY valid JSON.`,
+  // ==================== SEMANTIC KEYWORD EXTRACTOR ====================
+  semantic_keyword_extractor: {
+    systemInstruction: `Extract keywords from content. Return ONLY valid JSON.`,
 
     userPrompt: (content: string, title: string) => `## TITLE: ${title}
 ## CONTENT:
@@ -800,11 +800,11 @@ Extract keywords. Return ONLY JSON:
   "primaryTopic": "main topic",
   "entities": ["entity1", "entity2"]
 }`
-},
+  },
 
-// ==================== DOM CONTENT POLISHER ====================
-dom_content_polisher: {
-  systemInstruction: `Polish text for ${TARGET_YEAR} SEO and readability.
+  // ==================== DOM CONTENT POLISHER ====================
+  dom_content_polisher: {
+    systemInstruction: `Polish text for ${TARGET_YEAR} SEO and readability.
 
 VARY SENTENCE LENGTH.
 Use contractions naturally.
@@ -817,11 +817,11 @@ OUTPUT: Return enhanced text only.`,
 ${textContent}
 
 Polish for quality. Return text only.`
-},
+  },
 
-// ==================== CONTENT OPTIMIZER ====================
-content_optimizer: {
-  systemInstruction: `Optimize content for SEO.
+  // ==================== CONTENT OPTIMIZER ====================
+  content_optimizer: {
+    systemInstruction: `Optimize content for SEO.
 
 Update to ${TARGET_YEAR}.
 Improve entity density.
@@ -841,11 +841,11 @@ ${content.substring(0, 12000)}
 
 Optimize. Return HTML only.`;
     }
-},
+  },
 
-// ==================== GAP ANALYSIS ====================
-gap_analysis: {
-  systemInstruction: `Identify content gaps. Return ONLY valid JSON.`,
+  // ==================== GAP ANALYSIS ====================
+  gap_analysis: {
+    systemInstruction: `Identify content gaps. Return ONLY valid JSON.`,
 
     userPrompt: (existingPages: any[], niche: string, serpData: any) => {
       const pagesStr = existingPages?.slice(0, 50)
@@ -866,11 +866,11 @@ Analyze gaps. Return ONLY JSON:
   }
 ]`;
     }
-},
+  },
 
-// ==================== COMPETITOR GAP ANALYZER ====================
-competitor_gap_analyzer: {
-  systemInstruction: `Identify content gaps vs competitors. Return ONLY valid JSON.`,
+  // ==================== COMPETITOR GAP ANALYZER ====================
+  competitor_gap_analyzer: {
+    systemInstruction: `Identify content gaps vs competitors. Return ONLY valid JSON.`,
 
     userPrompt: (competitorContent: string, primaryKeyword: string) => `## KEYWORD: ${primaryKeyword}
 ## COMPETITOR CONTENT:
@@ -884,11 +884,11 @@ Identify 5-10 gaps. Return ONLY JSON:
   "missingKeywords": ["keyword1"],
   "competitorWeaknesses": ["weakness1"]
 }`
-},
+  },
 
-// ==================== SOTA IMAGE ALT OPTIMIZER ====================
-sota_image_alt_optimizer: {
-  systemInstruction: `Optimize image alt text.
+  // ==================== SOTA IMAGE ALT OPTIMIZER ====================
+  sota_image_alt_optimizer: {
+    systemInstruction: `Optimize image alt text.
 
 Do NOT start with "image of".
 Include keyword naturally.
@@ -902,11 +902,11 @@ ${JSON.stringify(images.slice(0, 20))}
 
 Generate alt text. Return ONLY JSON array:
 ["Alt text 1", "Alt text 2"]`
-},
+  },
 
-// ==================== CONTENT OUTLINE GENERATOR ====================
-content_outline_generator: {
-  systemInstruction: `Create comprehensive H2/H3 outlines with question-based headings.
+  // ==================== CONTENT OUTLINE GENERATOR ====================
+  content_outline_generator: {
+    systemInstruction: `Create comprehensive H2/H3 outlines with question-based headings.
 
 Return ONLY valid JSON.`,
 
@@ -922,7 +922,7 @@ Create outline. Return ONLY JSON:
   ],
   "faqQuestions": ["question1"]
 }`
-}
+  }
 
 };
 
