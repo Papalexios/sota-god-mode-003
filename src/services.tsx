@@ -196,16 +196,22 @@ export const findRelevantYouTubeVideo = async (
   analytics.log('youtube', 'Searching for relevant YouTube videos...', { keyword });
 
   try {
+    // SOTA Multi-Query Strategy for Video
     const searchQueries = [
       `${keyword} tutorial guide`,
-      `${keyword} explained how to`,
-      `${keyword} tips 2024 2025`
+      `${keyword} explained`,
+      `${keyword} 101`,
+      `how to ${keyword}`,
+      `best ${keyword} review`
     ];
 
     let bestVideo: YouTubeVideo | null = null;
     let highestScore = 0;
 
+    // Try queries sequentially until a high-quality match is found
     for (const query of searchQueries) {
+      if (highestScore > 80) break; // Stop if we found an excellent match
+
       try {
         const response = await fetchWithProxies('https://google.serper.dev/videos', {
           method: 'POST',
@@ -241,17 +247,25 @@ export const findRelevantYouTubeVideo = async (
 
           let score = 0;
           if (titleLower.includes(keywordLower)) score += 50;
+
+          let wordMatchCount = 0;
           keywordWords.forEach(word => {
-            if (word.length > 3 && titleLower.includes(word)) score += 15;
+            if (word.length > 3 && titleLower.includes(word)) {
+              score += 15;
+              wordMatchCount++;
+            }
           });
 
-          if (titleLower.includes('tutorial')) score += 20;
-          if (titleLower.includes('guide')) score += 15;
-          if (titleLower.includes('how to')) score += 15;
-          if (titleLower.includes('2024') || titleLower.includes('2025') || titleLower.includes('2026')) {
+          if (titleLower.includes('tutorial')) score += 10;
+          if (titleLower.includes('guide')) score += 10;
+          if (titleLower.includes('how to')) score += 10;
+
+          const currentYear = new Date().getFullYear();
+          if (titleLower.includes(currentYear.toString()) || titleLower.includes((currentYear + 1).toString())) {
             score += 25;
           }
-          if (video.title && video.title.length < 20) score -= 20;
+
+          if (video.title && video.title.length < 20) score -= 20; // Penalize very short titles
 
           if (score > highestScore) {
             highestScore = score;
@@ -270,28 +284,27 @@ export const findRelevantYouTubeVideo = async (
       }
     }
 
-    if (!bestVideo || highestScore < 30) {
-      analytics.log('youtube', 'No sufficiently relevant YouTube video found', { highestScore, threshold: 30 });
+    if (!bestVideo) {
+      analytics.log('youtube', 'No relevant video found after all queries');
       return { html: '', video: null };
     }
 
-    analytics.log('youtube', `Found relevant video: "${bestVideo.title}"`, {
-      videoId: bestVideo.videoId,
-      relevanceScore: bestVideo.relevanceScore
-    });
+    analytics.log('youtube', `Found relevant video: "${bestVideo.title}" (Score: ${highestScore})`);
 
     const videoHtml = `
-<div class="sota-youtube-embed" style="margin: 2.5rem 0; background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%); border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
-  <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
-    <div style="display: flex; align-items: center; gap: 0.75rem;">
-      <span style="font-size: 1.5rem;">📹</span>
+<div class="sota-youtube-embed" style="margin: 3rem 0; background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%); border-radius: 20px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);">
+  <div style="padding: 1.25rem 1.75rem; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02);">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <div style="width: 40px; height: 40px; background: #FF0000; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(255,0,0,0.3);">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+      </div>
       <div>
-        <h4 style="margin: 0; color: #E2E8F0; font-size: 1rem; font-weight: 600;">Recommended Video</h4>
-        <p style="margin: 0.25rem 0 0; color: #94A3B8; font-size: 0.85rem;">${bestVideo.channel}</p>
+        <h4 style="margin: 0; color: #E2E8F0; font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em;">Recommended Watch</h4>
+        <p style="margin: 0.25rem 0 0; color: #94A3B8; font-size: 0.85rem;">Selected for relevance to this guide</p>
       </div>
     </div>
   </div>
-  <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+  <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; background: #000;">
     <iframe 
       src="https://www.youtube.com/embed/${bestVideo.videoId}?rel=0&modestbranding=1" 
       title="${bestVideo.title.replace(/"/g, '&quot;')}"
@@ -302,9 +315,12 @@ export const findRelevantYouTubeVideo = async (
       style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
     ></iframe>
   </div>
-  <div style="padding: 1rem 1.5rem; background: rgba(0,0,0,0.2);">
-    <p style="margin: 0; color: #CBD5E1; font-size: 0.9rem; line-height: 1.5;">
-      <strong style="color: #E2E8F0;">${bestVideo.title}</strong>
+  <div style="padding: 1.25rem 1.75rem; background: linear-gradient(to bottom, rgba(30,41,59,0.5), rgba(15,23,42,0.8));">
+    <p style="margin: 0; color: #CBD5E1; font-size: 0.95rem; line-height: 1.6; font-weight: 500;">
+      <span style="color: #60A5FA;">Now Playing:</span> ${bestVideo.title}
+    </p>
+    <p style="margin: 0.5rem 0 0; color: #64748B; font-size: 0.8rem;">
+      By ${bestVideo.channel}
     </p>
   </div>
 </div>`;
@@ -727,873 +743,860 @@ function findContextualAnchor(paragraphText: string, page: SitemapPage): AnchorC
         if (phraseLower.includes(titleWord)) {
           matchedWords++;
           score += 0.15;
+          if (score > highestScore) {
+            highestScore = score;
+            bestCandidate = { text: phrase, score };
+          }
         }
       }
 
-      if (matchedWords === 0) continue;
-      if (matchedWords >= 2) score += 0.2;
-      if (matchedWords >= 3) score += 0.15;
-
-      const stopwords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'];
-      if (stopwords.includes(phraseWords[0].toLowerCase())) score -= 0.1;
-      if (stopwords.includes(phraseWords[phraseLen - 1].toLowerCase())) score -= 0.05;
-
-      if (phraseLen === 4 || phraseLen === 5) score += 0.1;
-
-      if (score > highestScore) {
-        highestScore = score;
-        bestCandidate = { text: phrase, score };
-      }
+      return bestCandidate && bestCandidate.score >= 0.4 ? bestCandidate : null;
     }
-  }
 
-  return bestCandidate && bestCandidate.score >= 0.4 ? bestCandidate : null;
-}
+    // ==================== MAIN AI CALL FUNCTION ====================
 
-// ==================== MAIN AI CALL FUNCTION ====================
+    export const callAI = async (
+      apiClients: ApiClients,
+      selectedModel: string,
+      geoTargeting: ExpandedGeoTargeting,
+      openrouterModels: string[],
+      selectedGroqModel: string,
+      promptKey: keyof typeof PROMPT_TEMPLATES | string,
+      args: any[],
+      format: 'json' | 'html' = 'json',
+      grounding: boolean = false
+    ): Promise<string> => {
+      const promptTemplate = PROMPT_TEMPLATES[promptKey as keyof typeof PROMPT_TEMPLATES];
+      if (!promptTemplate) {
+        throw new Error(`Unknown prompt key: ${promptKey}`);
+      }
 
-export const callAI = async (
-  apiClients: ApiClients,
-  selectedModel: string,
-  geoTargeting: ExpandedGeoTargeting,
-  openrouterModels: string[],
-  selectedGroqModel: string,
-  promptKey: keyof typeof PROMPT_TEMPLATES | string,
-  args: any[],
-  format: 'json' | 'html' = 'json',
-  grounding: boolean = false
-): Promise<string> => {
-  const promptTemplate = PROMPT_TEMPLATES[promptKey as keyof typeof PROMPT_TEMPLATES];
-  if (!promptTemplate) {
-    throw new Error(`Unknown prompt key: ${promptKey}`);
-  }
+      const systemInstruction = promptTemplate.systemInstruction || '';
+      const userPrompt = typeof promptTemplate.userPrompt === 'function'
+        ? promptTemplate.userPrompt(...args)
+        : String(promptTemplate.userPrompt);
 
-  const systemInstruction = promptTemplate.systemInstruction || '';
-  const userPrompt = typeof promptTemplate.userPrompt === 'function'
-    ? promptTemplate.userPrompt(...args)
-    : String(promptTemplate.userPrompt);
+      const modelOrder = [selectedModel, 'gemini', 'anthropic', 'openai', 'openrouter', 'groq'];
 
-  const modelOrder = [selectedModel, 'gemini', 'anthropic', 'openai', 'openrouter', 'groq'];
+      for (const model of modelOrder) {
+        const client = apiClients[model as keyof ApiClients];
+        if (!client) continue;
 
-  for (const model of modelOrder) {
-    const client = apiClients[model as keyof ApiClients];
-    if (!client) continue;
+        try {
+          let response: string = '';
 
-    try {
-      let response: string = '';
+          switch (model) {
+            case 'gemini':
+              const geminiResult = await callAiWithRetry(() =>
+                (client as any).models.generateContent({
+                  model: 'gemini-2.0-flash-exp',
+                  systemInstruction,
+                  contents: userPrompt,
+                  generationConfig: {
+                    responseMimeType: format === 'json' ? 'application/json' : 'text/plain',
+                    temperature: 0.7,
+                    maxOutputTokens: 8192
+                  }
+                })
+              );
+              response = geminiResult?.response?.text?.() || geminiResult?.text || '';
+              break;
 
-      switch (model) {
-        case 'gemini':
-          const geminiResult = await callAiWithRetry(() =>
-            (client as any).models.generateContent({
-              model: 'gemini-2.0-flash-exp',
-              systemInstruction,
-              contents: userPrompt,
-              generationConfig: {
-                responseMimeType: format === 'json' ? 'application/json' : 'text/plain',
-                temperature: 0.7,
-                maxOutputTokens: 8192
+            case 'anthropic':
+              const anthropicResult = await callAiWithRetry(() =>
+                (client as Anthropic).messages.create({
+                  model: AI_MODELS.ANTHROPIC_SONNET,
+                  max_tokens: 8192,
+                  system: systemInstruction,
+                  messages: [{ role: 'user', content: userPrompt }]
+                })
+              );
+              const textContent = (anthropicResult as any).content?.find((c: any) => c.type === 'text');
+              response = textContent?.text || '';
+              break;
+
+            case 'openai':
+              const openaiResult = await callAiWithRetry(() =>
+                (client as OpenAI).chat.completions.create({
+                  model: AI_MODELS.OPENAI_GPT4,
+                  messages: [
+                    { role: 'system', content: systemInstruction },
+                    { role: 'user', content: userPrompt }
+                  ],
+                  max_tokens: 8192,
+                  temperature: 0.7
+                })
+              );
+              response = openaiResult.choices[0]?.message?.content || '';
+              break;
+
+            case 'openrouter':
+              for (const orModel of openrouterModels) {
+                try {
+                  const orResult = await (client as OpenAI).chat.completions.create({
+                    model: orModel,
+                    messages: [
+                      { role: 'system', content: systemInstruction },
+                      { role: 'user', content: userPrompt }
+                    ],
+                    max_tokens: 8192
+                  });
+                  response = orResult.choices[0]?.message?.content || '';
+                  if (response) break;
+                } catch (e) {
+                  continue;
+                }
               }
-            })
-          );
-          response = geminiResult?.response?.text?.() || geminiResult?.text || '';
-          break;
+              break;
 
-        case 'anthropic':
-          const anthropicResult = await callAiWithRetry(() =>
-            (client as Anthropic).messages.create({
-              model: AI_MODELS.ANTHROPIC_SONNET,
-              max_tokens: 8192,
-              system: systemInstruction,
-              messages: [{ role: 'user', content: userPrompt }]
-            })
-          );
-          const textContent = (anthropicResult as any).content?.find((c: any) => c.type === 'text');
-          response = textContent?.text || '';
-          break;
+            case 'groq':
+              const groqResult = await callAiWithRetry(() =>
+                (client as OpenAI).chat.completions.create({
+                  model: selectedGroqModel,
+                  messages: [
+                    { role: 'system', content: systemInstruction },
+                    { role: 'user', content: userPrompt }
+                  ],
+                  max_tokens: 8192
+                })
+              );
+              response = groqResult.choices[0]?.message?.content || '';
+              break;
+          }
 
-        case 'openai':
-          const openaiResult = await callAiWithRetry(() =>
-            (client as OpenAI).chat.completions.create({
-              model: AI_MODELS.OPENAI_GPT4,
-              messages: [
-                { role: 'system', content: systemInstruction },
-                { role: 'user', content: userPrompt }
-              ],
-              max_tokens: 8192,
-              temperature: 0.7
-            })
-          );
-          response = openaiResult.choices[0]?.message?.content || '';
-          break;
+          if (response && response.trim().length > 10) {
+            return response;
+          }
+        } catch (error: any) {
+          console.error(`[callAI] ${model} failed:`, error.message);
+          continue;
+        }
+      }
 
-        case 'openrouter':
-          for (const orModel of openrouterModels) {
+      throw new Error('All AI providers failed');
+    };
+
+    // ==================== CONTENT ANALYSIS - WITH SAFE JSON PARSING ====================
+
+    const analyzePages = async (
+      pages: SitemapPage[],
+      callAIFn: (promptKey: string, args: any[], format: 'json' | 'html') => Promise<string>,
+      setPages: React.Dispatch<React.SetStateAction<SitemapPage[]>>,
+      onProgress: (progress: { current: number; total: number }) => void,
+      shouldStop: () => boolean
+    ): Promise<void> => {
+      for (let i = 0; i < pages.length; i++) {
+        if (shouldStop()) break;
+
+        const page = pages[i];
+        onProgress({ current: i + 1, total: pages.length });
+
+        setPages(prev =>
+          prev.map(p => (p.id === page.id ? { ...p, status: 'analyzing' as const } : p))
+        );
+
+        try {
+          let content = page.crawledContent;
+          if (!content) {
             try {
-              const orResult = await (client as OpenAI).chat.completions.create({
-                model: orModel,
-                messages: [
-                  { role: 'system', content: systemInstruction },
-                  { role: 'user', content: userPrompt }
-                ],
-                max_tokens: 8192
-              });
-              response = orResult.choices[0]?.message?.content || '';
-              if (response) break;
-            } catch (e) {
-              continue;
+              content = await smartCrawl(page.id);
+            } catch (crawlError) {
+              console.warn(`[analyzePages] Failed to crawl ${page.id}:`, crawlError);
+              content = '';
             }
           }
-          break;
 
-        case 'groq':
-          const groqResult = await callAiWithRetry(() =>
-            (client as OpenAI).chat.completions.create({
-              model: selectedGroqModel,
-              messages: [
-                { role: 'system', content: systemInstruction },
-                { role: 'user', content: userPrompt }
-              ],
-              max_tokens: 8192
-            })
+          if (!content || content.length < 200) {
+            setPages(prev =>
+              prev.map(p =>
+                p.id === page.id
+                  ? {
+                    ...p,
+                    status: 'error' as const,
+                    justification: 'Content too short or inaccessible',
+                  }
+                  : p
+              )
+            );
+            continue;
+          }
+
+          const aiResponse = await callAIFn(
+            'content_health_analyzer',
+            [content, page.title || extractSlugFromUrl(page.id)],
+            'json'
           );
-          response = groqResult.choices[0]?.message?.content || '';
-          break;
-      }
 
-      if (response && response.trim().length > 10) {
-        return response;
-      }
-    } catch (error: any) {
-      console.error(`[callAI] ${model} failed:`, error.message);
-      continue;
-    }
-  }
-
-  throw new Error('All AI providers failed');
-};
-
-// ==================== CONTENT ANALYSIS - WITH SAFE JSON PARSING ====================
-
-const analyzePages = async (
-  pages: SitemapPage[],
-  callAIFn: (promptKey: string, args: any[], format: 'json' | 'html') => Promise<string>,
-  setPages: React.Dispatch<React.SetStateAction<SitemapPage[]>>,
-  onProgress: (progress: { current: number; total: number }) => void,
-  shouldStop: () => boolean
-): Promise<void> => {
-  for (let i = 0; i < pages.length; i++) {
-    if (shouldStop()) break;
-
-    const page = pages[i];
-    onProgress({ current: i + 1, total: pages.length });
-
-    setPages(prev =>
-      prev.map(p => (p.id === page.id ? { ...p, status: 'analyzing' as const } : p))
-    );
-
-    try {
-      let content = page.crawledContent;
-      if (!content) {
-        try {
-          content = await smartCrawl(page.id);
-        } catch (crawlError) {
-          console.warn(`[analyzePages] Failed to crawl ${page.id}:`, crawlError);
-          content = '';
-        }
-      }
-
-      if (!content || content.length < 200) {
-        setPages(prev =>
-          prev.map(p =>
-            p.id === page.id
-              ? {
-                ...p,
-                status: 'error' as const,
-                justification: 'Content too short or inaccessible',
-              }
-              : p
-          )
-        );
-        continue;
-      }
-
-      const aiResponse = await callAIFn(
-        'content_health_analyzer',
-        [content, page.title || extractSlugFromUrl(page.id)],
-        'json'
-      );
-
-      // ✅ CRITICAL FIX: Use safe JSON parser with fallback
-      const analysis = safeParseJSON<any>(
-        aiResponse,
-        {
-          healthScore: 50,
-          updatePriority: 'Medium',
-          recommendations: ['Unable to fully analyze - manual review recommended'],
-          issues: [],
-        }
-      );
-
-      if (analysis) {
-        setPages(prev =>
-          prev.map(p =>
-            p.id === page.id
-              ? {
-                ...p,
-                status: 'analyzed' as const,
-                crawledContent: content,
-                healthScore: analysis.healthScore,
-                updatePriority: analysis.updatePriority,
-                justification: analysis.justification || analysis.recommendations?.[0] || null,
-                analysis,
-              }
-              : p
-          )
-        );
-      } else {
-        throw new Error('Failed to parse analysis result');
-      }
-    } catch (error: any) {
-      console.error(`[analyzePages] Error analyzing ${page.title}:`, error);
-      setPages(prev =>
-        prev.map(p =>
-          p.id === page.id
-            ? {
-              ...p,
-              status: 'error' as const,
-              justification: error.message || 'Analysis failed',
+          // ✅ CRITICAL FIX: Use safe JSON parser with fallback
+          const analysis = safeParseJSON<any>(
+            aiResponse,
+            {
+              healthScore: 50,
+              updatePriority: 'Medium',
+              recommendations: ['Unable to fully analyze - manual review recommended'],
+              issues: [],
             }
-            : p
-        )
-      );
-    }
+          );
 
-    await delay(500);
-  }
-};
+          if (analysis) {
+            setPages(prev =>
+              prev.map(p =>
+                p.id === page.id
+                  ? {
+                    ...p,
+                    status: 'analyzed' as const,
+                    crawledContent: content,
+                    healthScore: analysis.healthScore,
+                    updatePriority: analysis.updatePriority,
+                    justification: analysis.justification || analysis.recommendations?.[0] || null,
+                    analysis,
+                  }
+                  : p
+              )
+            );
+          } else {
+            throw new Error('Failed to parse analysis result');
+          }
+        } catch (error: any) {
+          console.error(`[analyzePages] Error analyzing ${page.title}:`, error);
+          setPages(prev =>
+            prev.map(p =>
+              p.id === page.id
+                ? {
+                  ...p,
+                  status: 'error' as const,
+                  justification: error.message || 'Analysis failed',
+                }
+                : p
+            )
+          );
+        }
 
-// ==================== GAP ANALYSIS - WITH SAFE JSON PARSING ====================
+        await delay(500);
+      }
+    };
 
-const analyzeContentGaps = async (
-  existingPages: SitemapPage[],
-  niche: string,
-  callAIFn: (promptKey: string, args: any[], format: 'json' | 'html') => Promise<string>,
-  context: GenerationContext
-): Promise<GapAnalysisSuggestion[]> => {
-  try {
-    const aiResponse = await callAIFn(
-      'gap_analysis',
-      [existingPages, niche, null],
-      'json'
-    );
+    // ==================== GAP ANALYSIS - WITH SAFE JSON PARSING ====================
 
-    // ✅ SAFE JSON PARSING
-    const gaps = safeParseJSON<GapAnalysisSuggestion[]>(aiResponse, []);
-    return gaps || [];
-  } catch (error: any) {
-    console.error('[analyzeContentGaps] Error:', error);
-    return [];
-  }
-};
+    const analyzeContentGaps = async (
+      existingPages: SitemapPage[],
+      niche: string,
+      callAIFn: (promptKey: string, args: any[], format: 'json' | 'html') => Promise<string>,
+      context: GenerationContext
+    ): Promise<GapAnalysisSuggestion[]> => {
+      try {
+        const aiResponse = await callAIFn(
+          'gap_analysis',
+          [existingPages, niche, null],
+          'json'
+        );
 
-// ==================== CONTENT GENERATION ====================
+        // ✅ SAFE JSON PARSING
+        const gaps = safeParseJSON<GapAnalysisSuggestion[]>(aiResponse, []);
+        return gaps || [];
+      } catch (error: any) {
+        console.error('[analyzeContentGaps] Error:', error);
+        return [];
+      }
+    };
 
-export const generateContent = {
-  async generateItems(
-    items: ContentItem[],
-    callAIFn: any,
-    generateImageFn: any,
-    context: GenerationContext,
-    progressCallback: (progress: { current: number; total: number }) => void,
-    stopRef: React.MutableRefObject<Set<string>>
-  ) {
-    const { dispatch, existingPages, siteInfo, wpConfig, geoTargeting, serperApiKey, neuronConfig } = context;
+    // ==================== CONTENT GENERATION ====================
 
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
+    export const generateContent = {
+      async generateItems(
+        items: ContentItem[],
+        callAIFn: any,
+        generateImageFn: any,
+        context: GenerationContext,
+        progressCallback: (progress: { current: number; total: number }) => void,
+        stopRef: React.MutableRefObject<Set<string>>
+      ) {
+        const { dispatch, existingPages, siteInfo, wpConfig, geoTargeting, serperApiKey, neuronConfig } = context;
 
-      if (stopRef.current.has(item.id)) {
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'idle', statusText: 'Stopped' } });
-        continue;
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+
+          if (stopRef.current.has(item.id)) {
+            dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'idle', statusText: 'Stopped' } });
+            continue;
+          }
+
+          progressCallback({ current: i + 1, total: items.length });
+          dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: 'Initializing...' } });
+          analytics.reset();
+
+          try {
+            // Phase 1: SERP Analysis
+            analytics.log('research', 'Starting content research...', { title: item.title });
+            dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🔍 Researching...' } });
+
+            let serpData: any[] = [];
+            if (serperApiKey) {
+              try {
+                const serpResponse = await fetchWithProxies('https://google.serper.dev/search', {
+                  method: 'POST',
+                  headers: { 'X-API-KEY': serperApiKey, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ q: item.title, num: 10 })
+                });
+                const serpJson = await serpResponse.json();
+                serpData = serpJson.organic || [];
+              } catch (e) {
+                analytics.log('warning', 'SERP fetch failed');
+              }
+            }
+
+            // Phase 2: Semantic Keywords
+            dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🏷️ Keywords...' } });
+
+            let semanticKeywords: string[] = [];
+            try {
+              const keywordResponse = await callAIFn('semantic_keyword_generator', [item.title, geoTargeting.location || null, serpData], 'json');
+              const keywordData = safeParseJSON<any>(keywordResponse, { keywords: [], semanticKeywords: [] });
+              semanticKeywords = keywordData?.keywords || keywordData?.semanticKeywords || [];
+            } catch (e) {
+              semanticKeywords = [item.title];
+            }
+
+            // Phase 3: YouTube Video
+            dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Video...' } });
+            const { html: youtubeHtml } = await findRelevantYouTubeVideo(item.title, serperApiKey);
+
+            // Phase 4: Main Content
+            dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '✍️ Writing...' } });
+            const contentResponse = await callAIFn(
+              'ultra_sota_article_writer',
+              [item.title, semanticKeywords, existingPages, serpData, null, null],
+              'html'
+            );
+
+            // Phase 5: References
+            dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📚 References...' } });
+            const { html: referencesHtml, references } = await fetchVerifiedReferences(
+              item.title, semanticKeywords, serperApiKey, wpConfig.url
+            );
+
+            // Phase 6: Internal Links
+            dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🔗 Links...' } });
+            let contentWithLinks = contentResponse;
+            let linkResult = { linkCount: 0, links: [] as any[] };
+
+            if (existingPages.length > 0) {
+              const linkingResult = await generateEnhancedInternalLinks(
+                contentResponse, existingPages, item.title, null, ''
+              );
+              contentWithLinks = linkingResult.html;
+              linkResult = { linkCount: linkingResult.linkCount, links: linkingResult.links };
+            }
+
+            // Phase 7: Assemble
+            dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📋 Assembling...' } });
+
+            let finalContent = contentWithLinks;
+            if (youtubeHtml) {
+              const h2Match = finalContent.match(/<\/h2>/i);
+              if (h2Match && h2Match.index !== undefined) {
+                const insertPos = h2Match.index + h2Match[0].length;
+                const afterH2 = finalContent.substring(insertPos);
+                const nextPMatch = afterH2.match(/<\/p>/i);
+                if (nextPMatch && nextPMatch.index !== undefined) {
+                  const finalInsertPos = insertPos + nextPMatch.index + nextPMatch[0].length;
+                  finalContent = finalContent.substring(0, finalInsertPos) + youtubeHtml + finalContent.substring(finalInsertPos);
+                }
+              }
+            }
+
+            if (referencesHtml) {
+              finalContent += referencesHtml;
+            }
+
+            // Phase 8: Schema
+            dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📋 Schema...' } });
+
+            const schemaData = generateFullSchema({
+              pageType: item.type === 'pillar' ? 'pillar' : 'article',
+              title: item.title,
+              description: item.title,
+              content: finalContent,
+              url: wpConfig.url ? `${wpConfig.url}/${extractSlugFromUrl(item.title)}/` : '',
+              datePublished: new Date().toISOString(),
+              dateModified: new Date().toISOString(),
+              author: siteInfo.authorName || 'Expert Author',
+              authorUrl: siteInfo.authorUrl || wpConfig.url || '',
+              publisher: siteInfo.orgName || 'Organization',
+              publisherLogo: siteInfo.logoUrl || '',
+              featuredImage: '',
+              wordCount: finalContent.split(/\s+/).length,
+              images: [],
+              faqs: []
+            });
+
+            const generatedContent: GeneratedContent = {
+              title: item.title,
+              content: finalContent,
+              metaDescription: `${item.title} - Comprehensive guide with expert insights.`,
+              slug: extractSlugFromUrl(item.title),
+              schemaMarkup: JSON.stringify(schemaData, null, 2),
+              primaryKeyword: item.title,
+              semanticKeywords,
+              youtubeVideo: null,
+              references: references.map(r => ({ title: r.title, url: r.url, verified: r.verified })),
+              internalLinks: linkResult.links
+            };
+
+            dispatch({ type: 'SET_CONTENT', payload: { id: item.id, content: generatedContent } });
+            dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'done', statusText: '✅ Complete' } });
+
+          } catch (error: any) {
+            analytics.log('error', `Generation failed: ${error.message}`);
+            dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'error', statusText: error.message } });
+          }
+        }
+      },
+
+      async refreshItem(
+        item: ContentItem,
+        callAIFn: any,
+        context: GenerationContext,
+        aiRepairer: any
+      ) {
+        const { dispatch, existingPages, wpConfig, serperApiKey } = context;
+
+        try {
+          if (!item.crawledContent) {
+            throw new Error('No crawled content available');
+          }
+
+          dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🔄 Analyzing...' } });
+
+          let semanticKeywords: string[] = [];
+          try {
+            const keywordResponse = await callAIFn('semantic_keyword_extractor', [item.crawledContent, item.title], 'json');
+            const parsed = safeParseJSON<any>(keywordResponse, { keywords: [] });
+            semanticKeywords = parsed?.keywords || [];
+          } catch (e) {
+            semanticKeywords = [item.title];
+          }
+
+          dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '✨ Optimizing...' } });
+
+          const optimizedContent = await callAIFn(
+            'content_refresher',
+            [item.crawledContent, item.title, semanticKeywords],
+            'html'
+          );
+
+          const { html: youtubeHtml } = await findRelevantYouTubeVideo(item.title, serperApiKey);
+          const { html: referencesHtml, references } = await fetchVerifiedReferences(
+            item.title, semanticKeywords, serperApiKey, wpConfig.url
+          );
+
+          let finalContent = optimizedContent;
+          if (existingPages.length > 0) {
+            const linkResult = await generateEnhancedInternalLinks(
+              optimizedContent, existingPages, item.title, null, ''
+            );
+            finalContent = linkResult.html;
+          }
+
+          if (youtubeHtml) {
+            const insertMatch = finalContent.match(/<\/h2>/i);
+            if (insertMatch && insertMatch.index !== undefined) {
+              const pos = insertMatch.index + insertMatch[0].length;
+              finalContent = finalContent.substring(0, pos) + youtubeHtml + finalContent.substring(pos);
+            }
+          }
+
+          if (referencesHtml) {
+            finalContent += referencesHtml;
+          }
+
+          const generatedContent: GeneratedContent = {
+            title: item.title,
+            content: finalContent,
+            metaDescription: `${item.title} - Updated comprehensive guide.`,
+            slug: extractSlugFromUrl(item.originalUrl || item.title),
+            schemaMarkup: '',
+            primaryKeyword: item.title,
+            semanticKeywords,
+            references: references.map(r => ({ title: r.title, url: r.url, verified: r.verified }))
+          };
+
+          dispatch({ type: 'SET_CONTENT', payload: { id: item.id, content: generatedContent } });
+          dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'done', statusText: '✅ Refreshed' } });
+
+        } catch (error: any) {
+          dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'error', statusText: error.message } });
+        }
+      },
+
+      analyzeContentGaps,
+      analyzePages
+    };
+
+    // ==================== WORDPRESS PUBLISHING ====================
+
+    export const publishItemToWordPress = async (
+      item: ContentItem,
+      password: string,
+      status: 'publish' | 'draft' | 'pending',
+      fetchFn: typeof fetch,
+      wpConfig: WpConfig
+    ): Promise<{ success: boolean; message?: string; url?: string; postId?: number }> => {
+      if (!item.generatedContent) {
+        return { success: false, message: 'No generated content' };
       }
 
-      progressCallback({ current: i + 1, total: items.length });
-      dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: 'Initializing...' } });
-      analytics.reset();
+      if (!wpConfig.url || !wpConfig.username || !password) {
+        return { success: false, message: 'WordPress credentials incomplete' };
+      }
+
+      const authHeader = `Basic ${btoa(`${wpConfig.username}:${password}`)}`;
+      const baseUrl = wpConfig.url.replace(/\/+$/, '');
 
       try {
-        // Phase 1: SERP Analysis
-        analytics.log('research', 'Starting content research...', { title: item.title });
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🔍 Researching...' } });
+        const slug = item.generatedContent.slug || extractSlugFromUrl(item.title);
+        const searchResponse = await fetchFn(
+          `${baseUrl}/wp-json/wp/v2/posts?slug=${encodeURIComponent(slug)}&status=any`,
+          { method: 'GET', headers: { 'Authorization': authHeader } }
+        );
+        const existingPosts = await searchResponse.json();
+        const existingPost = Array.isArray(existingPosts) && existingPosts.length > 0 ? existingPosts[0] : null;
 
-        let serpData: any[] = [];
-        if (serperApiKey) {
-          try {
-            const serpResponse = await fetchWithProxies('https://google.serper.dev/search', {
-              method: 'POST',
-              headers: { 'X-API-KEY': serperApiKey, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ q: item.title, num: 10 })
-            });
-            const serpJson = await serpResponse.json();
-            serpData = serpJson.organic || [];
-          } catch (e) {
-            analytics.log('warning', 'SERP fetch failed');
+        const postData = {
+          title: item.generatedContent.title,
+          content: item.generatedContent.content,
+          slug,
+          status,
+          meta: {
+            _yoast_wpseo_metadesc: item.generatedContent.metaDescription,
+            _yoast_wpseo_focuskw: item.generatedContent.primaryKeyword
           }
+        };
+
+        let response;
+        if (existingPost) {
+          response = await fetchFn(
+            `${baseUrl}/wp-json/wp/v2/posts/${existingPost.id}`,
+            {
+              method: 'PUT',
+              headers: {
+                'Authorization': authHeader,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(postData)
+            }
+          );
+        } else {
+          response = await fetchFn(
+            `${baseUrl}/wp-json/wp/v2/posts`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': authHeader,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(postData)
+            }
+          );
         }
 
-        // Phase 2: Semantic Keywords
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🏷️ Keywords...' } });
+        if (!response.ok) {
+          const errorData = await response.json();
+          return { success: false, message: errorData.message || 'Publish failed' };
+        }
 
+        const result = await response.json();
+        return {
+          success: true,
+          url: result.link,
+          postId: result.id,
+          message: existingPost ? 'Updated' : 'Published'
+        };
+      } catch (error: any) {
+        return { success: false, message: error.message };
+      }
+    };
+
+    // ==================== IMAGE GENERATION ====================
+
+    export const generateImageWithFallback = async (
+      apiClients: ApiClients,
+      prompt: string
+    ): Promise<string | null> => {
+      if (apiClients.gemini) {
+        try {
+          const result = await (apiClients.gemini as any).models.generateContent({
+            model: 'gemini-2.0-flash-exp-image-generation',
+            contents: prompt,
+            generationConfig: { responseModalities: ['image'] }
+          });
+
+          if (result?.response?.candidates?.[0]?.content?.parts) {
+            const imagePart = result.response.candidates[0].content.parts.find(
+              (p: any) => p.inlineData?.mimeType?.startsWith('image/')
+            );
+            if (imagePart?.inlineData?.data) {
+              return `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+            }
+          }
+        } catch (e) {
+          console.error('[Image Gen] Gemini failed:', e);
+        }
+      }
+
+      if (apiClients.openai) {
+        try {
+          const response = await (apiClients.openai as OpenAI).images.generate({
+            model: 'dall-e-3',
+            prompt,
+            n: 1,
+            size: '1024x1024',
+            response_format: 'b64_json'
+          });
+
+          if (response.data[0]?.b64_json) {
+            return `data:image/png;base64,${response.data[0].b64_json}`;
+          }
+        } catch (e) {
+          console.error('[Image Gen] DALL-E failed:', e);
+        }
+      }
+
+      return null;
+    };
+
+    // ==================== MAINTENANCE ENGINE (GOD MODE) ====================
+
+    class MaintenanceEngine {
+      isRunning: boolean = false;
+      logCallback: ((msg: string) => void) | null = null;
+      private context: GenerationContext | null = null;
+      private intervalId: ReturnType<typeof setInterval> | null = null;
+
+      start(context: GenerationContext) {
+        if (this.isRunning) return;
+
+        // Validate API clients
+        const hasValidClient = context.apiClients && (
+          context.apiClients.gemini ||
+          context.apiClients.anthropic ||
+          context.apiClients.openai ||
+          context.apiClients.openrouter
+        );
+
+        if (!hasValidClient) {
+          this.log('❌ CRITICAL ERROR: No AI API client initialized!');
+          this.log('🔧 REQUIRED: Configure at least one AI API key in Settings');
+          this.log('🛑 STOPPING: God Mode requires a valid AI API client');
+          return;
+        }
+
+        this.isRunning = true;
+        this.context = context;
+        this.log('🚀 GOD MODE ACTIVATED - Autonomous Optimization Engine');
+        this.log(`📊 Found ${context.existingPages.length} pages in sitemap`);
+
+        this.runCycle();
+        this.intervalId = setInterval(() => this.runCycle(), 60000);
+      }
+
+      stop() {
+        this.isRunning = false;
+        if (this.intervalId) {
+          clearInterval(this.intervalId);
+          this.intervalId = null;
+        }
+        this.log('🛑 GOD MODE DEACTIVATED');
+      }
+
+      updateContext(context: GenerationContext) {
+        this.context = context;
+      }
+
+      private log(msg: string) {
+        console.log(`[GOD MODE] ${msg}`);
+        if (this.logCallback) {
+          this.logCallback(msg);
+        }
+      }
+
+      private async runCycle() {
+        if (!this.isRunning || !this.context) return;
+
+        const { existingPages, priorityUrls, excludedUrls, priorityOnlyMode } = this.context;
+
+        let pagesToProcess = existingPages.filter(page => {
+          if (excludedUrls?.some(url => page.id.includes(url))) return false;
+
+          const lastProcessed = localStorage.getItem(`sota_last_proc_${page.id}`);
+          if (lastProcessed) {
+            const hoursSince = (Date.now() - parseInt(lastProcessed)) / (1000 * 60 * 60);
+            if (hoursSince < 24) return false;
+          }
+
+          return true;
+        });
+
+        if (priorityOnlyMode && priorityUrls && priorityUrls.length > 0) {
+          pagesToProcess = pagesToProcess.filter(page =>
+            priorityUrls.some(url => page.id.includes(url))
+          );
+        } else if (priorityUrls && priorityUrls.length > 0) {
+          pagesToProcess.sort((a, b) => {
+            const aIsPriority = priorityUrls.some(url => a.id.includes(url));
+            const bIsPriority = priorityUrls.some(url => b.id.includes(url));
+            if (aIsPriority && !bIsPriority) return -1;
+            if (!aIsPriority && bIsPriority) return 1;
+            return 0;
+          });
+        }
+
+        if (pagesToProcess.length === 0) {
+          this.log('💤 No pages need optimization at this time');
+          return;
+        }
+
+        const page = pagesToProcess[0];
+        this.log(`🎯 Processing: ${page.title || page.id}`);
+
+        try {
+          await this.optimizePage(page);
+          localStorage.setItem(`sota_last_proc_${page.id}`, Date.now().toString());
+          this.log(`✅ SUCCESS|${page.title}|${page.id}`);
+        } catch (error: any) {
+          this.log(`❌ FAILED: ${page.title} - ${error.message}`);
+        }
+      }
+
+      private async optimizePage(page: SitemapPage) {
+        if (!this.context) throw new Error('No context');
+
+        this.log('📥 Crawling page content...');
+        const content = await smartCrawl(page.id);
+
+        if (!content || content.length < 500) {
+          throw new Error('Content too short to optimize');
+        }
+
+        const callAIFn = (promptKey: string, args: any[], format: 'json' | 'html' = 'json') => {
+          return callAI(
+            this.context!.apiClients,
+            this.context!.selectedModel,
+            this.context!.geoTargeting,
+            this.context!.openrouterModels || [],
+            this.context!.selectedGroqModel || '',
+            promptKey,
+            args,
+            format
+          );
+        };
+
+        this.log('🏷️ Extracting semantic keywords...');
         let semanticKeywords: string[] = [];
         try {
-          const keywordResponse = await callAIFn('semantic_keyword_generator', [item.title, geoTargeting.location || null, serpData], 'json');
-          const keywordData = safeParseJSON<any>(keywordResponse, { keywords: [], semanticKeywords: [] });
-          semanticKeywords = keywordData?.keywords || keywordData?.semanticKeywords || [];
+          const kwResponse = await callAIFn('semantic_keyword_extractor', [content, page.title], 'json');
+          const kwData = safeParseJSON<any>(kwResponse, { keywords: [] });
+          semanticKeywords = kwData?.keywords || [];
         } catch (e) {
-          semanticKeywords = [item.title];
+          semanticKeywords = [page.title || 'content'];
         }
 
-        // Phase 3: YouTube Video
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Video...' } });
-        const { html: youtubeHtml } = await findRelevantYouTubeVideo(item.title, serperApiKey);
-
-        // Phase 4: Main Content
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '✍️ Writing...' } });
-        const contentResponse = await callAIFn(
-          'ultra_sota_article_writer',
-          [item.title, semanticKeywords, existingPages, serpData, null, null],
+        this.log('✨ Optimizing content with AI...');
+        const optimizedContent = await callAIFn(
+          'content_optimizer',
+          [content, semanticKeywords, page.title],
           'html'
         );
 
-        // Phase 5: References
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📚 References...' } });
-        const { html: referencesHtml, references } = await fetchVerifiedReferences(
-          item.title, semanticKeywords, serperApiKey, wpConfig.url
+        this.log('📹 Finding relevant video...');
+        const { html: youtubeHtml } = await findRelevantYouTubeVideo(
+          page.title || semanticKeywords[0],
+          this.context.serperApiKey
         );
 
-        // Phase 6: Internal Links
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🔗 Links...' } });
-        let contentWithLinks = contentResponse;
-        let linkResult = { linkCount: 0, links: [] as any[] };
+        this.log('📚 Fetching verified references...');
+        const { html: referencesHtml } = await fetchVerifiedReferences(
+          page.title || semanticKeywords[0],
+          semanticKeywords,
+          this.context.serperApiKey,
+          this.context.wpConfig.url
+        );
 
-        if (existingPages.length > 0) {
-          const linkingResult = await generateEnhancedInternalLinks(
-            contentResponse, existingPages, item.title, null, ''
-          );
-          contentWithLinks = linkingResult.html;
-          linkResult = { linkCount: linkingResult.linkCount, links: linkingResult.links };
-        }
+        this.log('🔗 Injecting internal links...');
+        const linkResult = await generateEnhancedInternalLinks(
+          optimizedContent,
+          this.context.existingPages,
+          page.title || '',
+          null,
+          ''
+        );
 
-        // Phase 7: Assemble
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📋 Assembling...' } });
-
-        let finalContent = contentWithLinks;
+        let finalContent = linkResult.html;
         if (youtubeHtml) {
-          const h2Match = finalContent.match(/<\/h2>/i);
-          if (h2Match && h2Match.index !== undefined) {
-            const insertPos = h2Match.index + h2Match[0].length;
-            const afterH2 = finalContent.substring(insertPos);
-            const nextPMatch = afterH2.match(/<\/p>/i);
-            if (nextPMatch && nextPMatch.index !== undefined) {
-              const finalInsertPos = insertPos + nextPMatch.index + nextPMatch[0].length;
-              finalContent = finalContent.substring(0, finalInsertPos) + youtubeHtml + finalContent.substring(finalInsertPos);
-            }
+          const match = finalContent.match(/<\/h2>/i);
+          if (match && match.index !== undefined) {
+            const pos = match.index + match[0].length;
+            finalContent = finalContent.substring(0, pos) + youtubeHtml + finalContent.substring(pos);
           }
         }
-
         if (referencesHtml) {
           finalContent += referencesHtml;
         }
 
-        // Phase 8: Schema
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📋 Schema...' } });
-
-        const schemaData = generateFullSchema({
-          pageType: item.type === 'pillar' ? 'pillar' : 'article',
-          title: item.title,
-          description: item.title,
-          content: finalContent,
-          url: wpConfig.url ? `${wpConfig.url}/${extractSlugFromUrl(item.title)}/` : '',
-          datePublished: new Date().toISOString(),
-          dateModified: new Date().toISOString(),
-          author: siteInfo.authorName || 'Expert Author',
-          authorUrl: siteInfo.authorUrl || wpConfig.url || '',
-          publisher: siteInfo.orgName || 'Organization',
-          publisherLogo: siteInfo.logoUrl || '',
-          featuredImage: '',
-          wordCount: finalContent.split(/\s+/).length,
-          images: [],
-          faqs: []
-        });
-
-        const generatedContent: GeneratedContent = {
-          title: item.title,
-          content: finalContent,
-          metaDescription: `${item.title} - Comprehensive guide with expert insights.`,
-          slug: extractSlugFromUrl(item.title),
-          schemaMarkup: JSON.stringify(schemaData, null, 2),
-          primaryKeyword: item.title,
-          semanticKeywords,
-          youtubeVideo: null,
-          references: references.map(r => ({ title: r.title, url: r.url, verified: r.verified })),
-          internalLinks: linkResult.links
-        };
-
-        dispatch({ type: 'SET_CONTENT', payload: { id: item.id, content: generatedContent } });
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'done', statusText: '✅ Complete' } });
-
-      } catch (error: any) {
-        analytics.log('error', `Generation failed: ${error.message}`);
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'error', statusText: error.message } });
-      }
-    }
-  },
-
-  async refreshItem(
-    item: ContentItem,
-    callAIFn: any,
-    context: GenerationContext,
-    aiRepairer: any
-  ) {
-    const { dispatch, existingPages, wpConfig, serperApiKey } = context;
-
-    try {
-      if (!item.crawledContent) {
-        throw new Error('No crawled content available');
-      }
-
-      dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🔄 Analyzing...' } });
-
-      let semanticKeywords: string[] = [];
-      try {
-        const keywordResponse = await callAIFn('semantic_keyword_extractor', [item.crawledContent, item.title], 'json');
-        const parsed = safeParseJSON<any>(keywordResponse, { keywords: [] });
-        semanticKeywords = parsed?.keywords || [];
-      } catch (e) {
-        semanticKeywords = [item.title];
-      }
-
-      dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '✨ Optimizing...' } });
-
-      const optimizedContent = await callAIFn(
-        'content_refresher',
-        [item.crawledContent, item.title, semanticKeywords],
-        'html'
-      );
-
-      const { html: youtubeHtml } = await findRelevantYouTubeVideo(item.title, serperApiKey);
-      const { html: referencesHtml, references } = await fetchVerifiedReferences(
-        item.title, semanticKeywords, serperApiKey, wpConfig.url
-      );
-
-      let finalContent = optimizedContent;
-      if (existingPages.length > 0) {
-        const linkResult = await generateEnhancedInternalLinks(
-          optimizedContent, existingPages, item.title, null, ''
-        );
-        finalContent = linkResult.html;
-      }
-
-      if (youtubeHtml) {
-        const insertMatch = finalContent.match(/<\/h2>/i);
-        if (insertMatch && insertMatch.index !== undefined) {
-          const pos = insertMatch.index + insertMatch[0].length;
-          finalContent = finalContent.substring(0, pos) + youtubeHtml + finalContent.substring(pos);
-        }
-      }
-
-      if (referencesHtml) {
-        finalContent += referencesHtml;
-      }
-
-      const generatedContent: GeneratedContent = {
-        title: item.title,
-        content: finalContent,
-        metaDescription: `${item.title} - Updated comprehensive guide.`,
-        slug: extractSlugFromUrl(item.originalUrl || item.title),
-        schemaMarkup: '',
-        primaryKeyword: item.title,
-        semanticKeywords,
-        references: references.map(r => ({ title: r.title, url: r.url, verified: r.verified }))
-      };
-
-      dispatch({ type: 'SET_CONTENT', payload: { id: item.id, content: generatedContent } });
-      dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'done', statusText: '✅ Refreshed' } });
-
-    } catch (error: any) {
-      dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'error', statusText: error.message } });
-    }
-  },
-
-  analyzeContentGaps,
-  analyzePages
-};
-
-// ==================== WORDPRESS PUBLISHING ====================
-
-export const publishItemToWordPress = async (
-  item: ContentItem,
-  password: string,
-  status: 'publish' | 'draft' | 'pending',
-  fetchFn: typeof fetch,
-  wpConfig: WpConfig
-): Promise<{ success: boolean; message?: string; url?: string; postId?: number }> => {
-  if (!item.generatedContent) {
-    return { success: false, message: 'No generated content' };
-  }
-
-  if (!wpConfig.url || !wpConfig.username || !password) {
-    return { success: false, message: 'WordPress credentials incomplete' };
-  }
-
-  const authHeader = `Basic ${btoa(`${wpConfig.username}:${password}`)}`;
-  const baseUrl = wpConfig.url.replace(/\/+$/, '');
-
-  try {
-    const slug = item.generatedContent.slug || extractSlugFromUrl(item.title);
-    const searchResponse = await fetchFn(
-      `${baseUrl}/wp-json/wp/v2/posts?slug=${encodeURIComponent(slug)}&status=any`,
-      { method: 'GET', headers: { 'Authorization': authHeader } }
-    );
-    const existingPosts = await searchResponse.json();
-    const existingPost = Array.isArray(existingPosts) && existingPosts.length > 0 ? existingPosts[0] : null;
-
-    const postData = {
-      title: item.generatedContent.title,
-      content: item.generatedContent.content,
-      slug,
-      status,
-      meta: {
-        _yoast_wpseo_metadesc: item.generatedContent.metaDescription,
-        _yoast_wpseo_focuskw: item.generatedContent.primaryKeyword
-      }
-    };
-
-    let response;
-    if (existingPost) {
-      response = await fetchFn(
-        `${baseUrl}/wp-json/wp/v2/posts/${existingPost.id}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Authorization': authHeader,
-            'Content-Type': 'application/json'
+        this.log('🌐 Publishing to WordPress...');
+        const result = await publishItemToWordPress(
+          {
+            id: page.id,
+            title: page.title || 'Optimized Content',
+            type: 'refresh',
+            status: 'idle',
+            statusText: '',
+            generatedContent: {
+              title: page.title || 'Optimized Content',
+              content: finalContent,
+              metaDescription: `${page.title} - Comprehensive guide`,
+              slug: page.slug || extractSlugFromUrl(page.id),
+              schemaMarkup: '',
+              primaryKeyword: page.title || '',
+              semanticKeywords
+            },
+            originalUrl: page.id,
+            crawledContent: null
           },
-          body: JSON.stringify(postData)
-        }
-      );
-    } else {
-      response = await fetchFn(
-        `${baseUrl}/wp-json/wp/v2/posts`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': authHeader,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(postData)
-        }
-      );
-    }
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      return { success: false, message: errorData.message || 'Publish failed' };
-    }
-
-    const result = await response.json();
-    return {
-      success: true,
-      url: result.link,
-      postId: result.id,
-      message: existingPost ? 'Updated' : 'Published'
-    };
-  } catch (error: any) {
-    return { success: false, message: error.message };
-  }
-};
-
-// ==================== IMAGE GENERATION ====================
-
-export const generateImageWithFallback = async (
-  apiClients: ApiClients,
-  prompt: string
-): Promise<string | null> => {
-  if (apiClients.gemini) {
-    try {
-      const result = await (apiClients.gemini as any).models.generateContent({
-        model: 'gemini-2.0-flash-exp-image-generation',
-        contents: prompt,
-        generationConfig: { responseModalities: ['image'] }
-      });
-
-      if (result?.response?.candidates?.[0]?.content?.parts) {
-        const imagePart = result.response.candidates[0].content.parts.find(
-          (p: any) => p.inlineData?.mimeType?.startsWith('image/')
+          localStorage.getItem('sota_wp_password') || '',
+          'publish',
+          fetch,
+          this.context.wpConfig
         );
-        if (imagePart?.inlineData?.data) {
-          return `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+
+        if (!result.success) {
+          throw new Error(result.message || 'Publish failed');
         }
+
+        this.log(`📊 Stats: ${linkResult.linkCount} links, ${semanticKeywords.length} keywords`);
       }
-    } catch (e) {
-      console.error('[Image Gen] Gemini failed:', e);
-    }
-  }
-
-  if (apiClients.openai) {
-    try {
-      const response = await (apiClients.openai as OpenAI).images.generate({
-        model: 'dall-e-3',
-        prompt,
-        n: 1,
-        size: '1024x1024',
-        response_format: 'b64_json'
-      });
-
-      if (response.data[0]?.b64_json) {
-        return `data:image/png;base64,${response.data[0].b64_json}`;
-      }
-    } catch (e) {
-      console.error('[Image Gen] DALL-E failed:', e);
-    }
-  }
-
-  return null;
-};
-
-// ==================== MAINTENANCE ENGINE (GOD MODE) ====================
-
-class MaintenanceEngine {
-  isRunning: boolean = false;
-  logCallback: ((msg: string) => void) | null = null;
-  private context: GenerationContext | null = null;
-  private intervalId: ReturnType<typeof setInterval> | null = null;
-
-  start(context: GenerationContext) {
-    if (this.isRunning) return;
-
-    // Validate API clients
-    const hasValidClient = context.apiClients && (
-      context.apiClients.gemini ||
-      context.apiClients.anthropic ||
-      context.apiClients.openai ||
-      context.apiClients.openrouter
-    );
-
-    if (!hasValidClient) {
-      this.log('❌ CRITICAL ERROR: No AI API client initialized!');
-      this.log('🔧 REQUIRED: Configure at least one AI API key in Settings');
-      this.log('🛑 STOPPING: God Mode requires a valid AI API client');
-      return;
     }
 
-    this.isRunning = true;
-    this.context = context;
-    this.log('🚀 GOD MODE ACTIVATED - Autonomous Optimization Engine');
-    this.log(`📊 Found ${context.existingPages.length} pages in sitemap`);
+    export const maintenanceEngine = new MaintenanceEngine();
 
-    this.runCycle();
-    this.intervalId = setInterval(() => this.runCycle(), 60000);
-  }
+    // ==================== EXPORTS ====================
 
-  stop() {
-    this.isRunning = false;
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
-    this.log('🛑 GOD MODE DEACTIVATED');
-  }
-
-  updateContext(context: GenerationContext) {
-    this.context = context;
-  }
-
-  private log(msg: string) {
-    console.log(`[GOD MODE] ${msg}`);
-    if (this.logCallback) {
-      this.logCallback(msg);
-    }
-  }
-
-  private async runCycle() {
-    if (!this.isRunning || !this.context) return;
-
-    const { existingPages, priorityUrls, excludedUrls, priorityOnlyMode } = this.context;
-
-    let pagesToProcess = existingPages.filter(page => {
-      if (excludedUrls?.some(url => page.id.includes(url))) return false;
-
-      const lastProcessed = localStorage.getItem(`sota_last_proc_${page.id}`);
-      if (lastProcessed) {
-        const hoursSince = (Date.now() - parseInt(lastProcessed)) / (1000 * 60 * 60);
-        if (hoursSince < 24) return false;
-      }
-
-      return true;
-    });
-
-    if (priorityOnlyMode && priorityUrls && priorityUrls.length > 0) {
-      pagesToProcess = pagesToProcess.filter(page =>
-        priorityUrls.some(url => page.id.includes(url))
-      );
-    } else if (priorityUrls && priorityUrls.length > 0) {
-      pagesToProcess.sort((a, b) => {
-        const aIsPriority = priorityUrls.some(url => a.id.includes(url));
-        const bIsPriority = priorityUrls.some(url => b.id.includes(url));
-        if (aIsPriority && !bIsPriority) return -1;
-        if (!aIsPriority && bIsPriority) return 1;
-        return 0;
-      });
-    }
-
-    if (pagesToProcess.length === 0) {
-      this.log('💤 No pages need optimization at this time');
-      return;
-    }
-
-    const page = pagesToProcess[0];
-    this.log(`🎯 Processing: ${page.title || page.id}`);
-
-    try {
-      await this.optimizePage(page);
-      localStorage.setItem(`sota_last_proc_${page.id}`, Date.now().toString());
-      this.log(`✅ SUCCESS|${page.title}|${page.id}`);
-    } catch (error: any) {
-      this.log(`❌ FAILED: ${page.title} - ${error.message}`);
-    }
-  }
-
-  private async optimizePage(page: SitemapPage) {
-    if (!this.context) throw new Error('No context');
-
-    this.log('📥 Crawling page content...');
-    const content = await smartCrawl(page.id);
-
-    if (!content || content.length < 500) {
-      throw new Error('Content too short to optimize');
-    }
-
-    const callAIFn = (promptKey: string, args: any[], format: 'json' | 'html' = 'json') => {
-      return callAI(
-        this.context!.apiClients,
-        this.context!.selectedModel,
-        this.context!.geoTargeting,
-        this.context!.openrouterModels || [],
-        this.context!.selectedGroqModel || '',
-        promptKey,
-        args,
-        format
-      );
+    export {
+      analytics as generationAnalytics,
+      AnalyticsEngine,
+      YouTubeVideo,
+      VerifiedReference,
+      GenerationAnalytics
     };
 
-    this.log('🏷️ Extracting semantic keywords...');
-    let semanticKeywords: string[] = [];
-    try {
-      const kwResponse = await callAIFn('semantic_keyword_extractor', [content, page.title], 'json');
-      const kwData = safeParseJSON<any>(kwResponse, { keywords: [] });
-      semanticKeywords = kwData?.keywords || [];
-    } catch (e) {
-      semanticKeywords = [page.title || 'content'];
-    }
-
-    this.log('✨ Optimizing content with AI...');
-    const optimizedContent = await callAIFn(
-      'content_optimizer',
-      [content, semanticKeywords, page.title],
-      'html'
-    );
-
-    this.log('📹 Finding relevant video...');
-    const { html: youtubeHtml } = await findRelevantYouTubeVideo(
-      page.title || semanticKeywords[0],
-      this.context.serperApiKey
-    );
-
-    this.log('📚 Fetching verified references...');
-    const { html: referencesHtml } = await fetchVerifiedReferences(
-      page.title || semanticKeywords[0],
-      semanticKeywords,
-      this.context.serperApiKey,
-      this.context.wpConfig.url
-    );
-
-    this.log('🔗 Injecting internal links...');
-    const linkResult = await generateEnhancedInternalLinks(
-      optimizedContent,
-      this.context.existingPages,
-      page.title || '',
-      null,
-      ''
-    );
-
-    let finalContent = linkResult.html;
-    if (youtubeHtml) {
-      const match = finalContent.match(/<\/h2>/i);
-      if (match && match.index !== undefined) {
-        const pos = match.index + match[0].length;
-        finalContent = finalContent.substring(0, pos) + youtubeHtml + finalContent.substring(pos);
-      }
-    }
-    if (referencesHtml) {
-      finalContent += referencesHtml;
-    }
-
-    this.log('🌐 Publishing to WordPress...');
-    const result = await publishItemToWordPress(
-      {
-        id: page.id,
-        title: page.title || 'Optimized Content',
-        type: 'refresh',
-        status: 'idle',
-        statusText: '',
-        generatedContent: {
-          title: page.title || 'Optimized Content',
-          content: finalContent,
-          metaDescription: `${page.title} - Comprehensive guide`,
-          slug: page.slug || extractSlugFromUrl(page.id),
-          schemaMarkup: '',
-          primaryKeyword: page.title || '',
-          semanticKeywords
-        },
-        originalUrl: page.id,
-        crawledContent: null
-      },
-      localStorage.getItem('sota_wp_password') || '',
-      'publish',
-      fetch,
-      this.context.wpConfig
-    );
-
-    if (!result.success) {
-      throw new Error(result.message || 'Publish failed');
-    }
-
-    this.log(`📊 Stats: ${linkResult.linkCount} links, ${semanticKeywords.length} keywords`);
-  }
-}
-
-export const maintenanceEngine = new MaintenanceEngine();
-
-// ==================== EXPORTS ====================
-
-export {
-  analytics as generationAnalytics,
-  AnalyticsEngine,
-  YouTubeVideo,
-  VerifiedReference,
-  GenerationAnalytics
-};
-
-export default {
-  callAI,
-  generateContent,
-  publishItemToWordPress,
-  maintenanceEngine,
-  fetchVerifiedReferences,
-  findRelevantYouTubeVideo,
-  generateEnhancedInternalLinks,
-  generateImageWithFallback,
-  generationAnalytics: analytics
-};
+    export default {
+      callAI,
+      generateContent,
+      publishItemToWordPress,
+      maintenanceEngine,
+      fetchVerifiedReferences,
+      findRelevantYouTubeVideo,
+      generateEnhancedInternalLinks,
+      generateImageWithFallback,
+      generationAnalytics: analytics
+    };
