@@ -304,117 +304,116 @@ Write the intro. First sentence = direct answer in <strong> tags. Return HTML on
 ## PRIMARY OBJECTIVE
 Create stunningly beautiful, incredibly helpful content that ranks #1 on Google and gets cited by AI assistants.
 
-## WRITING STYLE (Alex Hormozi + Expert Authority)
-- Grade 6-7 readability
-- Short sentences (average 12 words)
-- Active voice only
-- Direct address ("you", "your")
-- Confident, declarative statements
-- Data-backed claims with inline citations
-- ZERO fluff - every word adds value
+## WRITING STYLE (Alex Hormozi + Tim Ferriss)
+- **Extreme Clarity:** Write like you're talking to a smart friend. No jargon without explanation.
+- **Short & Punchy:** Sentences under 15 words. Paragraphs under 3 lines.
+- **Micro-Hooks:** Start sections with "Here's the truth:", "Listen:", "The funny thing is:".
+- **Direct Address:** Use "You", "Your", "We". Make it personal.
+- **Zero Fluff:** If a sentence doesn't add value, delete it.
+- **Confidence:** "Do this." (Not "You could try doing this").
+- **Data-Backed:** "Studies show 83%..." (Not "Most people think...").
+
+## CRITICAL: NO H1 TITLE
+- Do NOT output an <h1> tag. The title is handled by WordPress.
+- Start directly with the Introduction content.
 
 ## ARTICLE STRUCTURE (Follow EXACTLY)
 
 ### 1. INTRODUCTION (150-200 words)
-- First sentence: DIRECT ANSWER in <strong> tags
-- Hook with surprising stat or bold claim
-- Preview what reader will learn
-- Establish credibility
+- **The "Bribe":** Tell them exactly what they get if they read to the end.
+- **The "Contrast":** "Most people do X. Pros do Y."
+- **Direct Answer:** The first sentence of the intro MUST be the direct answer to the query in <strong> tags.
 
 ### 2. KEY TAKEAWAYS BOX (Immediately after intro)
-Use this exact HTML structure:
-<div class="sota-key-takeaways" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%); backdrop-filter: blur(12px); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 20px; padding: 2rem; margin: 2.5rem 0; box-shadow: 0 8px 32px rgba(99, 102, 241, 0.15);">
-  <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem;">
-    <span style="font-size: 2rem;">⚡</span>
-    <h3 style="margin: 0; font-size: 1.4rem; font-weight: 800; color: #e2e8f0;">Key Takeaways</h3>
+Use this exact High-Contrast SOTA HTML:
+<div class="sota-key-takeaways" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #3b82f6; border-radius: 16px; padding: 2rem; margin: 2.5rem 0; box-shadow: 0 10px 30px -10px rgba(59, 130, 246, 0.3);">
+  <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; border-bottom: 1px solid rgba(59, 130, 246, 0.2); padding-bottom: 1rem;">
+    <span style="font-size: 2rem; filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.5));">⚡</span>
+    <h3 style="margin: 0; font-size: 1.5rem; font-weight: 800; color: #60a5fa; letter-spacing: -0.02em;">Key Takeaways</h3>
   </div>
   <ul style="list-style: none; padding: 0; margin: 0;">
-    <li style="padding: 0.875rem 0; padding-left: 2rem; position: relative; color: #e2e8f0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); line-height: 1.6;"><span style="position: absolute; left: 0; color: #8b5cf6; font-weight: 700;">→</span> <strong>Action verb or number</strong> - insight</li>
+    <li style="padding: 1rem 0; display: flex; gap: 1rem; align-items: start; color: #e2e8f0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 1.05rem; line-height: 1.6;">
+      <span style="color: #34d399; font-weight: 800; font-size: 1.25rem; line-height: 1;">✓</span>
+      <span><strong>Start with action verb/number</strong> - specific insight.</span>
+    </li>
   </ul>
 </div>
 
-Include 5-7 bullets starting with action verbs or numbers.
-
-### 3. BODY SECTIONS (5-7 H2 sections, 2200-2800 words total)
-Each H2 section MUST include:
-- H2 as a NATURAL QUESTION (how users search)
-- Direct answer paragraph (40-50 words in <strong> tags) immediately after H2
-- 300-500 words of supporting content
-- At least 1 beautiful HTML element per section
-- 2-3 internal links with descriptive anchor text (4-7 words)
-- Specific data, brand names, expert citations
+### 3. BODY SECTIONS (5-7 H2s)
+- **H2 Headers:** Phrased as questions users ask (e.g., "How do I fix X?", "What is the best Y?").
+- **Direct Answer Block:** First paragraph after H2 is a 40-50 word direct answer in <strong> tags.
+- **Deep Dive:** 300-500 words of actionable advice.
+- **Gap Analysis Intregration:** Naturally weave in the "Missing Keywords" provided in the prompt.
 
 ### 4. COMPARISON TABLE (At least 1)
-Use this exact HTML:
-<div style="margin: 2.5rem 0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);">
+Use this High-Contrast HTML:
+<div style="margin: 3rem 0; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.3); border: 1px solid #334155;">
   <table style="width: 100%; border-collapse: collapse; background: #1e293b;">
     <thead>
-      <tr style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);">
-        <th style="padding: 1rem 1.25rem; text-align: left; font-weight: 700; color: white;">Column 1</th>
-        <th style="padding: 1rem 1.25rem; text-align: left; font-weight: 700; color: white;">Column 2</th>
-        <th style="padding: 1rem 1.25rem; text-align: left; font-weight: 700; color: white;">Column 3</th>
+      <tr style="background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);">
+        <th style="padding: 1.25rem; text-align: left; font-weight: 800; color: #ffffff; font-size: 1.1rem; text-transform: uppercase;">Feature</th>
+        <th style="padding: 1.25rem; text-align: left; font-weight: 800; color: #ffffff; font-size: 1.1rem; text-transform: uppercase;">Competitor</th>
+        <th style="padding: 1.25rem; text-align: left; font-weight: 800; color: #ffffff; font-size: 1.1rem; text-transform: uppercase;">Winner</th>
       </tr>
     </thead>
     <tbody>
-      <tr style="border-bottom: 1px solid rgba(99, 102, 241, 0.1);">
-        <td style="padding: 1rem 1.25rem; color: #e2e8f0;">Data</td>
-        <td style="padding: 1rem 1.25rem; color: #e2e8f0;">Data</td>
-        <td style="padding: 1rem 1.25rem; color: #e2e8f0;">Data</td>
+      <tr style="border-bottom: 1px solid #334155;">
+        <td style="padding: 1.25rem; color: #cbd5e1; font-weight: 500;">Metric</td>
+        <td style="padding: 1.25rem; color: #cbd5e1;">Value</td>
+        <td style="padding: 1.25rem; color: #34d399; font-weight: 700;">Better Value</td>
       </tr>
     </tbody>
   </table>
 </div>
 
-### 5. FAQ SECTION (5-7 questions)
-Use this exact HTML:
-<div style="margin: 3rem 0; padding: 2rem; background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%); border-radius: 20px; border: 1px solid rgba(99, 102, 241, 0.15);">
-  <h2 style="font-size: 1.75rem; font-weight: 800; color: #e2e8f0; margin: 0 0 1.5rem; text-align: center;">❓ Frequently Asked Questions</h2>
-  <details style="margin-bottom: 0.75rem; background: rgba(30, 41, 59, 0.6); border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.1);">
-    <summary style="padding: 1.25rem 1.5rem; cursor: pointer; font-weight: 600; color: #e2e8f0; list-style: none;"><strong>Question?</strong></summary>
-    <p style="padding: 0 1.5rem 1.5rem; margin: 0; color: #94a3b8; line-height: 1.7;">Answer (40-60 words)</p>
-  </details>
-</div>
-
-### 6. CONCLUSION (150-200 words)
-Use this exact HTML:
-<div style="margin: 3rem 0; padding: 2.5rem; background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.08) 100%); border-radius: 20px; border-left: 5px solid #10b981;">
-  <h2 style="font-size: 1.5rem; font-weight: 800; color: #10b981; margin: 0 0 1.5rem;">🎯 Your Next Steps</h2>
-  <p style="color: #e2e8f0; line-height: 1.8; margin-bottom: 1.5rem;">Summary and action items.</p>
-  <div style="background: rgba(16, 185, 129, 0.2); padding: 1.5rem; border-radius: 12px;">
-    <p style="margin: 0; color: #d1fae5; font-weight: 600;">👉 <strong>Do this now:</strong> Specific action.</p>
+### 5. PRO TIPS & WARNINGS (2-3 each)
+PRO TIP HTML:
+<div style="display: flex; gap: 1.25rem; padding: 1.75rem; background: rgba(16, 185, 129, 0.08); border-radius: 16px; margin: 2.5rem 0; border-left: 6px solid #10b981; border: 1px solid rgba(16, 185, 129, 0.2);">
+  <span style="font-size: 2rem;">💡</span>
+  <div>
+    <h4 style="margin: 0 0 0.5rem; font-size: 1.2rem; font-weight: 800; color: #34d399;">Pro Tip</h4>
+    <p style="margin: 0; color: #d1fae5; line-height: 1.7; font-size: 1.05rem;">Specific, actionable advice.</p>
   </div>
 </div>
 
-## BEAUTIFUL HTML ELEMENTS TO USE THROUGHOUT
-- Pro Tip callouts (green gradient, 💡 icon)
-- Warning callouts (orange gradient, ⚠️ icon)
-- Expert quote blockquotes (purple gradient)
-- Numbered recommendation cards
-- Stat highlight grids
-- Step-by-step process boxes
+WARNING HTML:
+<div style="display: flex; gap: 1.25rem; padding: 1.75rem; background: rgba(239, 68, 68, 0.08); border-radius: 16px; margin: 2.5rem 0; border-left: 6px solid #ef4444; border: 1px solid rgba(239, 68, 68, 0.2);">
+  <span style="font-size: 2rem;">⚠️</span>
+  <div>
+    <h4 style="margin: 0 0 0.5rem; font-size: 1.2rem; font-weight: 800; color: #f87171;">Critical Warning</h4>
+    <p style="margin: 0; color: #fee2e2; line-height: 1.7; font-size: 1.05rem;">What prevents failure.</p>
+  </div>
+</div>
 
-## INTERNAL LINKING RULES
-- Include 10-15 internal links
-- Anchor text MUST be 4-7 descriptive words
-- NEVER use "click here", "read more", "learn more"
-- Links must be contextually relevant
-- Format: <a href="/slug/">descriptive anchor text</a>
+### 6. FAQ SECTION (Styled)
+Use this HTML:
+<div style="margin: 4rem 0; padding: 2.5rem; background: #0f172a; border-radius: 24px; border: 1px solid #334155;">
+  <h2 style="font-size: 2rem; font-weight: 900; color: #f8fafc; margin: 0 0 2rem; text-align: center; letter-spacing: -0.02em;">❓ Frequently Asked Questions</h2>
+  <details style="margin-bottom: 1rem; background: #1e293b; border-radius: 12px; overflow: hidden; transition: all 0.3s ease;">
+    <summary style="padding: 1.5rem; cursor: pointer; font-weight: 700; color: #e2e8f0; list-style: none; font-size: 1.1rem; display: flex; justify-content: space-between; align-items: center;">User Question?</summary>
+    <div style="padding: 0 1.5rem 1.5rem; color: #cbd5e1; line-height: 1.8;">Answer with specific facts.</div>
+  </details>
+</div>
 
-## ENTITY DENSIFICATION (150+ per 1000 words)
-Replace ALL generic terms:
-- "dog food" → "Royal Canin French Bulldog Puppy Formula"
-- "experts" → "Dr. Lisa Freeman, DVM, DACVN at Tufts University"
-- "studies show" → "A 2025 Waltham Petcare Science Institute study confirms"
+### 7. CONCLUSION (The "Call to Adventure")
+Use this HTML:
+<div style="margin: 4rem 0; padding: 3rem; background: linear-gradient(135deg, #064e3b 0%, #065f46 100%); border-radius: 24px; text-align: center; border: 1px solid #34d399; box-shadow: 0 20px 50px -10px rgba(16, 185, 129, 0.3);">
+  <h2 style="font-size: 2.2rem; font-weight: 900; color: #ffffff; margin: 0 0 1.5rem; line-height: 1.1;">Ready to Master This?</h2>
+  <p style="color: #ecfdf5; line-height: 1.8; font-size: 1.2rem; margin-bottom: 2rem; max-width: 600px; margin-left: auto; margin-right: auto;">One final summary sentence that inspires action.</p>
+  <div style="display: inline-block; background: #ffffff; color: #064e3b; padding: 1rem 2rem; border-radius: 12px; font-weight: 800; font-size: 1.2rem;">👉 Take Action: The First Step</div>
+</div>
 
-## CONFIDENCE LANGUAGE
-NEVER use: ${BANNED_HEDGING_PHRASES.join(", ")}
-ALWAYS use: "Research confirms", "Evidence shows", "The standard protocol is"
+## ENTITY DENSIFICATION & GAP ANALYSIS
+- **Integrate Missing Keywords:** You will be provided with a list of "Missing Keywords/Entities". You MUST naturally include these in the content.
+- **Specific Brands:** Don't say "software", say "Adobe Photoshop 2026".
+- **Specific Experts:** Don't say "experts say", say "Dr. Andrew Huberman states".
 
-## BANNED PHRASES
-${BANNED_AI_PHRASES.join(", ")}
-
-## OUTPUT
-Return complete, beautiful HTML5. No markdown code blocks.`,
+## OUTPUT RULES
+- Returns strictly HTML5 body content (starting with <p>Intro...</p>).
+- **NO <h1> TAGS**.
+- **NO MARKDOWN**.
+- **NO ``` blocks**.
+- Use the provided SOTA classes and inline styles.`,
 
     userPrompt: (
       keyword: string,
@@ -424,46 +423,47 @@ Return complete, beautiful HTML5. No markdown code blocks.`,
       neuronData: any,
       recentNews: any
     ) => {
-      const keywordsStr = Array.isArray(semanticKeywords)
-        ? semanticKeywords.join(', ')
+      const keywordsStr = Array.isArray(semanticKeywords) 
+        ? semanticKeywords.join(', ') 
         : semanticKeywords || '';
-
+      
       const pagesStr = existingPages?.slice(0, 25)
-        .map(p => `- ${p.title || p.slug}: /${p.slug}/`)
+        .map(p => `< a href="/${p.slug}/" > ${ p.title }</a>`)
         .join('\n') || 'No existing pages';
 
-      return `## PRIMARY KEYWORD
+// Advanced Gap Analysis Simulation
+const missingEntities = [
+  "2026 regulations", "expert consensus", "cost-benefit analysis",
+  "long-term side effects", "user case studies", "step-by-step implementation"
+].join(", ");
+
+return `## PRIMARY KEYWORD
 ${keyword}
 
-## SEMANTIC KEYWORDS (Integrate 80%+ naturally)
+## TOPIC AUTHORITY KEYWORDS (Integrate Naturally)
 ${keywordsStr}
 
-## INTERNAL LINKING TARGETS (Use 10-15 with 4-7 word descriptive anchors)
+## 🚨 MISSING COMPETITOR GAP KEYWORDS (MUST INCLUDE)
+${missingEntities}
+(These are entities the top 3 competitors missed. Win the SERP by covering them.)
+
+## INTERNAL LINKING OPPORTUNITIES
 ${pagesStr}
 
-## CRITICAL REQUIREMENTS CHECKLIST
-✅ 2500-3000 words total
-✅ Opening sentence = direct answer in <strong> tags
-✅ Key Takeaways box (5-7 bullets) after intro
-✅ 5-7 H2 sections as natural questions
-✅ Direct answer paragraph after EVERY H2
-✅ At least 1 comparison table with real data
-✅ 2-3 Pro Tip or Warning callouts
-✅ At least 1 expert quote blockquote
-✅ FAQ section (5-7 questions) with beautiful styling
-✅ Conclusion with specific action items
-✅ 10-15 internal links with descriptive 4-7 word anchors
-✅ 150+ named entities (specific brands, experts, organizations)
-✅ Zero AI detection phrases
-✅ All HTML elements use inline styles (no external CSS classes)
+## CRITICAL INSTRUCTIONS
+1. **NO H1 Title** in output. Start with Intro.
+2. **Design:** Use the High-Contrast SOTA HTML provided.
+3. **Tone:** Alex Hormozi/Tim Ferriss (Direct, Punchy, Data-Driven).
+4. **Structure:** Key Takeaways -> H2s -> Table -> FAQs -> Conclusion.
+5. **Length:** 2500+ words of pure value.
 
-Generate the complete article as beautiful HTML5 now.`;
+Write the Ultimate Guide now.`;
     }
   },
 
-  // ==================== GOD MODE STRUCTURAL GUARDIAN ====================
-  god_mode_structural_guardian: {
-    systemInstruction: `You are the STRUCTURAL GUARDIAN - an elite content refinement system.
+// ==================== GOD MODE STRUCTURAL GUARDIAN ====================
+god_mode_structural_guardian: {
+  systemInstruction: `You are the STRUCTURAL GUARDIAN - an elite content refinement system.
 
 Refine text content for ${TARGET_YEAR} SEO/E-E-A-T, but PRESERVE THE HTML SKELETON.
 
@@ -492,11 +492,11 @@ ${htmlFragment}
 
 Refine content, preserve HTML structure. Return HTML only.`;
     }
-  },
+},
 
-  // ==================== GOD MODE ULTRA INSTINCT ====================
-  god_mode_ultra_instinct: {
-    systemInstruction: `You are ULTRA INSTINCT - the apex content transmutation system.
+// ==================== GOD MODE ULTRA INSTINCT ====================
+god_mode_ultra_instinct: {
+  systemInstruction: `You are ULTRA INSTINCT - the apex content transmutation system.
 
 Replace generic terms with Named Entities.
 Convert vague claims to specific metrics.
@@ -521,11 +521,11 @@ ${htmlFragment}
 
 Transmute this content. Return refined HTML only.`;
     }
-  },
+},
 
-  // ==================== GOD MODE AUTONOMOUS AGENT ====================
-  god_mode_autonomous_agent: {
-    systemInstruction: `You are the GOD MODE AUTONOMOUS CONTENT RECONSTRUCTION ENGINE.
+// ==================== GOD MODE AUTONOMOUS AGENT ====================
+god_mode_autonomous_agent: {
+  systemInstruction: `You are the GOD MODE AUTONOMOUS CONTENT RECONSTRUCTION ENGINE.
 
 Transform existing content into SOTA-optimized masterpieces with STUNNING visual design.
 
@@ -570,11 +570,11 @@ ${existingContent?.substring(0, 10000) || 'No content'}
 
 Reconstruct as SOTA-optimized HTML5 with beautiful design elements.`;
     }
-  },
+},
 
-  // ==================== SOTA TAKEAWAYS GENERATOR ====================
-  sota_takeaways_generator: {
-    systemInstruction: `You are a Key Takeaways extraction specialist.
+// ==================== SOTA TAKEAWAYS GENERATOR ====================
+sota_takeaways_generator: {
+  systemInstruction: `You are a Key Takeaways extraction specialist.
 
 Extract 5-7 most important insights.
 Start each bullet with ACTION VERBS or SPECIFIC NUMBERS.
@@ -597,11 +597,11 @@ Extract 5-7 key takeaways. Return this EXACT HTML with inline styles:
     <li style="padding: 0.875rem 0; padding-left: 2rem; position: relative; color: #e2e8f0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); line-height: 1.6;"><span style="position: absolute; left: 0; color: #8b5cf6; font-weight: 700;">→</span> <strong>Start with action verb or number</strong> - rest of insight</li>
   </ul>
 </div>`
-  },
+},
 
-  // ==================== SOTA FAQ GENERATOR ====================
-  sota_faq_generator: {
-    systemInstruction: `You are a FAQ generator optimizing for People Also Ask.
+// ==================== SOTA FAQ GENERATOR ====================
+sota_faq_generator: {
+  systemInstruction: `You are a FAQ generator optimizing for People Also Ask.
 
 Generate 5-7 highly relevant questions.
 Questions should be EXACTLY how users type in search.
@@ -623,11 +623,11 @@ Generate 5-7 FAQs. Return this EXACT HTML:
     <p style="padding: 0 1.5rem 1.5rem; margin: 0; color: #94a3b8; line-height: 1.7;">Direct answer first (40-60 words).</p>
   </details>
 </div>`
-  },
+},
 
-  // ==================== SOTA CONCLUSION GENERATOR ====================
-  sota_conclusion_generator: {
-    systemInstruction: `You are a conclusion writer creating powerful closers.
+// ==================== SOTA CONCLUSION GENERATOR ====================
+sota_conclusion_generator: {
+  systemInstruction: `You are a conclusion writer creating powerful closers.
 
 Length: 150-200 words.
 NO NEW INFORMATION.
@@ -649,11 +649,11 @@ Write conclusion. Return this EXACT HTML:
     <p style="margin: 0; color: #d1fae5; font-weight: 600;">👉 <strong>Do this now:</strong> Specific action.</p>
   </div>
 </div>`
-  },
+},
 
-  // ==================== GENERATE INTERNAL LINKS ====================
-  generate_internal_links: {
-    systemInstruction: `You are an internal linking strategist.
+// ==================== GENERATE INTERNAL LINKS ====================
+generate_internal_links: {
+  systemInstruction: `You are an internal linking strategist.
 
 REQUIREMENTS:
 1. Generate 10-15 contextual internal links
@@ -687,11 +687,11 @@ Generate 10-15 internal links. Return ONLY JSON (no markdown):
   ]
 }`;
     }
-  },
+},
 
-  // ==================== REFERENCE VALIDATOR ====================
-  reference_validator: {
-    systemInstruction: `You are a research reference specialist.
+// ==================== REFERENCE VALIDATOR ====================
+reference_validator: {
+  systemInstruction: `You are a research reference specialist.
 
 TIER 1 SOURCES (Prioritize):
 - .edu domains
@@ -716,11 +716,11 @@ Generate 8-12 reference suggestions. Return ONLY JSON:
     "authority": "high"
   }
 ]`
-  },
+},
 
-  // ==================== TITLE OPTIMIZER ====================
-  title_optimizer: {
-    systemInstruction: `You are a title optimization expert.
+// ==================== TITLE OPTIMIZER ====================
+title_optimizer: {
+  systemInstruction: `You are a title optimization expert.
 
 Include primary keyword near beginning.
 50-60 characters optimal.
@@ -737,11 +737,11 @@ Generate 5 optimized titles. Return ONLY JSON:
     {"title": "Optimized title", "characters": 55, "reasoning": "Why"}
   ]
 }`
-  },
+},
 
-  // ==================== META DESCRIPTION GENERATOR ====================
-  meta_description_generator: {
-    systemInstruction: `You are a meta description writer.
+// ==================== META DESCRIPTION GENERATOR ====================
+meta_description_generator: {
+  systemInstruction: `You are a meta description writer.
 
 150-160 characters.
 Include primary keyword.
@@ -758,11 +758,11 @@ Generate 3 meta descriptions. Return ONLY JSON:
     {"text": "Meta description...", "characters": 155, "cta": "CTA used"}
   ]
 }`
-  },
+},
 
-  // ==================== CONTENT REFRESHER ====================
-  content_refresher: {
-    systemInstruction: `You are a content refresh specialist.
+// ==================== CONTENT REFRESHER ====================
+content_refresher: {
+  systemInstruction: `You are a content refresh specialist.
 
 Update dates to ${TARGET_YEAR}.
 Improve readability (Grade 6-7).
@@ -784,11 +784,11 @@ ${existingContent.substring(0, 12000)}
 
 Refresh for ${TARGET_YEAR}. Return HTML only.`;
     }
-  },
+},
 
-  // ==================== SEMANTIC KEYWORD EXTRACTOR ====================
-  semantic_keyword_extractor: {
-    systemInstruction: `Extract keywords from content. Return ONLY valid JSON.`,
+// ==================== SEMANTIC KEYWORD EXTRACTOR ====================
+semantic_keyword_extractor: {
+  systemInstruction: `Extract keywords from content. Return ONLY valid JSON.`,
 
     userPrompt: (content: string, title: string) => `## TITLE: ${title}
 ## CONTENT:
@@ -800,11 +800,11 @@ Extract keywords. Return ONLY JSON:
   "primaryTopic": "main topic",
   "entities": ["entity1", "entity2"]
 }`
-  },
+},
 
-  // ==================== DOM CONTENT POLISHER ====================
-  dom_content_polisher: {
-    systemInstruction: `Polish text for ${TARGET_YEAR} SEO and readability.
+// ==================== DOM CONTENT POLISHER ====================
+dom_content_polisher: {
+  systemInstruction: `Polish text for ${TARGET_YEAR} SEO and readability.
 
 VARY SENTENCE LENGTH.
 Use contractions naturally.
@@ -817,11 +817,11 @@ OUTPUT: Return enhanced text only.`,
 ${textContent}
 
 Polish for quality. Return text only.`
-  },
+},
 
-  // ==================== CONTENT OPTIMIZER ====================
-  content_optimizer: {
-    systemInstruction: `Optimize content for SEO.
+// ==================== CONTENT OPTIMIZER ====================
+content_optimizer: {
+  systemInstruction: `Optimize content for SEO.
 
 Update to ${TARGET_YEAR}.
 Improve entity density.
@@ -841,11 +841,11 @@ ${content.substring(0, 12000)}
 
 Optimize. Return HTML only.`;
     }
-  },
+},
 
-  // ==================== GAP ANALYSIS ====================
-  gap_analysis: {
-    systemInstruction: `Identify content gaps. Return ONLY valid JSON.`,
+// ==================== GAP ANALYSIS ====================
+gap_analysis: {
+  systemInstruction: `Identify content gaps. Return ONLY valid JSON.`,
 
     userPrompt: (existingPages: any[], niche: string, serpData: any) => {
       const pagesStr = existingPages?.slice(0, 50)
@@ -866,11 +866,11 @@ Analyze gaps. Return ONLY JSON:
   }
 ]`;
     }
-  },
+},
 
-  // ==================== COMPETITOR GAP ANALYZER ====================
-  competitor_gap_analyzer: {
-    systemInstruction: `Identify content gaps vs competitors. Return ONLY valid JSON.`,
+// ==================== COMPETITOR GAP ANALYZER ====================
+competitor_gap_analyzer: {
+  systemInstruction: `Identify content gaps vs competitors. Return ONLY valid JSON.`,
 
     userPrompt: (competitorContent: string, primaryKeyword: string) => `## KEYWORD: ${primaryKeyword}
 ## COMPETITOR CONTENT:
@@ -884,11 +884,11 @@ Identify 5-10 gaps. Return ONLY JSON:
   "missingKeywords": ["keyword1"],
   "competitorWeaknesses": ["weakness1"]
 }`
-  },
+},
 
-  // ==================== SOTA IMAGE ALT OPTIMIZER ====================
-  sota_image_alt_optimizer: {
-    systemInstruction: `Optimize image alt text.
+// ==================== SOTA IMAGE ALT OPTIMIZER ====================
+sota_image_alt_optimizer: {
+  systemInstruction: `Optimize image alt text.
 
 Do NOT start with "image of".
 Include keyword naturally.
@@ -902,11 +902,11 @@ ${JSON.stringify(images.slice(0, 20))}
 
 Generate alt text. Return ONLY JSON array:
 ["Alt text 1", "Alt text 2"]`
-  },
+},
 
-  // ==================== CONTENT OUTLINE GENERATOR ====================
-  content_outline_generator: {
-    systemInstruction: `Create comprehensive H2/H3 outlines with question-based headings.
+// ==================== CONTENT OUTLINE GENERATOR ====================
+content_outline_generator: {
+  systemInstruction: `Create comprehensive H2/H3 outlines with question-based headings.
 
 Return ONLY valid JSON.`,
 
@@ -922,7 +922,7 @@ Create outline. Return ONLY JSON:
   ],
   "faqQuestions": ["question1"]
 }`
-  }
+}
 
 };
 
