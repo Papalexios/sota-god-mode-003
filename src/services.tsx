@@ -15,13 +15,15 @@ import {
   YouTubeSearchResult 
 } from './YouTubeService';
 
-// Reference Service
+// ❌ REMOVE THESE LINES:
 import { 
   fetchVerifiedReferences as fetchRefsFromService,
   generateReferencesHtml,
   detectCategory,
   determineAuthorityLevel,
-  REFERENCE_CATEGORIES
+  REFERENCE_CATEGORIES,
+  VerifiedReference,
+  ReferenceCategory
 } from './ReferenceService';
 
 // Internal Link Orchestrator
