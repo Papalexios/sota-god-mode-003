@@ -1146,32 +1146,49 @@ export const findBalancedJson = (
 /**
  * Extracts a JSON string from messy AI response using several strategies.
  */
+/**
+ * Extracts JSON from potentially messy AI response text.
+ * Handles markdown wrappers, extra text before/after JSON, nested structures.
+ * 
+ * @param response - The raw response text
+ * @returns Extracted JSON string
+ * @throws Error if no valid JSON structure found
+ */
 export const extractJsonFromResponse = (response: string): string => {
   if (!response || typeof response !== "string") {
     throw new Error("Empty or invalid response");
   }
 
   let cleaned = response.trim();
+
+  // Step 1: Strip markdown code blocks
   cleaned = stripMarkdownCodeBlocks(cleaned);
-  cleaned = removeProblematicCharacters(cleaned);
 
-  // Try balanced object/array extraction
-  const obj = findBalancedJson(cleaned, "{", "}");
-  const arr = findBalancedJson(cleaned, "[", "]");
+  // Step 2: Find JSON boundaries using balanced bracket matching
+  const jsonObjectMatch = findBalancedJson(cleaned, "{", "}");
+  const jsonArrayMatch = findBalancedJson(cleaned, "[", "]");
 
-  if (obj && arr) {
-    // choose earliest occurrence
-    const objIdx = cleaned.indexOf(obj);
-    const arrIdx = cleaned.indexOf(arr);
-    cleaned = objIdx !== -1 && arrIdx !== -1 ? (objIdx < arrIdx ? obj : arr) : obj || arr || cleaned;
-  } else if (obj) {
-    cleaned = obj;
-  } else if (arr) {
-    cleaned = arr;
+  // Determine which match to use based on position
+  if (jsonObjectMatch && jsonArrayMatch) {
+    const objectIndex = cleaned.indexOf(jsonObjectMatch);
+    const arrayIndex = cleaned.indexOf(jsonArrayMatch);
+    
+    if (objectIndex !== -1 && arrayIndex !== -1) {
+      cleaned = objectIndex < arrayIndex ? jsonObjectMatch : jsonArrayMatch;
+    } else if (objectIndex !== -1) {
+      cleaned = jsonObjectMatch;
+    } else {
+      cleaned = jsonArrayMatch;
+    }
+  } else if (jsonObjectMatch) {
+    cleaned = jsonObjectMatch;
+  } else if (jsonArrayMatch) {
+    cleaned = jsonArrayMatch;
   }
 
   return cleaned.trim();
 };
+
 
 /**
  * Cleans up typical JSON formatting issues produced by LLMs:
