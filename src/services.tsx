@@ -1041,10 +1041,32 @@ const polishContentHtml = (html: string): string => {
     );
   }
 
-  // 3. Enhance Lists (if they look like Key Takeaways but aren't styled)
-  // This is risky to do generally, but we can style ALL lists slightly better
-  // polished = polished.replace(/<ul>/gi, '<ul style="list-style: none; padding: 0; margin: 2rem 0;">'); 
-  // (Skipping list override to avoid breaking nav/other lists)
+  // 3. WALL OF TEXT DESTROYER (Split long paragraphs)
+  // Splits paragraphs > 400 chars into two shorter ones
+  polished = polished.replace(/<p>([^<]+)<\/p>/g, (match, text) => {
+    if (text.length > 400) {
+      const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+      const mid = Math.ceil(sentences.length / 2);
+      const part1 = sentences.slice(0, mid).join('').trim();
+      const part2 = sentences.slice(mid).join('').trim();
+      return `<p>${part1}</p><p>${part2}</p>`;
+    }
+    return match;
+  });
+
+  // 4. NUKE AI PHRASES (Last line of defense)
+  const bannedPhrases = [
+    'In conclusion,', 'In conclusion', 'It is important to note that',
+    'delve into', 'tapestry of', 'It is worth noting that',
+    'In summarry,', 'To summarize,', 'comprehensive guide to'
+  ];
+
+  bannedPhrases.forEach(phrase => {
+    // Replace with empty string or slight rephrase if needed, but empty is safer for headers.
+    // For start of sentences, we might want to capitalize next word, but simpler is better.
+    const re = new RegExp(`\\b${phrase}\\b`, 'gi');
+    polished = polished.replace(re, '');
+  });
 
   return polished;
 };
