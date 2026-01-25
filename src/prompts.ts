@@ -691,6 +691,54 @@ export function buildPrompt(promptKey: keyof typeof PROMPT_TEMPLATES | string, a
   }
 }
 
+// Add this to your PROMPT_TEMPLATES object in prompts.ts
+
+content_health_analyzer: {
+    systemInstruction: `You are a SOTA content health analyzer specializing in SEO and content quality assessment. 
+Analyze web content for:
+- Content freshness and relevance
+- SEO optimization gaps
+- Structural issues (headings, paragraphs, lists)
+- Internal linking opportunities
+- E-E-A-T signals
+- Readability and engagement
+Return a structured JSON analysis.`,
+    
+    userPrompt: (crawledContent: string, pageUrl: string, pageTitle: string) => `
+Analyze this webpage content for optimization opportunities:
+
+**URL:** ${pageUrl}
+**Title:** ${pageTitle}
+
+**Content:**
+${crawledContent?.substring(0, 8000) || 'No content available'}
+
+Return JSON with this exact structure:
+{
+    "healthScore": 0-100,
+    "updatePriority": "Critical" | "High" | "Medium" | "Low" | "Healthy",
+    "justification": "Brief explanation of the score",
+    "issues": [
+        {
+            "type": "seo" | "content" | "structure" | "freshness" | "eeat",
+            "severity": "high" | "medium" | "low",
+            "description": "What's wrong",
+            "recommendation": "How to fix it"
+        }
+    ],
+    "opportunities": [
+        "Opportunity 1",
+        "Opportunity 2"
+    ],
+    "suggestedKeywords": ["keyword1", "keyword2"],
+    "estimatedWordCount": number,
+    "contentAge": "fresh" | "moderate" | "stale" | "unknown"
+}
+
+Be specific and actionable in recommendations.`
+},
+
+
 // ==================== CONSTANTS & UTILITIES ====================
 export const PROMPT_CONSTANTS = {
   BANNED_PHRASES: BANNED_AI_PHRASES,
