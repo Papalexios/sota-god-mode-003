@@ -21,9 +21,7 @@ import {
   generateReferencesHtml,
   detectCategory,
   determineAuthorityLevel,
-  REFERENCE_CATEGORIES,
-  VerifiedReference,
-  ReferenceCategory
+  REFERENCE_CATEGORIES
 } from './ReferenceService';
 
 // Internal Link Orchestrator
