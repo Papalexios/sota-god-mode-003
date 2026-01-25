@@ -140,15 +140,46 @@ const analytics = new AnalyticsEngine();
 
 /**
  * Safely parse AI response to JSON with multiple fallback strategies
+ * @param response - Raw AI response string
+ * @param aiRepairer - Optional async function to repair broken JSON
+ * @param fallback - Optional fallback value if all parsing fails
+ * @returns Parsed JSON or fallback/null
  */
-const safeParseAIResponse = async <T>(
+const safeParseAIResponse = async <T,>(
   response: string,
   aiRepairer?: (broken: string) => Promise<string>,
   fallback?: T
 ): Promise<T | null> => {
-  // Use the utility function from utils.ts
-  return safeParseJSON<T>(response, fallback);
+  if (!response || typeof response !== 'string') {
+    console.warn('[safeParseAIResponse] Invalid input');
+    return fallback ?? null;
+  }
+
+  // Step 1: Try synchronous safe parse first
+  const quickResult = safeParseJSON<T>(response, fallback);
+  if (quickResult !== null) {
+    return quickResult;
+  }
+
+  // Step 2: If aiRepairer provided, try AI repair
+  if (aiRepairer) {
+    try {
+      console.log('[safeParseAIResponse] Attempting AI repair...');
+      const repaired = await aiRepairer(response);
+      const repairedResult = safeParseJSON<T>(repaired, fallback);
+      if (repairedResult !== null) {
+        console.log('[safeParseAIResponse] AI repair successful');
+        return repairedResult;
+      }
+    } catch (e) {
+      console.error('[safeParseAIResponse] AI repair failed:', e);
+    }
+  }
+
+  // Step 3: Return fallback
+  return fallback ?? null;
 };
+
 
 // ==================== YOUTUBE VIDEO FINDER ====================
 
