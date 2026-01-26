@@ -1708,15 +1708,8 @@ const App: React.FC = () => {
           <SidebarNav activeView={activeView} onNavClick={setActiveView} />
         </aside>
 
-        <main className="main-content">
-          {/* Theme Selector Integration */}
-          <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 100 }}>
-            <ThemeSelector
-              currentThemeId="glassmorphism-dark"
-              onThemeChange={(theme) => console.log('Theme changed:', theme)}
-              previewContent=""
-            />
-          </div>
+        <div className="main-content-wrapper">
+          <div className="content-placeholder">Content</div>
 
           {/* SETUP VIEW */}
           {activeView === 'setup' && (
@@ -3155,7 +3148,8 @@ const App: React.FC = () => {
                   </div>
                 </div>
               )}
-            </main>
+            </div>
+            </div>
       </div>
 
       <AppFooter />
