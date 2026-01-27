@@ -13,46 +13,46 @@ import ReactQuill from 'react-quill';
 // =============================================================================
 
 function ensureArraySafe<T>(value: unknown, fallback: T[] = []): T[] {
-  if (Array.isArray(value)) return value;
-  if (value === null || value === undefined) return fallback;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return fallback;
-    if (trimmed.startsWith('[')) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) return parsed;
-      } catch (e) {}
+    if (Array.isArray(value)) return value;
+    if (value === null || value === undefined) return fallback;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return fallback;
+        if (trimmed.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (Array.isArray(parsed)) return parsed;
+            } catch (e) { }
+        }
+        if (trimmed.includes(',')) return trimmed.split(',').map(s => s.trim()).filter(Boolean) as T[];
+        return [trimmed] as T[];
     }
-    if (trimmed.includes(',')) return trimmed.split(',').map(s => s.trim()).filter(Boolean) as T[];
-    return [trimmed] as T[];
-  }
-  return [value] as T[];
+    return [value] as T[];
 }
 
 // Safe slice that ensures array first
 function safeSlice<T>(value: unknown, start?: number, end?: number): T[] {
-  const arr = ensureArraySafe<T>(value, []);
-  return arr.slice(start, end);
+    const arr = ensureArraySafe<T>(value, []);
+    return arr.slice(start, end);
 }
 
 // Safe join that ensures array first and filters nullish values
 function safeJoin(value: unknown, separator: string = ', '): string {
-  const arr = ensureArraySafe<unknown>(value, []);
-  return arr.filter(Boolean).join(separator);
+    const arr = ensureArraySafe<unknown>(value, []);
+    return arr.filter(Boolean).join(separator);
 }
 
 export const CheckIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
 );
 
 export const XIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
 );
 
-const SetupIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>;
-const StrategyIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>;
-const ReviewIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
+const SetupIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>;
+const StrategyIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon"><path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" /></svg>;
+const ReviewIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>;
 
 export const SidebarNav = memo(({ activeView, onNavClick }: { activeView: string; onNavClick: (view: string) => void; }) => {
     const navItems = [
@@ -97,8 +97,8 @@ export const ApiKeyInput = memo(({ provider, value, onChange, status, name, plac
     if (status === 'valid' && !isEditing) {
         return (
             <div className="api-key-group">
-                <input type="text" readOnly value={`**** **** **** ${value.slice(-4)}`} disabled style={{opacity: 0.7}} />
-                <button onClick={onEdit} className="btn-edit-key" style={{position: 'absolute', right: '40px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600'}} aria-label={`Edit ${provider} API Key`}>EDIT</button>
+                <input type="text" readOnly value={`**** **** **** ${value.slice(-4)}`} disabled style={{ opacity: 0.7 }} />
+                <button onClick={onEdit} className="btn-edit-key" style={{ position: 'absolute', right: '40px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600' }} aria-label={`Edit ${provider} API Key`}>EDIT</button>
             </div>
         );
     }
@@ -130,14 +130,14 @@ const ScoreGauge = ({ score, size = 80 }: { score: number; size?: number }) => {
     const circumference = 2 * Math.PI * radius;
     const offset = circumference - (score / 100) * circumference;
     let strokeColor = '#10B981';
-    if (score < 85) strokeColor = '#F59E0B'; 
+    if (score < 85) strokeColor = '#F59E0B';
     if (score < 50) strokeColor = '#EF4444';
 
     return (
         <div className="score-gauge" style={{ width: size, height: size, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg className="score-gauge-svg" width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{transform: 'rotate(-90deg)'}}>
-                <circle className="gauge-bg" cx={size/2} cy={size/2} r={radius} stroke="rgba(255,255,255,0.05)" strokeWidth="6" fill="none" />
-                <circle className="gauge-fg" cx={size/2} cy={size/2} r={radius} stroke={strokeColor} strokeWidth="6" fill="none" strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" style={{transition: 'stroke-dashoffset 1s ease'}} />
+            <svg className="score-gauge-svg" width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
+                <circle className="gauge-bg" cx={size / 2} cy={size / 2} r={radius} stroke="rgba(255,255,255,0.05)" strokeWidth="6" fill="none" />
+                <circle className="gauge-fg" cx={size / 2} cy={size / 2} r={radius} stroke={strokeColor} strokeWidth="6" fill="none" strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s ease' }} />
             </svg>
             <span className="score-gauge-text" style={{ color: strokeColor, position: 'absolute', fontSize: size * 0.28, fontWeight: '800', letterSpacing: '-1px' }}>{score}</span>
         </div>
@@ -160,7 +160,7 @@ export const RankGuardian = memo(({ item, editedSeo, editedContent, onSeoChange,
     if (!item.generatedContent) return <div className="guardian-card"><h4>No Analysis Data</h4></div>;
 
     const { title, metaDescription, slug } = editedSeo;
-    
+
     // CRITICAL FIX: Use ensureArraySafe to prevent "t?.slice(...).join is not a function" error
     const primaryKeyword = item.generatedContent.primaryKeyword || '';
     const semanticKeywords = ensureArraySafe<string>(item.generatedContent.semanticKeywords, []);
@@ -174,7 +174,7 @@ export const RankGuardian = memo(({ item, editedSeo, editedContent, onSeoChange,
         const keywordLower = (primaryKeyword || '').toLowerCase();
         const first100Words = (tempDiv.textContent || '').substring(0, 800).split(/\s+/).slice(0, 100).join(' ').toLowerCase();
         const keywordInFirst100 = !!keywordLower && first100Words.includes(keywordLower);
-        
+
         const contentAnalysis = {
             wordCount,
             readabilityScore: calculateFleschReadability(textContent),
@@ -185,65 +185,65 @@ export const RankGuardian = memo(({ item, editedSeo, editedContent, onSeoChange,
         };
 
         const checks: SeoCheck[] = [
-            { 
-                id: 'titleLength', 
-                valid: title.length >= 50 && title.length <= 60, 
-                value: title.length, 
-                text: 'Title Length (50-60)', 
-                category: 'Meta', 
-                priority: 'High', 
-                advice: 'Strictly 50-60 characters for optimal CTR.' 
+            {
+                id: 'titleLength',
+                valid: title.length >= 50 && title.length <= 60,
+                value: title.length,
+                text: 'Title Length (50-60)',
+                category: 'Meta',
+                priority: 'High',
+                advice: 'Strictly 50-60 characters for optimal CTR.'
             },
-            { 
-                id: 'metaLength', 
-                valid: metaDescription.length >= 135 && metaDescription.length <= 150, 
-                value: metaDescription.length, 
-                text: 'Meta Description (135-150)', 
-                category: 'Meta', 
-                priority: 'High', 
-                advice: 'Strictly 135-150 characters required.' 
+            {
+                id: 'metaLength',
+                valid: metaDescription.length >= 135 && metaDescription.length <= 150,
+                value: metaDescription.length,
+                text: 'Meta Description (135-150)',
+                category: 'Meta',
+                priority: 'High',
+                advice: 'Strictly 135-150 characters required.'
             },
-            { 
-                id: 'wordCount', 
-                valid: wordCount >= 2200 && wordCount <= 2800, 
-                value: wordCount, 
-                text: `Word Count (2200-2800)`, 
-                category: 'Content', 
-                priority: 'High', 
-                advice: `Must be between 2200 and 2800 words.` 
+            {
+                id: 'wordCount',
+                valid: wordCount >= 2200 && wordCount <= 2800,
+                value: wordCount,
+                text: `Word Count (2200-2800)`,
+                category: 'Content',
+                priority: 'High',
+                advice: `Must be between 2200 and 2800 words.`
             },
-            { 
-                id: 'keywordInFirstP', 
-                valid: keywordInFirst100, 
-                value: keywordInFirst100 ? 'Yes' : 'No', 
-                text: 'Keyword in First 100 Words', 
-                category: 'Content', 
-                priority: 'High', 
-                advice: 'Primary keyword must appear immediately.' 
+            {
+                id: 'keywordInFirstP',
+                valid: keywordInFirst100,
+                value: keywordInFirst100 ? 'Yes' : 'No',
+                text: 'Keyword in First 100 Words',
+                category: 'Content',
+                priority: 'High',
+                advice: 'Primary keyword must appear immediately.'
             },
-            { 
-                id: 'verificationFooter', 
-                valid: editedContent.includes('verification-footer-sota'), 
-                value: editedContent.includes('verification-footer-sota') ? 'Yes' : 'No', 
-                text: 'Scientific Verification', 
-                category: 'Trust & E-E-A-T', 
-                priority: 'High', 
-                advice: 'Content must have the scientific verification footer.' 
+            {
+                id: 'verificationFooter',
+                valid: editedContent.includes('verification-footer-sota'),
+                value: editedContent.includes('verification-footer-sota') ? 'Yes' : 'No',
+                text: 'Scientific Verification',
+                category: 'Trust & E-E-A-T',
+                priority: 'High',
+                advice: 'Content must have the scientific verification footer.'
             },
-             { 
-                id: 'links', 
-                valid: contentAnalysis.linkCount >= 6 && contentAnalysis.linkCount <= 12, 
-                value: contentAnalysis.linkCount, 
-                text: `Internal Links (6-12)`, 
-                category: 'Content', 
-                priority: 'Medium', 
-                advice: 'Must have 6-12 high-quality internal links.' 
+            {
+                id: 'links',
+                valid: contentAnalysis.linkCount >= 6 && contentAnalysis.linkCount <= 12,
+                value: contentAnalysis.linkCount,
+                text: `Internal Links (6-12)`,
+                category: 'Content',
+                priority: 'Medium',
+                advice: 'Must have 6-12 high-quality internal links.'
             },
         ];
-        
+
         return { contentAnalysis, checks };
     }, [title, metaDescription, primaryKeyword, editedContent]);
-    
+
     const { contentAnalysis, checks } = analysis;
     const readabilityVerdict = getReadabilityVerdict(contentAnalysis.readabilityScore);
 
@@ -253,87 +253,87 @@ export const RankGuardian = memo(({ item, editedSeo, editedContent, onSeoChange,
         const overallScore = Math.round(seoScore * 0.6 + contentAnalysis.readabilityScore * 0.4);
         return { seoScore, overallScore };
     }, [checks, contentAnalysis.readabilityScore]);
-    
+
     const actionItems = checks.filter(c => !c.valid).sort((a, b) => (a.priority === 'High' ? -1 : 1));
 
     return (
         <div className="rank-guardian-reloaded">
-             <div className="guardian-header">
+            <div className="guardian-header">
                 <div className="guardian-main-score">
                     <ScoreGauge score={scores.overallScore} size={120} />
                     <div className="main-score-text">
-                        <h4 style={{color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.9rem'}}>Overall Optimization</h4>
-                        <p style={{fontSize: '2.2rem', fontWeight: '800', color: 'white', lineHeight: 1}}>
+                        <h4 style={{ color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.9rem' }}>Overall Optimization</h4>
+                        <p style={{ fontSize: '2.2rem', fontWeight: '800', color: 'white', lineHeight: 1 }}>
                             {scores.overallScore >= 85 ? 'SOTA Ready' : 'Optimization Needed'}
                         </p>
                     </div>
                 </div>
-                <div style={{display: 'flex', gap: '2rem', marginRight: '2rem'}}>
-                    <div style={{textAlign: 'center'}}>
-                        <div style={{fontSize: '1.5rem', fontWeight: '700', color: scores.seoScore >= 85 ? '#10B981' : '#F59E0B'}}>{scores.seoScore}</div>
-                        <div style={{fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748B', fontWeight: '600'}}>SEO Score</div>
+                <div style={{ display: 'flex', gap: '2rem', marginRight: '2rem' }}>
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: scores.seoScore >= 85 ? '#10B981' : '#F59E0B' }}>{scores.seoScore}</div>
+                        <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748B', fontWeight: '600' }}>SEO Score</div>
                     </div>
-                     <div style={{textAlign: 'center'}}>
-                        <div style={{fontSize: '1.5rem', fontWeight: '700', color: contentAnalysis.readabilityScore >= 85 ? '#10B981' : '#F59E0B'}}>{contentAnalysis.readabilityScore}</div>
-                        <div style={{fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748B', fontWeight: '600'}}>Readability</div>
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: contentAnalysis.readabilityScore >= 85 ? '#10B981' : '#F59E0B' }}>{contentAnalysis.readabilityScore}</div>
+                        <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748B', fontWeight: '600' }}>Readability</div>
                     </div>
                 </div>
             </div>
 
             <div className="guardian-grid">
                 <div className="guardian-card">
-                     <h4>Metadata & SERP</h4>
-                     <div className="seo-inputs">
+                    <h4>Metadata & SERP</h4>
+                    <div className="seo-inputs">
                         <div className="form-group">
                             <label>SEO Title (50-60 chars)</label>
-                            <input type="text" value={title} onChange={onSeoChange} name="title" style={{borderColor: (title.length >= 50 && title.length <= 60) ? '#10B981' : '#DC2626'}} />
-                            <div style={{display: 'flex', justifyContent: 'space-between', marginTop: '4px'}}>
-                                <span style={{fontSize: '0.75rem', color: (title.length >= 50 && title.length <= 60) ? '#10B981' : '#DC2626'}}>{title.length} / 60</span>
-                                <button className="btn-regenerate" onClick={() => onRegenerate('title')} style={{background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.75rem', cursor: 'pointer'}}>Regenerate</button>
+                            <input type="text" value={title} onChange={onSeoChange} name="title" style={{ borderColor: (title.length >= 50 && title.length <= 60) ? '#10B981' : '#DC2626' }} />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                                <span style={{ fontSize: '0.75rem', color: (title.length >= 50 && title.length <= 60) ? '#10B981' : '#DC2626' }}>{title.length} / 60</span>
+                                <button className="btn-regenerate" onClick={() => onRegenerate('title')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.75rem', cursor: 'pointer' }}>Regenerate</button>
                             </div>
                         </div>
                         <div className="form-group">
                             <label>Meta Description (135-150 chars)</label>
-                            <textarea value={metaDescription} onChange={onSeoChange} name="metaDescription" rows={3} style={{borderColor: (metaDescription.length >= 135 && metaDescription.length <= 150) ? '#10B981' : '#DC2626'}}></textarea>
-                             <div style={{display: 'flex', justifyContent: 'space-between', marginTop: '4px'}}>
-                                <span style={{fontSize: '0.75rem', color: (metaDescription.length >= 135 && metaDescription.length <= 150) ? '#10B981' : '#DC2626'}}>{metaDescription.length} / 150</span>
-                                <button className="btn-regenerate" onClick={() => onRegenerate('meta')} style={{background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.75rem', cursor: 'pointer'}}>Regenerate</button>
+                            <textarea value={metaDescription} onChange={onSeoChange} name="metaDescription" rows={3} style={{ borderColor: (metaDescription.length >= 135 && metaDescription.length <= 150) ? '#10B981' : '#DC2626' }}></textarea>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                                <span style={{ fontSize: '0.75rem', color: (metaDescription.length >= 135 && metaDescription.length <= 150) ? '#10B981' : '#DC2626' }}>{metaDescription.length} / 150</span>
+                                <button className="btn-regenerate" onClick={() => onRegenerate('meta')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.75rem', cursor: 'pointer' }}>Regenerate</button>
                             </div>
                         </div>
                     </div>
                 </div>
-                
-                 <div className="guardian-card">
+
+                <div className="guardian-card">
                     <h4>Priority Actions</h4>
-                     {actionItems.length === 0 ? (
-                        <div style={{textAlign: 'center', padding: '2rem', color: '#10B981'}}>
-                            <span style={{fontSize: '2.5rem'}}>🚀</span>
-                            <p style={{fontWeight: '700', marginTop: '1rem'}}>All SOTA Checks Passed!</p>
+                    {actionItems.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2rem', color: '#10B981' }}>
+                            <span style={{ fontSize: '2.5rem' }}>🚀</span>
+                            <p style={{ fontWeight: '700', marginTop: '1rem' }}>All SOTA Checks Passed!</p>
                         </div>
                     ) : (
-                        <ul className="action-item-list" style={{listStyle: 'none', padding: 0}}>
+                        <ul className="action-item-list" style={{ listStyle: 'none', padding: 0 }}>
                             {actionItems.map(item => (
                                 <li key={item.id} className={`priority-${item.priority}`}>
-                                    <h5 style={{color: 'white', fontSize: '0.9rem', fontWeight: '700', marginBottom: '0.2rem'}}>{item.text}</h5>
-                                    <p style={{color: '#94A3B8', fontSize: '0.8rem', margin: 0}}>{item.advice}</p>
+                                    <h5 style={{ color: 'white', fontSize: '0.9rem', fontWeight: '700', marginBottom: '0.2rem' }}>{item.text}</h5>
+                                    <p style={{ color: '#94A3B8', fontSize: '0.8rem', margin: 0 }}>{item.advice}</p>
                                 </li>
                             ))}
                         </ul>
                     )}
                 </div>
-                
+
                 <div className="guardian-card full-width">
                     <h4>Deep Analysis Checklist</h4>
-                    <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem'}}>
-                       {checks.map(check => (
-                           <div key={check.id} style={{display: 'flex', gap: '0.8rem', alignItems: 'center', padding: '0.8rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid var(--border-subtle)'}}>
-                                <div style={{color: check.valid ? '#10B981' : '#DC2626', fontSize: '1.2rem'}}>{check.valid ? <CheckIcon /> : <XIcon />}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+                        {checks.map(check => (
+                            <div key={check.id} style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', padding: '0.8rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                                <div style={{ color: check.valid ? '#10B981' : '#DC2626', fontSize: '1.2rem' }}>{check.valid ? <CheckIcon /> : <XIcon />}</div>
                                 <div>
-                                    <div style={{color: 'white', fontWeight: '600', fontSize: '0.85rem'}}>{check.text}</div>
-                                    <div style={{color: '#64748B', fontSize: '0.75rem'}}>{check.valid ? 'Passed' : check.advice.substring(0, 40) + '...'}</div>
+                                    <div style={{ color: 'white', fontWeight: '600', fontSize: '0.85rem' }}>{check.text}</div>
+                                    <div style={{ color: '#64748B', fontSize: '0.75rem' }}>{check.valid ? 'Passed' : check.advice.substring(0, 40) + '...'}</div>
                                 </div>
-                           </div>
-                       ))}
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
@@ -346,7 +346,7 @@ export const SkeletonLoader = ({ rows = 5, columns = 5 }: { rows?: number, colum
         {Array.from({ length: rows }).map((_, i) => (
             <tr key={i}>
                 {Array.from({ length: columns }).map((_, j) => (
-                    <td key={j}><div style={{height: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', animation: 'pulse 1.5s infinite'}}></div></td>
+                    <td key={j}><div style={{ height: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', animation: 'pulse 1.5s infinite' }}></div></td>
                 ))}
             </tr>
         ))}
@@ -406,7 +406,7 @@ export const ReviewModal = ({ item, onClose, onSaveChanges, wpConfig, wpPassword
         toolbar: [
             [{ 'header': [2, 3, 4, false] }], // No H1
             ['bold', 'italic', 'underline', 'strike', 'blockquote'],
-            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+            [{ 'list': 'ordered' }, { 'list': 'bullet' }],
             [{ 'align': [] }],
             ['link', 'image', 'video'],
             ['clean']
@@ -439,7 +439,7 @@ export const ReviewModal = ({ item, onClose, onSaveChanges, wpConfig, wpPassword
             // CRITICAL FIX: Ensure serpData is always an array
             const serpData = ensureArraySafe(item.generatedContent.serpData, []);
             const summary = editedContent.replace(/<[^>]+>/g, ' ').substring(0, 500);
-                  const competitorTitles = safeSlice<string>(serpData.map((d: any) => d?.title).filter(Boolean), 0, 5);
+            const competitorTitles = safeSlice<string>(serpData.map((d: any) => d?.title).filter(Boolean), 0, 5);
             const location = geoTargeting.enabled ? geoTargeting.location : null;
             const responseText = await callAI('seo_metadata_generator', [primaryKeyword, summary, strategy?.targetAudience, competitorTitles, location], 'json');
             const aiRepairer = (brokenText: string) => callAI('json_repair', [brokenText], 'json');
@@ -461,8 +461,11 @@ export const ReviewModal = ({ item, onClose, onSaveChanges, wpConfig, wpPassword
         const result = await publishItem(itemWithEdits, wpPassword, item.originalUrl ? 'publish' : publishAction);
         setWpPublishStatus(result.success ? 'success' : 'error');
         setWpPublishMessage(result.message);
-        if (result.success && result.link) setPublishedLink(result.link);
-        if (result.success && item.originalUrl) onPublishSuccess(item.originalUrl);
+        if (result.success && result.link) {
+            setPublishedLink(result.link);
+            // CRITICAL FIX: Pass the actual published URL to onPublishSuccess for BOTH new and updated posts
+            onPublishSuccess(result.link);
+        }
     };
 
     const TABS = ['Live Preview', 'Editor', 'Raw HTML', 'Assets', 'Rank Guardian', 'Raw JSON'];
@@ -485,10 +488,10 @@ export const ReviewModal = ({ item, onClose, onSaveChanges, wpConfig, wpPassword
             if (neuronTermFilter === 'unused') return terms.filter(t => !t.exists);
             return terms;
         };
-        return { 
-            h1: filterTerms(h1), 
-            h2: filterTerms(h2), 
-            basic: filterTerms(basic), 
+        return {
+            h1: filterTerms(h1),
+            h2: filterTerms(h2),
+            basic: filterTerms(basic),
             extended: filterTerms(extended),
             stats: {
                 h1: { total: h1.length, used: h1.filter(t => t.exists).length },
@@ -506,8 +509,8 @@ export const ReviewModal = ({ item, onClose, onSaveChanges, wpConfig, wpPassword
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
-                    <h3 style={{color: 'white', fontSize: '1rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em'}}>{item.title}</h3>
-                    <button className="modal-close-btn" onClick={onClose} style={{background: 'none', border: 'none', color: '#94A3B8', fontSize: '1.5rem', cursor: 'pointer'}}>&times;</button>
+                    <h3 style={{ color: 'white', fontSize: '1rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.title}</h3>
+                    <button className="modal-close-btn" onClick={onClose} style={{ background: 'none', border: 'none', color: '#94A3B8', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
                 </div>
                 <div className="review-tabs">
                     {TABS.map(tab => (
@@ -518,35 +521,35 @@ export const ReviewModal = ({ item, onClose, onSaveChanges, wpConfig, wpPassword
                     {activeTab === 'Live Preview' && <div className="live-preview" dangerouslySetInnerHTML={{ __html: editedContent }}></div>}
                     {activeTab === 'Editor' && (
                         <div className="editor-tab-container">
-                            <ReactQuill 
-                                theme="snow" 
-                                value={editedContent} 
-                                onChange={setEditedContent} 
+                            <ReactQuill
+                                theme="snow"
+                                value={editedContent}
+                                onChange={setEditedContent}
                                 modules={quillModules}
-                                style={{height: '100%'}} 
+                                style={{ height: '100%' }}
                             />
                         </div>
                     )}
                     {activeTab === 'Raw HTML' && (
-                        <div className="editor-tab-container" style={{padding: '1rem'}}>
-                            <p style={{color: '#94A3B8', marginBottom: '0.5rem', fontSize: '0.8rem'}}>Direct HTML editing. Use this to fix complex layouts if the Visual Editor breaks them.</p>
-                            <textarea 
-                                value={editedContent} 
+                        <div className="editor-tab-container" style={{ padding: '1rem' }}>
+                            <p style={{ color: '#94A3B8', marginBottom: '0.5rem', fontSize: '0.8rem' }}>Direct HTML editing. Use this to fix complex layouts if the Visual Editor breaks them.</p>
+                            <textarea
+                                value={editedContent}
                                 onChange={(e) => setEditedContent(e.target.value)}
                                 style={{
-                                    width: '100%', height: '100%', background: '#1E1E1E', color: '#D4D4D4', 
+                                    width: '100%', height: '100%', background: '#1E1E1E', color: '#D4D4D4',
                                     fontFamily: 'monospace', padding: '1rem', border: 'none', resize: 'none'
                                 }}
                             />
                         </div>
                     )}
                     {activeTab === 'Assets' && (
-                        <div className="assets-tab-container" style={{padding: '2rem', overflowY: 'auto', height: '100%', background: '#050507'}}>
-                            <div className="image-assets-grid" style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '2rem'}}>
+                        <div className="assets-tab-container" style={{ padding: '2rem', overflowY: 'auto', height: '100%', background: '#050507' }}>
+                            <div className="image-assets-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '2rem' }}>
                                 {imageDetails.map((image: any, index: number) => (
                                     image?.generatedImageSrc && <div key={index} className="image-asset-card">
-                                        <img src={image.generatedImageSrc} alt={image.altText || ''} style={{width: '100%', height: '200px', objectFit: 'cover'}} />
-                                        <div style={{padding: '1rem'}}><p style={{color: '#94A3B8', fontSize: '0.8rem'}}>{image.prompt || ''}</p></div>
+                                        <img src={image.generatedImageSrc} alt={image.altText || ''} style={{ width: '100%', height: '200px', objectFit: 'cover' }} />
+                                        <div style={{ padding: '1rem' }}><p style={{ color: '#94A3B8', fontSize: '0.8rem' }}>{image.prompt || ''}</p></div>
                                     </div>
                                 ))}
                             </div>
@@ -554,17 +557,17 @@ export const ReviewModal = ({ item, onClose, onSaveChanges, wpConfig, wpPassword
                     )}
                     {activeTab === 'Neuron NLP' && (
                         <div className="rank-guardian-container">
-                             <div className="neuron-filter-bar">
-                                <h4 style={{color: '#E2E8F0', margin: '0 0 0 1rem'}}>NEURONWRITER INTELLIGENCE</h4>
-                                <div style={{display: 'flex', gap: '0.5rem', marginRight: '1rem'}}>
+                            <div className="neuron-filter-bar">
+                                <h4 style={{ color: '#E2E8F0', margin: '0 0 0 1rem' }}>NEURONWRITER INTELLIGENCE</h4>
+                                <div style={{ display: 'flex', gap: '0.5rem', marginRight: '1rem' }}>
                                     {[
-                                        {id: 'all', label: 'All Terms'}, 
-                                        {id: 'used', label: '✅ Used'}, 
-                                        {id: 'unused', label: '⚠️ Unused'}
+                                        { id: 'all', label: 'All Terms' },
+                                        { id: 'used', label: '✅ Used' },
+                                        { id: 'unused', label: '⚠️ Unused' }
                                     ].map(f => (
-                                        <button 
-                                            key={f.id} 
-                                            onClick={() => setNeuronTermFilter(f.id as any)} 
+                                        <button
+                                            key={f.id}
+                                            onClick={() => setNeuronTermFilter(f.id as any)}
                                             className={`btn ${neuronTermFilter === f.id ? 'btn' : 'btn-secondary'}`}
                                             style={{
                                                 border: neuronTermFilter === f.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
@@ -578,7 +581,7 @@ export const ReviewModal = ({ item, onClose, onSaveChanges, wpConfig, wpPassword
                                 </div>
                             </div>
                             {neuronAnalysisView ? (
-                                <div className="guardian-grid" style={{marginTop: '1rem', maxWidth: '1600px', margin: '0 auto'}}>
+                                <div className="guardian-grid" style={{ marginTop: '1rem', maxWidth: '1600px', margin: '0 auto' }}>
                                     <div className="guardian-card">
                                         <div className="neuron-section-title">META & H1 TERMS ({neuronAnalysisView.stats.h1.used}/{neuronAnalysisView.stats.h1.total})</div>
                                         <div className="nlp-term-cloud">{neuronAnalysisView.h1.map((t, i) => <span key={i} className={`badge ${t.exists ? 'pillar' : 'standard'}`}>{t.term}</span>)}</div>
@@ -591,29 +594,29 @@ export const ReviewModal = ({ item, onClose, onSaveChanges, wpConfig, wpPassword
                                         <div className="neuron-section-title">BASIC CONTENT TERMS ({neuronAnalysisView.stats.basic.used}/{neuronAnalysisView.stats.basic.total})</div>
                                         <div className="nlp-term-cloud">{neuronAnalysisView.basic.map((t, i) => <span key={i} className={`badge ${t.exists ? 'pillar' : 'standard'}`}>{t.term}</span>)}</div>
                                     </div>
-                                     <div className="guardian-card full-width">
+                                    <div className="guardian-card full-width">
                                         <div className="neuron-section-title">EXTENDED CONTENT TERMS ({neuronAnalysisView.stats.extended.used}/{neuronAnalysisView.stats.extended.total})</div>
                                         <div className="nlp-term-cloud">{neuronAnalysisView.extended.map((t, i) => <span key={i} className={`badge ${t.exists ? 'pillar' : 'standard'}`}>{t.term}</span>)}</div>
                                     </div>
                                 </div>
-                            ) : <div style={{padding: '3rem', textAlign: 'center', color: '#64748B'}}>No NeuronWriter data available. Ensure you have enabled the integration in Setup.</div>}
+                            ) : <div style={{ padding: '3rem', textAlign: 'center', color: '#64748B' }}>No NeuronWriter data available. Ensure you have enabled the integration in Setup.</div>}
                         </div>
                     )}
                     {activeTab === 'Rank Guardian' && (
                         <div className="rank-guardian-container">
-                            <RankGuardian item={item} editedSeo={editedSeo} editedContent={editedContent} onSeoChange={handleSeoChange} onUrlChange={e => setEditedSeo(p => ({...p, slug: e.target.value}))} onRegenerate={handleRegenerateSeo} isRegenerating={isRegenerating} isUpdate={!!item.originalUrl} geoTargeting={geoTargeting} />
+                            <RankGuardian item={item} editedSeo={editedSeo} editedContent={editedContent} onSeoChange={handleSeoChange} onUrlChange={e => setEditedSeo(p => ({ ...p, slug: e.target.value }))} onRegenerate={handleRegenerateSeo} isRegenerating={isRegenerating} isUpdate={!!item.originalUrl} geoTargeting={geoTargeting} />
                         </div>
                     )}
-                     {activeTab === 'Raw JSON' && <pre style={{padding: '2rem', color: '#64748B', overflow: 'auto'}}>{JSON.stringify(item.generatedContent, null, 2)}</pre>}
+                    {activeTab === 'Raw JSON' && <pre style={{ padding: '2rem', color: '#64748B', overflow: 'auto' }}>{JSON.stringify(item.generatedContent, null, 2)}</pre>}
                 </div>
                 <div className="modal-footer">
-                    <div style={{marginRight: 'auto', display: 'flex', alignItems: 'center', gap: '1rem'}}>
+                    <div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         {wpPublishMessage && <span className={wpPublishStatus === 'error' ? 'error' : 'success'}>{wpPublishMessage}</span>}
-                        {publishedLink && <a href={publishedLink} target="_blank" rel="noopener noreferrer" className="btn btn-small" style={{backgroundColor: 'var(--accent-success)', color: 'white', textDecoration: 'none'}}>View Post &rarr;</a>}
+                        {publishedLink && <a href={publishedLink} target="_blank" rel="noopener noreferrer" className="btn btn-small" style={{ backgroundColor: 'var(--accent-success)', color: 'white', textDecoration: 'none' }}>View Post &rarr;</a>}
                     </div>
                     <button className="btn btn-secondary" onClick={() => onSaveChanges(item.id, editedSeo, editedContent)}>Save Changes</button>
-                    <div style={{display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '8px'}}>
-                        <select value={publishAction} onChange={e => setPublishAction(e.target.value as any)} style={{background: 'transparent', border: 'none', color: 'white'}}><option value="publish">Publish</option><option value="draft">Draft</option></select>
+                    <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '8px' }}>
+                        <select value={publishAction} onChange={e => setPublishAction(e.target.value as any)} style={{ background: 'transparent', border: 'none', color: 'white' }}><option value="publish">Publish</option><option value="draft">Draft</option></select>
                         <button className="btn" onClick={handlePublishToWordPress} disabled={wpPublishStatus === 'publishing'}>{wpPublishStatus === 'publishing' ? 'Publishing...' : 'Publish'}</button>
                     </div>
                 </div>
@@ -655,7 +658,7 @@ export const BulkPublishModal = ({ items, onClose, publishItem, wpConfig, wpPass
             setProgress({ current: i + 1, total: safeItems.length });
             setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Publishing: ${item.title}...`]);
             try {
-                const status = 'publish'; 
+                const status = 'publish';
                 const result = await publishItem(item, wpPassword, status);
                 if (result.success) {
                     setLogs(prev => [...prev, `✅ Success: ${item.title}`]);
@@ -675,61 +678,61 @@ export const BulkPublishModal = ({ items, onClose, publishItem, wpConfig, wpPass
 
     return (
         <div className="modal-overlay" onClick={isPublishing ? undefined : onClose}>
-            <div className="modal-content" style={{maxWidth: '700px', height: 'auto', maxHeight: '85vh', padding: '2rem', display: 'flex', flexDirection: 'column', background: '#0F172A', border: '1px solid #334155', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'}}>
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
-                    <h2 className="gradient-headline" style={{fontSize: '1.5rem', margin: 0}}>Bulk Publisher</h2>
-                    {!isPublishing && <button onClick={onClose} style={{background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: '1.5rem'}}>&times;</button>}
+            <div className="modal-content" style={{ maxWidth: '700px', height: 'auto', maxHeight: '85vh', padding: '2rem', display: 'flex', flexDirection: 'column', background: '#0F172A', border: '1px solid #334155', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <h2 className="gradient-headline" style={{ fontSize: '1.5rem', margin: 0 }}>Bulk Publisher</h2>
+                    {!isPublishing && <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: '1.5rem' }}>&times;</button>}
                 </div>
-                <div style={{marginBottom: '1.5rem', flex: 1, minHeight: '300px', overflowY: 'auto', background: '#020617', padding: '1.5rem', borderRadius: '12px', fontFamily: 'monospace', fontSize: '0.85rem', color: '#E2E8F0', border: '1px solid #1E293B', boxShadow: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.3)'}}>
+                <div style={{ marginBottom: '1.5rem', flex: 1, minHeight: '300px', overflowY: 'auto', background: '#020617', padding: '1.5rem', borderRadius: '12px', fontFamily: 'monospace', fontSize: '0.85rem', color: '#E2E8F0', border: '1px solid #1E293B', boxShadow: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.3)' }}>
                     {logs.length === 0 ? (
-                        <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#64748B'}}>
-                            <p style={{marginBottom: '1rem'}}>Ready to publish {safeItems.length} items to:</p>
-                            <div style={{background: '#1E293B', padding: '0.5rem 1rem', borderRadius: '6px', color: '#94A3B8', fontSize: '0.9rem'}}>{wpConfig.url}</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#64748B' }}>
+                            <p style={{ marginBottom: '1rem' }}>Ready to publish {safeItems.length} items to:</p>
+                            <div style={{ background: '#1E293B', padding: '0.5rem 1rem', borderRadius: '6px', color: '#94A3B8', fontSize: '0.9rem' }}>{wpConfig.url}</div>
                         </div>
                     ) : (
-                        logs.map((log, i) => <div key={i} style={{marginBottom: '6px', lineHeight: '1.4', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '4px'}}>{log}</div>)
+                        logs.map((log, i) => <div key={i} style={{ marginBottom: '6px', lineHeight: '1.4', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '4px' }}>{log}</div>)
                     )}
                 </div>
                 {isPublishing && (
-                    <div style={{marginBottom: '1.5rem'}}>
-                        <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#94A3B8'}}>
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#94A3B8' }}>
                             <span>Progress</span>
                             <span>{Math.round((progress.current / Math.max(1, progress.total)) * 100)}%</span>
                         </div>
-                        <div style={{width: '100%', height: '8px', background: '#1E293B', borderRadius: '4px', overflow: 'hidden'}}>
-                            <div style={{width: `${(progress.current / Math.max(1, progress.total)) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #3B82F6, #8B5CF6)', transition: 'width 0.3s ease-out'}} />
+                        <div style={{ width: '100%', height: '8px', background: '#1E293B', borderRadius: '4px', overflow: 'hidden' }}>
+                            <div style={{ width: `${(progress.current / Math.max(1, progress.total)) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #3B82F6, #8B5CF6)', transition: 'width 0.3s ease-out' }} />
                         </div>
                     </div>
                 )}
-                <div style={{display: 'flex', justifyContent: 'flex-end', gap: '1rem', paddingTop: '1rem', borderTop: '1px solid #1E293B'}}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', paddingTop: '1rem', borderTop: '1px solid #1E293B' }}>
                     <button className="btn btn-secondary" onClick={onClose} disabled={isPublishing}>
                         {isPublishing ? 'Publishing...' : 'Close'}
                     </button>
                     {!isPublishing && (
-                        <button className="btn" onClick={startPublishing} disabled={logs.length > 0 && logs[logs.length-1].includes('Complete')}>
-                            {logs.length > 0 && logs[logs.length-1].includes('Complete') ? 'Done' : 'Start Publishing'}
+                        <button className="btn" onClick={startPublishing} disabled={logs.length > 0 && logs[logs.length - 1].includes('Complete')}>
+                            {logs.length > 0 && logs[logs.length - 1].includes('Complete') ? 'Done' : 'Start Publishing'}
                         </button>
                     )}
                 </div>
             </div>
         </div>
-    ); 
+    );
 };
 
-export const AnalysisModal = ({ page, onClose, onPlanRewrite }: { 
-  page: SitemapPage; 
-  onClose: () => void; 
-  onPlanRewrite: (page: SitemapPage) => void; 
+export const AnalysisModal = ({ page, onClose, onPlanRewrite }: {
+    page: SitemapPage;
+    onClose: () => void;
+    onPlanRewrite: (page: SitemapPage) => void;
 }) => {
     if (!page) return null;
 
     const analysis = page.analysis;
     const hasAnalysis = analysis && (
-      analysis.critique || 
-      analysis.recommendations || 
-      analysis.keyIssues || 
-      analysis.opportunities ||
-      analysis.score !== undefined
+        analysis.critique ||
+        analysis.recommendations ||
+        analysis.keyIssues ||
+        analysis.opportunities ||
+        analysis.score !== undefined
     );
 
     // CRITICAL FIX: Ensure arrays are always valid before mapping
@@ -739,134 +742,134 @@ export const AnalysisModal = ({ page, onClose, onPlanRewrite }: {
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div 
-              className="modal-content" 
-              style={{
-                maxWidth: '900px', 
-                height: 'auto', 
-                maxHeight: '90vh', 
-                padding: '0',
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border-card)',
-                borderRadius: 'var(--radius-2xl)',
-                overflow: 'hidden'
-              }}
-              onClick={e => e.stopPropagation()}
+            <div
+                className="modal-content"
+                style={{
+                    maxWidth: '900px',
+                    height: 'auto',
+                    maxHeight: '90vh',
+                    padding: '0',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-card)',
+                    borderRadius: 'var(--radius-2xl)',
+                    overflow: 'hidden'
+                }}
+                onClick={e => e.stopPropagation()}
             >
                 {/* Header */}
                 <div style={{
-                  padding: '1.5rem 2rem',
-                  borderBottom: '1px solid var(--border-subtle)',
-                  background: 'var(--bg-elevated)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
+                    padding: '1.5rem 2rem',
+                    borderBottom: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-elevated)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
                 }}>
                     <div>
-                        <h2 className="gradient-headline" style={{fontSize: '1.5rem', margin: 0}}>
-                          📊 Content Analysis
+                        <h2 className="gradient-headline" style={{ fontSize: '1.5rem', margin: 0 }}>
+                            📊 Content Analysis
                         </h2>
                         <p style={{
-                          color: 'var(--text-tertiary)', 
-                          fontSize: '0.85rem', 
-                          margin: '0.5rem 0 0 0',
-                          maxWidth: '600px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
+                            color: 'var(--text-tertiary)',
+                            fontSize: '0.85rem',
+                            margin: '0.5rem 0 0 0',
+                            maxWidth: '600px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
                         }}>
-                          {page.title || page.id}
+                            {page.title || page.id}
                         </p>
                     </div>
-                    <button 
-                      onClick={onClose}
-                      style={{
-                        background: 'none',
-                        border: '1px solid var(--border-subtle)',
-                        color: 'var(--text-secondary)',
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '10px',
-                        cursor: 'pointer',
-                        fontSize: '1.25rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
+                    <button
+                        onClick={onClose}
+                        style={{
+                            background: 'none',
+                            border: '1px solid var(--border-subtle)',
+                            color: 'var(--text-secondary)',
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '10px',
+                            cursor: 'pointer',
+                            fontSize: '1.25rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}
                     >
-                      ×
+                        ×
                     </button>
                 </div>
 
                 {/* Body */}
                 <div style={{
-                  padding: '2rem',
-                  overflowY: 'auto',
-                  maxHeight: 'calc(90vh - 180px)'
+                    padding: '2rem',
+                    overflowY: 'auto',
+                    maxHeight: 'calc(90vh - 180px)'
                 }}>
                     {!hasAnalysis ? (
                         <div style={{
-                          textAlign: 'center',
-                          padding: '3rem',
-                          color: 'var(--text-tertiary)'
+                            textAlign: 'center',
+                            padding: '3rem',
+                            color: 'var(--text-tertiary)'
                         }}>
-                            <div style={{fontSize: '3rem', marginBottom: '1rem'}}>🔍</div>
-                            <h3 style={{color: 'var(--text-secondary)', marginBottom: '0.5rem'}}>
-                              No Analysis Data Available
+                            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔍</div>
+                            <h3 style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                                No Analysis Data Available
                             </h3>
-                            <p style={{fontSize: '0.9rem', maxWidth: '400px', margin: '0 auto'}}>
-                              This page hasn't been analyzed yet. Select it in the Content Hub 
-                              and click "Analyze Selected" to generate insights.
+                            <p style={{ fontSize: '0.9rem', maxWidth: '400px', margin: '0 auto' }}>
+                                This page hasn't been analyzed yet. Select it in the Content Hub
+                                and click "Analyze Selected" to generate insights.
                             </p>
                         </div>
                     ) : (
-                        <div style={{display: 'flex', flexDirection: 'column', gap: '1.5rem'}}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                             {/* Score Section */}
                             {analysis.score !== undefined && (
                                 <div style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '1.5rem',
-                                  padding: '1.5rem',
-                                  background: 'var(--bg-elevated)',
-                                  borderRadius: '16px',
-                                  border: '1px solid var(--border-subtle)'
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '1.5rem',
+                                    padding: '1.5rem',
+                                    background: 'var(--bg-elevated)',
+                                    borderRadius: '16px',
+                                    border: '1px solid var(--border-subtle)'
                                 }}>
                                     <div style={{
-                                      width: '80px',
-                                      height: '80px',
-                                      borderRadius: '50%',
-                                      background: analysis.score >= 70 
-                                        ? 'linear-gradient(135deg, #10B981 0%, #059669 100%)'
-                                        : analysis.score >= 50
-                                        ? 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)'
-                                        : 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      fontSize: '1.75rem',
-                                      fontWeight: '800',
-                                      color: 'white',
-                                      boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
+                                        width: '80px',
+                                        height: '80px',
+                                        borderRadius: '50%',
+                                        background: analysis.score >= 70
+                                            ? 'linear-gradient(135deg, #10B981 0%, #059669 100%)'
+                                            : analysis.score >= 50
+                                                ? 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)'
+                                                : 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '1.75rem',
+                                        fontWeight: '800',
+                                        color: 'white',
+                                        boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
                                     }}>
-                                      {analysis.score}
+                                        {analysis.score}
                                     </div>
                                     <div>
                                         <div style={{
-                                          fontSize: '0.75rem',
-                                          textTransform: 'uppercase',
-                                          letterSpacing: '0.1em',
-                                          color: 'var(--text-muted)',
-                                          marginBottom: '0.25rem'
+                                            fontSize: '0.75rem',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.1em',
+                                            color: 'var(--text-muted)',
+                                            marginBottom: '0.25rem'
                                         }}>
-                                          Health Score
+                                            Health Score
                                         </div>
                                         <div style={{
-                                          fontSize: '1.25rem',
-                                          fontWeight: '700',
-                                          color: 'var(--text-primary)'
+                                            fontSize: '1.25rem',
+                                            fontWeight: '700',
+                                            color: 'var(--text-primary)'
                                         }}>
-                                          {analysis.score >= 70 ? 'Good' : analysis.score >= 50 ? 'Needs Improvement' : 'Critical'}
+                                            {analysis.score >= 70 ? 'Good' : analysis.score >= 50 ? 'Needs Improvement' : 'Critical'}
                                         </div>
                                     </div>
                                 </div>
@@ -875,27 +878,27 @@ export const AnalysisModal = ({ page, onClose, onPlanRewrite }: {
                             {/* Critique Section */}
                             {analysis.critique && (
                                 <div style={{
-                                  padding: '1.5rem',
-                                  background: 'var(--bg-surface)',
-                                  borderRadius: '12px',
-                                  border: '1px solid var(--border-subtle)'
+                                    padding: '1.5rem',
+                                    background: 'var(--bg-surface)',
+                                    borderRadius: '12px',
+                                    border: '1px solid var(--border-subtle)'
                                 }}>
                                     <h4 style={{
-                                      color: 'var(--accent-primary)',
-                                      fontSize: '1rem',
-                                      marginBottom: '1rem',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '0.5rem'
+                                        color: 'var(--accent-primary)',
+                                        fontSize: '1rem',
+                                        marginBottom: '1rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
                                     }}>
-                                      📝 Analysis Summary
+                                        📝 Analysis Summary
                                     </h4>
                                     <p style={{
-                                      color: 'var(--text-secondary)',
-                                      lineHeight: '1.7',
-                                      margin: 0
+                                        color: 'var(--text-secondary)',
+                                        lineHeight: '1.7',
+                                        margin: 0
                                     }}>
-                                      {analysis.critique}
+                                        {analysis.critique}
                                     </p>
                                 </div>
                             )}
@@ -903,31 +906,31 @@ export const AnalysisModal = ({ page, onClose, onPlanRewrite }: {
                             {/* Key Issues */}
                             {keyIssues.length > 0 && (
                                 <div style={{
-                                  padding: '1.5rem',
-                                  background: 'rgba(239, 68, 68, 0.1)',
-                                  borderRadius: '12px',
-                                  border: '1px solid rgba(239, 68, 68, 0.3)'
+                                    padding: '1.5rem',
+                                    background: 'rgba(239, 68, 68, 0.1)',
+                                    borderRadius: '12px',
+                                    border: '1px solid rgba(239, 68, 68, 0.3)'
                                 }}>
                                     <h4 style={{
-                                      color: '#EF4444',
-                                      fontSize: '1rem',
-                                      marginBottom: '1rem',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '0.5rem'
+                                        color: '#EF4444',
+                                        fontSize: '1rem',
+                                        marginBottom: '1rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
                                     }}>
-                                      ⚠️ Key Issues Found
+                                        ⚠️ Key Issues Found
                                     </h4>
                                     <ul style={{
-                                      margin: 0,
-                                      paddingLeft: '1.25rem',
-                                      color: 'var(--text-secondary)'
+                                        margin: 0,
+                                        paddingLeft: '1.25rem',
+                                        color: 'var(--text-secondary)'
                                     }}>
-                                      {keyIssues.map((issue: string, idx: number) => (
-                                        <li key={idx} style={{marginBottom: '0.5rem', lineHeight: '1.6'}}>
-                                          {issue}
-                                        </li>
-                                      ))}
+                                        {keyIssues.map((issue: string, idx: number) => (
+                                            <li key={idx} style={{ marginBottom: '0.5rem', lineHeight: '1.6' }}>
+                                                {issue}
+                                            </li>
+                                        ))}
                                     </ul>
                                 </div>
                             )}
@@ -935,31 +938,31 @@ export const AnalysisModal = ({ page, onClose, onPlanRewrite }: {
                             {/* Recommendations */}
                             {recommendations.length > 0 && (
                                 <div style={{
-                                  padding: '1.5rem',
-                                  background: 'rgba(59, 130, 246, 0.1)',
-                                  borderRadius: '12px',
-                                  border: '1px solid rgba(59, 130, 246, 0.3)'
+                                    padding: '1.5rem',
+                                    background: 'rgba(59, 130, 246, 0.1)',
+                                    borderRadius: '12px',
+                                    border: '1px solid rgba(59, 130, 246, 0.3)'
                                 }}>
                                     <h4 style={{
-                                      color: '#3B82F6',
-                                      fontSize: '1rem',
-                                      marginBottom: '1rem',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '0.5rem'
+                                        color: '#3B82F6',
+                                        fontSize: '1rem',
+                                        marginBottom: '1rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
                                     }}>
-                                      💡 Recommendations
+                                        💡 Recommendations
                                     </h4>
                                     <ul style={{
-                                      margin: 0,
-                                      paddingLeft: '1.25rem',
-                                      color: 'var(--text-secondary)'
+                                        margin: 0,
+                                        paddingLeft: '1.25rem',
+                                        color: 'var(--text-secondary)'
                                     }}>
-                                      {recommendations.map((rec: string, idx: number) => (
-                                        <li key={idx} style={{marginBottom: '0.5rem', lineHeight: '1.6'}}>
-                                          {rec}
-                                        </li>
-                                      ))}
+                                        {recommendations.map((rec: string, idx: number) => (
+                                            <li key={idx} style={{ marginBottom: '0.5rem', lineHeight: '1.6' }}>
+                                                {rec}
+                                            </li>
+                                        ))}
                                     </ul>
                                 </div>
                             )}
@@ -967,31 +970,31 @@ export const AnalysisModal = ({ page, onClose, onPlanRewrite }: {
                             {/* Opportunities */}
                             {opportunities.length > 0 && (
                                 <div style={{
-                                  padding: '1.5rem',
-                                  background: 'rgba(16, 185, 129, 0.1)',
-                                  borderRadius: '12px',
-                                  border: '1px solid rgba(16, 185, 129, 0.3)'
+                                    padding: '1.5rem',
+                                    background: 'rgba(16, 185, 129, 0.1)',
+                                    borderRadius: '12px',
+                                    border: '1px solid rgba(16, 185, 129, 0.3)'
                                 }}>
                                     <h4 style={{
-                                      color: '#10B981',
-                                      fontSize: '1rem',
-                                      marginBottom: '1rem',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '0.5rem'
+                                        color: '#10B981',
+                                        fontSize: '1rem',
+                                        marginBottom: '1rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
                                     }}>
-                                      🚀 Growth Opportunities
+                                        🚀 Growth Opportunities
                                     </h4>
                                     <ul style={{
-                                      margin: 0,
-                                      paddingLeft: '1.25rem',
-                                      color: 'var(--text-secondary)'
+                                        margin: 0,
+                                        paddingLeft: '1.25rem',
+                                        color: 'var(--text-secondary)'
                                     }}>
-                                      {opportunities.map((opp: string, idx: number) => (
-                                        <li key={idx} style={{marginBottom: '0.5rem', lineHeight: '1.6'}}>
-                                          {opp}
-                                        </li>
-                                      ))}
+                                        {opportunities.map((opp: string, idx: number) => (
+                                            <li key={idx} style={{ marginBottom: '0.5rem', lineHeight: '1.6' }}>
+                                                {opp}
+                                            </li>
+                                        ))}
                                     </ul>
                                 </div>
                             )}
@@ -999,28 +1002,28 @@ export const AnalysisModal = ({ page, onClose, onPlanRewrite }: {
                             {/* Raw Analysis Data (Debug) */}
                             {!analysis.critique && keyIssues.length === 0 && recommendations.length === 0 && (
                                 <div style={{
-                                  padding: '1.5rem',
-                                  background: 'var(--bg-surface)',
-                                  borderRadius: '12px',
-                                  border: '1px solid var(--border-subtle)'
+                                    padding: '1.5rem',
+                                    background: 'var(--bg-surface)',
+                                    borderRadius: '12px',
+                                    border: '1px solid var(--border-subtle)'
                                 }}>
                                     <h4 style={{
-                                      color: 'var(--text-secondary)',
-                                      fontSize: '0.9rem',
-                                      marginBottom: '1rem'
+                                        color: 'var(--text-secondary)',
+                                        fontSize: '0.9rem',
+                                        marginBottom: '1rem'
                                     }}>
-                                      Raw Analysis Data:
+                                        Raw Analysis Data:
                                     </h4>
                                     <pre style={{
-                                      background: 'var(--bg-deep)',
-                                      padding: '1rem',
-                                      borderRadius: '8px',
-                                      overflow: 'auto',
-                                      fontSize: '0.75rem',
-                                      color: 'var(--text-tertiary)',
-                                      maxHeight: '200px'
+                                        background: 'var(--bg-deep)',
+                                        padding: '1rem',
+                                        borderRadius: '8px',
+                                        overflow: 'auto',
+                                        fontSize: '0.75rem',
+                                        color: 'var(--text-tertiary)',
+                                        maxHeight: '200px'
                                     }}>
-                                      {JSON.stringify(analysis, null, 2)}
+                                        {JSON.stringify(analysis, null, 2)}
                                     </pre>
                                 </div>
                             )}
@@ -1030,25 +1033,25 @@ export const AnalysisModal = ({ page, onClose, onPlanRewrite }: {
 
                 {/* Footer */}
                 <div style={{
-                  padding: '1.5rem 2rem',
-                  borderTop: '1px solid var(--border-subtle)',
-                  background: 'var(--bg-elevated)',
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  gap: '1rem'
+                    padding: '1.5rem 2rem',
+                    borderTop: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-elevated)',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: '1rem'
                 }}>
-                    <button 
-                      className="btn btn-secondary" 
-                      onClick={onClose}
+                    <button
+                        className="btn btn-secondary"
+                        onClick={onClose}
                     >
-                      Close
+                        Close
                     </button>
-                    <button 
-                      className="btn" 
-                      onClick={() => { onPlanRewrite(page); onClose(); }}
-                      disabled={!hasAnalysis}
+                    <button
+                        className="btn"
+                        onClick={() => { onPlanRewrite(page); onClose(); }}
+                        disabled={!hasAnalysis}
                     >
-                      🔄 Plan Rewrite
+                        🔄 Plan Rewrite
                     </button>
                 </div>
             </div>
@@ -1059,7 +1062,7 @@ export const AnalysisModal = ({ page, onClose, onPlanRewrite }: {
 
 export const WordPressEndpointInstructions = ({ onClose }: { onClose: () => void }) => (
     <div className="modal-overlay" onClick={onClose}>
-        <div className="modal-content" style={{maxWidth: '500px', height: 'auto', padding: '2rem'}}>
+        <div className="modal-content" style={{ maxWidth: '500px', height: 'auto', padding: '2rem' }}>
             <h3>Instructions</h3><p>Use Application Passwords.</p><button className="btn" onClick={onClose}>Close</button>
         </div>
     </div>
