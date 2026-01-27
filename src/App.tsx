@@ -408,6 +408,9 @@ const App: React.FC = () => {
   const [healthAnalysisProgress, setHealthAnalysisProgress] = useState({ current: 0, total: 0 });
   const [selectedHubPages, setSelectedHubPages] = useState(new Set<string>());
   const [viewingAnalysis, setViewingAnalysis] = useState<SitemapPage | null>(null);
+  const [hubPageIndex, setHubPageIndex] = useState(0); // Pagination: pages per view = 50
+  const [analyzingPageId, setAnalyzingPageId] = useState<string | null>(null);
+  const ITEMS_PER_PAGE = 50;
 
   // ==================== BULK PUBLISH STATE ====================
   const [isBulkAutoPublishing, setIsBulkAutoPublishing] = useState(false);
@@ -1316,10 +1319,10 @@ const App: React.FC = () => {
   };
 
   const handleToggleHubPageSelectAll = () => {
-    if (selectedHubPages.size === filteredAndSortedHubPages.length) {
+    if (selectedHubPages.size === filteredHubPages.length) {
       setSelectedHubPages(new Set());
     } else {
-      setSelectedHubPages(new Set(filteredAndSortedHubPages.map(p => p.id)));
+      setSelectedHubPages(new Set(filteredHubPages.map(p => p.id)));
     }
   };
 
@@ -1372,6 +1375,82 @@ const App: React.FC = () => {
     );
 
     setIsAnalyzingHealth(false);
+  };
+
+  // Analyze a single page and show the result
+  const handleAnalyzeSinglePage = async (page: SitemapPage) => {
+    setAnalyzingPageId(page.id);
+
+    try {
+      // Crawl content if not already crawled
+      let content = page.crawledContent;
+      if (!content) {
+        content = await smartCrawl(page.id);
+      }
+
+      if (!content || content.length < 100) {
+        alert('Could not crawl page content or content too short.');
+        setAnalyzingPageId(null);
+        return;
+      }
+
+      const serviceCallAI = (
+        promptKey: any,
+        args: any[],
+        format: 'json' | 'html' = 'json',
+        grounding = false
+      ) => callAI(
+        apiClients,
+        selectedModel,
+        geoTargeting,
+        openrouterModels,
+        selectedGroqModel,
+        promptKey,
+        args,
+        format,
+        grounding
+      );
+
+      // Call AI to analyze the page
+      const analysisResponse = await serviceCallAI(
+        'content_analyzer',
+        [content, page.title || page.slug || 'Unknown Page'],
+        'json'
+      );
+
+      // Parse the response
+      let analysis;
+      try {
+        analysis = JSON.parse(analysisResponse);
+      } catch {
+        analysis = {
+          score: 50,
+          critique: analysisResponse,
+          keyIssues: [],
+          recommendations: [],
+          opportunities: []
+        };
+      }
+
+      // Update the page with analysis results
+      setExistingPages(prev => prev.map(p =>
+        p.id === page.id
+          ? { ...p, analysis, crawledContent: content }
+          : p
+      ));
+
+      // Show the analysis modal with results
+      setViewingAnalysis({
+        ...page,
+        analysis,
+        crawledContent: content
+      });
+
+    } catch (error: any) {
+      alert(`Analysis failed: ${error.message}`);
+    } finally {
+      setAnalyzingPageId(null);
+    }
   };
 
   const handlePlanRewrite = (page: SitemapPage) => {
@@ -2723,46 +2802,159 @@ const App: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Existing Pages List */}
+                  {/* Existing Pages List - FULL PAGINATION */}
                   {existingPages.length > 0 && (
                     <div style={{ marginTop: '1.5rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h4 style={{ margin: 0 }}>📄 Discovered Pages ({existingPages.length})</h4>
-                        <input
-                          type="text"
-                          placeholder="🔍 Filter..."
-                          value={hubSearchFilter}
-                          onChange={e => setHubSearchFilter(e.target.value)}
-                          style={{
-                            padding: '0.5rem 1rem',
-                            background: 'rgba(15, 23, 42, 0.8)',
-                            border: '1px solid rgba(255,255,255,0.2)',
-                            borderRadius: '8px',
-                            color: '#fff'
-                          }}
-                        />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                        <h4 style={{ margin: 0 }}>📄 Discovered Pages ({filteredHubPages.length} of {existingPages.length})</h4>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <input
+                            type="text"
+                            placeholder="🔍 Filter pages..."
+                            value={hubSearchFilter}
+                            onChange={e => { setHubSearchFilter(e.target.value); setHubPageIndex(0); }}
+                            style={{
+                              padding: '0.5rem 1rem',
+                              background: 'rgba(15, 23, 42, 0.8)',
+                              border: '1px solid rgba(255,255,255,0.2)',
+                              borderRadius: '8px',
+                              color: '#fff',
+                              minWidth: '200px'
+                            }}
+                          />
+                          <button
+                            className="btn"
+                            onClick={handleAnalyzeSelectedPages}
+                            disabled={selectedHubPages.size === 0 || isAnalyzingHealth}
+                            style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)' }}
+                          >
+                            {isAnalyzingHealth ? `Analyzing (${healthAnalysisProgress.current}/${healthAnalysisProgress.total})...` : `🔍 Analyze Selected (${selectedHubPages.size})`}
+                          </button>
+                          <button
+                            className="btn"
+                            onClick={handleRewriteSelected}
+                            disabled={selectedHubPages.size === 0}
+                            style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', background: 'linear-gradient(135deg, #10B981, #059669)' }}
+                          >
+                            ✍️ Rewrite Selected
+                          </button>
+                        </div>
                       </div>
-                      <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                        {filteredHubPages.slice(0, 20).map(page => (
+
+                      {/* Pagination Controls */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', padding: '0.75rem 1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedHubPages.size > 0 && selectedHubPages.size === filteredHubPages.slice(hubPageIndex * ITEMS_PER_PAGE, (hubPageIndex + 1) * ITEMS_PER_PAGE).length}
+                            onChange={() => {
+                              const pageItems = filteredHubPages.slice(hubPageIndex * ITEMS_PER_PAGE, (hubPageIndex + 1) * ITEMS_PER_PAGE);
+                              const allSelected = pageItems.every(p => selectedHubPages.has(p.id));
+                              if (allSelected) {
+                                setSelectedHubPages(prev => {
+                                  const next = new Set(prev);
+                                  pageItems.forEach(p => next.delete(p.id));
+                                  return next;
+                                });
+                              } else {
+                                setSelectedHubPages(prev => {
+                                  const next = new Set(prev);
+                                  pageItems.forEach(p => next.add(p.id));
+                                  return next;
+                                });
+                              }
+                            }}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          />
+                          <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }}>Select all on page</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)' }}>
+                            Page {hubPageIndex + 1} of {Math.ceil(filteredHubPages.length / ITEMS_PER_PAGE)}
+                          </span>
+                          <button
+                            className="btn-secondary"
+                            onClick={() => setHubPageIndex(prev => Math.max(0, prev - 1))}
+                            disabled={hubPageIndex === 0}
+                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                          >
+                            ← Prev
+                          </button>
+                          <button
+                            className="btn-secondary"
+                            onClick={() => setHubPageIndex(prev => Math.min(Math.ceil(filteredHubPages.length / ITEMS_PER_PAGE) - 1, prev + 1))}
+                            disabled={hubPageIndex >= Math.ceil(filteredHubPages.length / ITEMS_PER_PAGE) - 1}
+                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Pages List */}
+                      <div style={{ maxHeight: '500px', overflowY: 'auto', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}>
+                        {filteredHubPages.slice(hubPageIndex * ITEMS_PER_PAGE, (hubPageIndex + 1) * ITEMS_PER_PAGE).map(page => (
                           <div key={page.id} style={{
                             padding: '0.75rem 1rem',
-                            background: 'rgba(0,0,0,0.2)',
-                            borderRadius: '8px',
-                            marginBottom: '0.5rem',
+                            background: selectedHubPages.has(page.id) ? 'rgba(59, 130, 246, 0.15)' : 'rgba(0,0,0,0.2)',
+                            borderBottom: '1px solid rgba(255,255,255,0.05)',
                             display: 'flex',
                             justifyContent: 'space-between',
-                            alignItems: 'center'
+                            alignItems: 'center',
+                            gap: '1rem'
                           }}>
-                            <span style={{ fontSize: '0.9rem' }}>{page.title || page.url}</span>
-                            <button
-                              className="btn-secondary"
-                              onClick={() => setViewingAnalysis(page)}
-                              style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
-                            >
-                              Analyze
-                            </button>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedHubPages.has(page.id)}
+                                onChange={() => handleToggleHubPageSelect(page.id)}
+                                style={{ width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0 }}
+                              />
+                              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                                <span style={{ fontSize: '0.9rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {page.title || page.slug || page.id}
+                                </span>
+                                <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {page.id}
+                                </span>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                              {page.analysis && (
+                                <span style={{
+                                  padding: '0.25rem 0.5rem',
+                                  background: page.analysis.score >= 70 ? 'rgba(16, 185, 129, 0.2)' : page.analysis.score >= 50 ? 'rgba(245, 158, 11, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                  color: page.analysis.score >= 70 ? '#10B981' : page.analysis.score >= 50 ? '#F59E0B' : '#EF4444',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600
+                                }}>
+                                  Score: {page.analysis.score}
+                                </span>
+                              )}
+                              <button
+                                className="btn"
+                                onClick={() => handleAnalyzeSinglePage(page)}
+                                disabled={analyzingPageId === page.id}
+                                style={{
+                                  padding: '0.35rem 0.75rem',
+                                  fontSize: '0.8rem',
+                                  background: page.analysis ? 'linear-gradient(135deg, #10B981, #059669)' : 'linear-gradient(135deg, #3B82F6, #2563EB)',
+                                  minWidth: '80px'
+                                }}
+                              >
+                                {analyzingPageId === page.id ? '⏳...' : page.analysis ? '👁️ View' : '🔍 Analyze'}
+                              </button>
+                            </div>
                           </div>
                         ))}
+                      </div>
+
+                      {/* Bottom Stats */}
+                      <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)' }}>
+                        <span>📊 Total: {existingPages.length} pages</span>
+                        <span>✅ Analyzed: {existingPages.filter(p => p.analysis).length}</span>
+                        <span>📝 Selected: {selectedHubPages.size}</span>
                       </div>
                     </div>
                   )}
