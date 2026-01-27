@@ -2448,6 +2448,7 @@ const App: React.FC = () => {
                     onPriorityQueueUpdate={setPriorityUrls}
                     onExcludedUrlsChange={setExcludedUrls}
                     onExcludedCategoriesChange={setExcludedCategories}
+                    onPriorityOnlyModeChange={setPriorityOnlyMode}
 
                   />
 

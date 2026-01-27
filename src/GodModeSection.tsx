@@ -37,6 +37,7 @@ interface GodModeSectionProps {
     onPriorityQueueUpdate?: (urls: PriorityURL[]) => void;
     onExcludedUrlsChange?: (urls: string[]) => void;
     onExcludedCategoriesChange?: (categories: string[]) => void;
+    onPriorityOnlyModeChange?: (enabled: boolean) => void;
 }
 
 // Storage keys
@@ -60,7 +61,8 @@ export const GodModeSection: React.FC<GodModeSectionProps> = ({
     wpPassword,
     onPriorityQueueUpdate,
     onExcludedUrlsChange,
-    onExcludedCategoriesChange
+    onExcludedCategoriesChange,
+    onPriorityOnlyModeChange
 }) => {
     // Priority URL Queue State
     const [priorityUrls, setPriorityUrls] = useState<PriorityURL[]>(() => {
@@ -119,7 +121,10 @@ export const GodModeSection: React.FC<GodModeSectionProps> = ({
     // Persistence for Priority Only Mode
     useEffect(() => {
         localStorage.setItem(STORAGE_KEYS.PRIORITY_ONLY_MODE, String(priorityOnlyMode));
-    }, [priorityOnlyMode]);
+        if (onPriorityOnlyModeChange) {
+            onPriorityOnlyModeChange(priorityOnlyMode);
+        }
+    }, [priorityOnlyMode, onPriorityOnlyModeChange]);
 
     // Handle priority URL queue updates
     const handlePriorityUrlsChange = useCallback((urls: PriorityURL[]) => {
