@@ -117,13 +117,18 @@ export const GodModeURLInput = memo(({
   existingPages = [],
   excludedUrls = [],
   excludedCategories = [],
+  // NEW props from GodModeSection - preferred interface
+  priorityUrls: externalPriorityUrls,
+  onPriorityUrlsChange,
+  maxUrls = 100,
 }: GodModeURLInputProps) => {
   // State Management
   const [inputMode, setInputMode] = useState<'single' | 'bulk' | 'import'>('single');
   const [singleURL, setSingleURL] = useState('');
   const [bulkURLs, setBulkURLs] = useState('');
   const [defaultPriority, setDefaultPriority] = useState<PriorityURLItem['priority']>('high');
-  const [urlQueue, setUrlQueue] = useState<PriorityURLItem[]>([]);
+  // ENTERPRISE FIX: Use external state if provided, otherwise manage internally
+  const [internalUrlQueue, setInternalUrlQueue] = useState<PriorityURLItem[]>([]);
   const [isExpanded, setIsExpanded] = useState(true);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -133,33 +138,46 @@ export const GodModeURLInput = memo(({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
 
-  // Load saved queue from localStorage
+  // ENTERPRISE FIX: Determine if we're in controlled mode (using external state)
+  const isControlledMode = externalPriorityUrls !== undefined && onPriorityUrlsChange !== undefined;
+  const urlQueue = isControlledMode ? externalPriorityUrls : internalUrlQueue;
+  const setUrlQueue = isControlledMode
+    ? (updater: PriorityURLItem[] | ((prev: PriorityURLItem[]) => PriorityURLItem[])) => {
+      const newValue = typeof updater === 'function' ? updater(externalPriorityUrls) : updater;
+      onPriorityUrlsChange?.(newValue);
+    }
+    : setInternalUrlQueue;
+
+  // Load saved queue from localStorage (only for uncontrolled mode)
   useEffect(() => {
+    if (isControlledMode) return; // Skip for controlled mode
     try {
       const saved = localStorage.getItem('godmode_url_queue');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          setUrlQueue(parsed);
+          setInternalUrlQueue(parsed);
         }
       }
     } catch (e) {
-      console.error('Failed to load URL queue:', e);
+      console.error('[GodModeURLInput] Failed to load URL queue:', e);
     }
-  }, []);
+  }, [isControlledMode]);
 
-  // Save queue to localStorage on changes
+  // Save queue to localStorage on changes (only for uncontrolled mode)
   useEffect(() => {
+    if (isControlledMode) return; // Skip for controlled mode
     try {
-      localStorage.setItem('godmode_url_queue', JSON.stringify(urlQueue));
+      localStorage.setItem('godmode_url_queue', JSON.stringify(internalUrlQueue));
     } catch (e) {
-      console.error('Failed to save URL queue:', e);
+      console.error('[GodModeURLInput] Failed to save URL queue:', e);
     }
-  }, [urlQueue]);
+  }, [internalUrlQueue, isControlledMode]);
 
-  // Notify parent of queue changes
+  // ENTERPRISE FIX: Notify parent of queue changes with null safety
   useEffect(() => {
-    onURLsSubmitted(urlQueue);
+    // Use optional chaining to prevent crashes when callback is undefined
+    onURLsSubmitted?.(urlQueue);
   }, [urlQueue, onURLsSubmitted]);
 
   // Calculate queue statistics
@@ -321,7 +339,8 @@ export const GodModeURLInput = memo(({
       alert('No URLs in queue to process. Add some URLs first.');
       return;
     }
-    onStartProcessing(queuedUrls);
+    // ENTERPRISE FIX: Use optional chaining to prevent crashes when callback is undefined
+    onStartProcessing?.(queuedUrls);
   }, [urlQueue, onStartProcessing]);
 
   // Drag and Drop handlers
