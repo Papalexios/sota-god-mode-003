@@ -1705,11 +1705,131 @@ const App: React.FC = () => {
       {/* Main Layout */}
       <div className="main-layout">
         <aside className="sidebar">
-          <div>SidebarNav Placeholder</div>
+          <nav className="sidebar-nav" style={{ padding: '1rem' }}>
+            <div style={{
+              marginBottom: '1.5rem',
+              paddingBottom: '1rem',
+              borderBottom: '1px solid rgba(255,255,255,0.1)'
+            }}>
+              <h3 style={{
+                fontSize: '0.7rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                color: 'rgba(255,255,255,0.4)',
+                marginBottom: '0.75rem'
+              }}>Navigation</h3>
+            </div>
+
+            {/* Nav Item: Setup */}
+            <button
+              onClick={() => setActiveView('setup')}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.85rem 1rem',
+                marginBottom: '0.5rem',
+                background: activeView === 'setup'
+                  ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(59, 130, 246, 0.2))'
+                  : 'transparent',
+                border: activeView === 'setup' ? '1px solid rgba(139, 92, 246, 0.4)' : '1px solid transparent',
+                borderRadius: '12px',
+                color: activeView === 'setup' ? '#ffffff' : 'rgba(255,255,255,0.7)',
+                fontSize: '0.95rem',
+                fontWeight: activeView === 'setup' ? 600 : 400,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                textAlign: 'left'
+              }}
+            >
+              <span style={{ fontSize: '1.25rem' }}>⚙️</span>
+              <div>
+                <div>1. Setup & Config</div>
+                <div style={{ fontSize: '0.7rem', opacity: 0.6 }}>API keys, WordPress</div>
+              </div>
+            </button>
+
+            {/* Nav Item: Strategy */}
+            <button
+              onClick={() => setActiveView('strategy')}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.85rem 1rem',
+                marginBottom: '0.5rem',
+                background: activeView === 'strategy'
+                  ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(59, 130, 246, 0.2))'
+                  : 'transparent',
+                border: activeView === 'strategy' ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid transparent',
+                borderRadius: '12px',
+                color: activeView === 'strategy' ? '#ffffff' : 'rgba(255,255,255,0.7)',
+                fontSize: '0.95rem',
+                fontWeight: activeView === 'strategy' ? 600 : 400,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                textAlign: 'left'
+              }}
+            >
+              <span style={{ fontSize: '1.25rem' }}>📊</span>
+              <div>
+                <div>2. Strategy & Planning</div>
+                <div style={{ fontSize: '0.7rem', opacity: 0.6 }}>Gap analysis, clusters</div>
+              </div>
+            </button>
+
+            {/* Nav Item: Review */}
+            <button
+              onClick={() => setActiveView('review')}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.85rem 1rem',
+                marginBottom: '0.5rem',
+                background: activeView === 'review'
+                  ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(139, 92, 246, 0.2))'
+                  : 'transparent',
+                border: activeView === 'review' ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid transparent',
+                borderRadius: '12px',
+                color: activeView === 'review' ? '#ffffff' : 'rgba(255,255,255,0.7)',
+                fontSize: '0.95rem',
+                fontWeight: activeView === 'review' ? 600 : 400,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                textAlign: 'left'
+              }}
+            >
+              <span style={{ fontSize: '1.25rem' }}>📝</span>
+              <div>
+                <div>3. Review & Export</div>
+                <div style={{ fontSize: '0.7rem', opacity: 0.6 }}>Publish content</div>
+              </div>
+            </button>
+
+            {/* Status */}
+            <div style={{
+              marginTop: '2rem',
+              padding: '1rem',
+              background: 'rgba(16, 185, 129, 0.1)',
+              borderRadius: '12px',
+              border: '1px solid rgba(16, 185, 129, 0.2)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <span style={{ width: '8px', height: '8px', background: '#10B981', borderRadius: '50%' }}></span>
+                <span style={{ fontSize: '0.8rem', color: '#10B981', fontWeight: 600 }}>System Ready</span>
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)' }}>
+                {contentStats.total} items • {contentStats.done} done
+              </div>
+            </div>
+          </nav>
         </aside>
 
         <div className="main-content-wrapper">
-          <div className="content-placeholder">Content</div>
 
           {/* SETUP VIEW */}
           {activeView === 'setup' && (
