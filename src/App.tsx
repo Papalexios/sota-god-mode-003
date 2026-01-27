@@ -2062,88 +2062,330 @@ const App: React.FC = () => {
           )}
 
           {/* STRATEGY VIEW */}
-
-              {/* STRATEGY VIEW */}
-              {activeView === 'strategy' && (
-                <div>Strategy Placeholder</div>
-              )}
-
-              {/* REVIEW VIEW */}
-              {activeView === 'review' && (
-                <div className="review-placeholder">Review View Placeholder</div>
-              )}
+          {activeView === 'strategy' && (
+            <div className="strategy-view" style={{ padding: '2rem' }}>
+              <div className="page-header">
+                <h2 className="gradient-headline">2. Content Strategy & Gap Analysis</h2>
+                <p>Analyze your content ecosystem and discover new opportunities.</p>
+              </div>
+              <div className="strategy-content">
+                <div className="form-group">
+                  <label>Topic / Niche</label>
+                  <input
+                    type="text"
+                    value={topic}
+                    onChange={e => setTopic(e.target.value)}
+                    placeholder="e.g., Affiliate Marketing, Dog Training, SaaS Tools..."
+                  />
+                </div>
+                <button
+                  className="btn"
+                  onClick={handleAnalyzeGaps}
+                  disabled={isAnalyzingGaps}
+                >
+                  {isAnalyzingGaps ? '🔍 Analyzing...' : '🎯 Analyze Content Gaps'}
+                </button>
+                {gapSuggestions.length > 0 && (
+                  <div className="gap-suggestions" style={{ marginTop: '2rem' }}>
+                    <h3>📊 Gap Analysis Results</h3>
+                    {gapSuggestions.map((suggestion, idx) => (
+                      <div key={idx} className="gap-card" style={{
+                        padding: '1rem',
+                        background: 'rgba(139, 92, 246, 0.1)',
+                        borderRadius: '12px',
+                        marginBottom: '1rem',
+                        border: '1px solid rgba(139, 92, 246, 0.3)'
+                      }}>
+                        <h4>{suggestion.keyword}</h4>
+                        <p style={{ color: 'rgba(255,255,255,0.7)' }}>{suggestion.opportunity}</p>
+                        <button
+                          className="btn-secondary"
+                          onClick={() => handleGenerateGapArticle(suggestion)}
+                        >
+                          ✨ Generate Article
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
+          )}
+
+          {/* REVIEW VIEW */}
+          {activeView === 'review' && (
+            <div className="review-view" style={{ padding: '2rem' }}>
+              <div className="page-header">
+                <h2 className="gradient-headline">3. Review & Export</h2>
+                <p>Review generated content and publish to WordPress.</p>
+              </div>
+
+              {/* Search and Actions */}
+              <div className="review-toolbar" style={{
+                display: 'flex',
+                gap: '1rem',
+                marginBottom: '1.5rem',
+                alignItems: 'center'
+              }}>
+                <input
+                  type="text"
+                  value={filter}
+                  onChange={e => setFilter(e.target.value)}
+                  placeholder="🔍 Search items..."
+                  style={{ flex: 1 }}
+                />
+                <button
+                  className="btn"
+                  onClick={handleGenerateSelected}
+                  disabled={isGenerating || selectedItems.size === 0}
+                >
+                  {isGenerating
+                    ? `⚙️ Generating ${generationProgress.current}/${generationProgress.total}...`
+                    : `✨ Generate Selected (${selectedItems.size})`}
+                </button>
+                {selectedItems.size > 0 && items.some(i => selectedItems.has(i.id) && i.status === 'done') && (
+                  <button
+                    className="btn-secondary"
+                    onClick={() => setIsBulkPublishModalOpen(true)}
+                  >
+                    📤 Bulk Publish
+                  </button>
+                )}
+              </div>
+
+              {/* Stats */}
+              <div className="content-stats" style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: '1rem',
+                marginBottom: '2rem'
+              }}>
+                <div className="stat-card" style={{
+                  padding: '1rem',
+                  background: 'rgba(59, 130, 246, 0.1)',
+                  borderRadius: '12px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#3B82F6' }}>{contentStats.total}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem' }}>Total Items</div>
+                </div>
+                <div className="stat-card" style={{
+                  padding: '1rem',
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  borderRadius: '12px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#10B981' }}>{contentStats.done}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem' }}>Completed</div>
+                </div>
+                <div className="stat-card" style={{
+                  padding: '1rem',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  borderRadius: '12px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#F59E0B' }}>{contentStats.idle + contentStats.generating}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem' }}>Pending</div>
+                </div>
+                <div className="stat-card" style={{
+                  padding: '1rem',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  borderRadius: '12px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#EF4444' }}>{contentStats.error}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem' }}>Errors</div>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="items-table" style={{
+                background: 'rgba(30, 41, 59, 0.5)',
+                borderRadius: '16px',
+                overflow: 'hidden'
+              }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(0,0,0,0.3)' }}>
+                      <th style={{ padding: '1rem', textAlign: 'left' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.size === filteredAndSortedItems.length && filteredAndSortedItems.length > 0}
+                          onChange={handleToggleSelectAll}
+                        />
+                      </th>
+                      <th style={{ padding: '1rem', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('title')}>
+                        Title {sortConfig.key === 'title' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th style={{ padding: '1rem', textAlign: 'left' }}>Type</th>
+                      <th style={{ padding: '1rem', textAlign: 'left' }}>Status</th>
+                      <th style={{ padding: '1rem', textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAndSortedItems.map(item => (
+                      <tr key={item.id} style={{
+                        borderBottom: '1px solid rgba(255,255,255,0.05)',
+                        background: selectedItems.has(item.id) ? 'rgba(139, 92, 246, 0.1)' : 'transparent'
+                      }}>
+                        <td style={{ padding: '1rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedItems.has(item.id)}
+                            onChange={() => handleToggleSelect(item.id)}
+                          />
+                        </td>
+                        <td style={{ padding: '1rem', fontWeight: 500 }}>{item.title}</td>
+                        <td style={{ padding: '1rem' }}>
+                          <span style={{
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            background: item.type === 'pillar' ? 'rgba(139, 92, 246, 0.2)' :
+                              item.type === 'cluster' ? 'rgba(59, 130, 246, 0.2)' :
+                                item.type === 'refresh' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(100, 116, 139, 0.2)',
+                            color: item.type === 'pillar' ? '#A78BFA' :
+                              item.type === 'cluster' ? '#60A5FA' :
+                                item.type === 'refresh' ? '#FBBF24' : '#94A3B8'
+                          }}>
+                            {item.type}
+                          </span>
+                        </td>
+                        <td style={{ padding: '1rem' }}>
+                          <span style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            color: item.status === 'done' ? '#10B981' :
+                              item.status === 'generating' ? '#3B82F6' :
+                                item.status === 'error' ? '#EF4444' : '#94A3B8'
+                          }}>
+                            {item.status === 'done' && '✅'}
+                            {item.status === 'generating' && '⏳'}
+                            {item.status === 'error' && '❌'}
+                            {item.status === 'idle' && '⏸️'}
+                            {item.statusText || item.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '1rem', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                            {item.status === 'idle' && (
+                              <button
+                                className="btn-secondary"
+                                onClick={() => handleGenerateSingle(item)}
+                                style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                              >
+                                ✨ Generate
+                              </button>
+                            )}
+                            {item.status === 'generating' && (
+                              <button
+                                className="btn-secondary"
+                                onClick={() => handleStopGeneration(item.id)}
+                                style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                              >
+                                ⏹️ Stop
+                              </button>
+                            )}
+                            {item.status === 'done' && (
+                              <button
+                                className="btn"
+                                onClick={() => setSelectedItemForReview(item)}
+                                style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                              >
+                                👁️ Review
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filteredAndSortedItems.length === 0 && (
+                  <div style={{
+                    padding: '3rem',
+                    textAlign: 'center',
+                    color: 'rgba(255,255,255,0.5)'
+                  }}>
+                    No items found. Go to Setup to add content or use Strategy to discover topics.
+                  </div>
+                )}
+              </div>
             </div>
-
-
-        <AppFooter />
-
-        {/* Modals */}
-        {isEndpointModalOpen && (
-          <WordPressEndpointInstructions onClose={() => setIsEndpointModalOpen(false)} />
-        )}
-
-        {selectedItemForReview && (
-          <ReviewModal
-            item={selectedItemForReview}
-            onClose={() => setSelectedItemForReview(null)}
-            onSaveChanges={(itemId, updatedSeo, updatedContent) => {
-              dispatch({
-                type: 'SET_CONTENT',
-                payload: {
-                  id: itemId,
-                  content: {
-                    ...selectedItemForReview.generatedContent!,
-                    title: updatedSeo.title,
-                    content: updatedContent
-                  }
-                }
-              });
-              alert('Changes saved locally!');
-            }}
-            wpConfig={wpConfig}
-            wpPassword={wpPassword}
-            onPublishSuccess={(originalUrl) => {
-              if (window.confirm(`✅ Published successfully!\n\nView post now?\n${originalUrl}`)) {
-                window.open(originalUrl, '_blank');
-              }
-            }}
-            publishItem={(item, pwd, status) =>
-              publishItemToWordPress(item, pwd, status, fetchWordPressWithRetry, wpConfig)
-            }
-            callAI={(key, args, fmt, g) =>
-              callAI(apiClients, selectedModel, geoTargeting, openrouterModels, selectedGroqModel, key, args, fmt, g)
-            }
-            geoTargeting={geoTargeting}
-            neuronConfig={neuronConfig}
-          />
-        )}
-
-        {isBulkPublishModalOpen && (
-          <BulkPublishModal
-            items={items.filter(i => selectedItems.has(i.id) && i.status === 'done')}
-            onClose={() => setIsBulkPublishModalOpen(false)}
-            publishItem={(item, pwd, status) =>
-              publishItemToWordPress(item, pwd, status, fetchWordPressWithRetry, wpConfig)
-            }
-            wpConfig={wpConfig}
-            wpPassword={wpPassword}
-            onPublishSuccess={(url) => {
-              // Bulk modal handles its own per-item display, but we can log unique success here
-              console.log(`Published ${url}`);
-            }}
-          />
-        )}
-
-        {viewingAnalysis && (
-          <AnalysisModal
-            page={viewingAnalysis}
-            onClose={() => setViewingAnalysis(null)}
-            onPlanRewrite={handlePlanRewrite}
-          />
-        )}
+          )}
+        </div>
       </div>
-      );
+
+      <AppFooter />
+
+      {/* Modals */}
+      {isEndpointModalOpen && (
+        <WordPressEndpointInstructions onClose={() => setIsEndpointModalOpen(false)} />
+      )}
+
+      {selectedItemForReview && (
+        <ReviewModal
+          item={selectedItemForReview}
+          onClose={() => setSelectedItemForReview(null)}
+          onSaveChanges={(itemId, updatedSeo, updatedContent) => {
+            dispatch({
+              type: 'SET_CONTENT',
+              payload: {
+                id: itemId,
+                content: {
+                  ...selectedItemForReview.generatedContent!,
+                  title: updatedSeo.title,
+                  content: updatedContent
+                }
+              }
+            });
+            alert('Changes saved locally!');
+          }}
+          wpConfig={wpConfig}
+          wpPassword={wpPassword}
+          onPublishSuccess={(originalUrl) => {
+            if (window.confirm(`✅ Published successfully!\n\nView post now?\n${originalUrl}`)) {
+              window.open(originalUrl, '_blank');
+            }
+          }}
+          publishItem={(item, pwd, status) =>
+            publishItemToWordPress(item, pwd, status, fetchWordPressWithRetry, wpConfig)
+          }
+          callAI={(key, args, fmt, g) =>
+            callAI(apiClients, selectedModel, geoTargeting, openrouterModels, selectedGroqModel, key, args, fmt, g)
+          }
+          geoTargeting={geoTargeting}
+          neuronConfig={neuronConfig}
+        />
+      )}
+
+      {isBulkPublishModalOpen && (
+        <BulkPublishModal
+          items={items.filter(i => selectedItems.has(i.id) && i.status === 'done')}
+          onClose={() => setIsBulkPublishModalOpen(false)}
+          publishItem={(item, pwd, status) =>
+            publishItemToWordPress(item, pwd, status, fetchWordPressWithRetry, wpConfig)
+          }
+          wpConfig={wpConfig}
+          wpPassword={wpPassword}
+          onPublishSuccess={(url) => {
+            // Bulk modal handles its own per-item display, but we can log unique success here
+            console.log(`Published ${url}`);
+          }}
+        />
+      )}
+
+      {viewingAnalysis && (
+        <AnalysisModal
+          page={viewingAnalysis}
+          onClose={() => setViewingAnalysis(null)}
+          onPlanRewrite={handlePlanRewrite}
+        />
+      )}
+    </div>
+  );
 };
 
-      export default App;
+export default App;
