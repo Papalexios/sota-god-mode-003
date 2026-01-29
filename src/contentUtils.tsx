@@ -328,8 +328,10 @@ export const validateAndFixAnchor = (
 
 const CORS_PROXIES = [
   '',
+  'https://api.codetabs.com/v1/proxy?quest=',
   'https://corsproxy.io/?',
   'https://api.allorigins.win/raw?url=',
+  'https://thingproxy.freeboard.io/fetch/',
 ];
 
 export const fetchWithProxies = async (
@@ -338,17 +340,19 @@ export const fetchWithProxies = async (
   onProgress?: (message: string) => void
 ): Promise<Response> => {
   let lastError: Error | null = null;
+  const errors: string[] = [];
 
   for (const proxy of CORS_PROXIES) {
     try {
       const targetUrl = proxy ? `${proxy}${encodeURIComponent(url)}` : url;
-      onProgress?.(`Trying: ${proxy || 'direct'}...`);
+      const proxyName = proxy || 'direct';
+      onProgress?.(`Trying: ${proxyName}...`);
       
       const response = await fetch(targetUrl, {
         ...options,
         signal: AbortSignal.timeout(30000),
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; SOTA-Bot/1.0)',
+          'Accept': 'application/xml, text/xml, */*',
           ...options.headers,
         },
       });
@@ -356,13 +360,20 @@ export const fetchWithProxies = async (
       if (response.ok) {
         return response;
       }
+      
+      // Capture non-ok responses as errors and continue to next proxy
+      errors.push(`${proxyName}: HTTP ${response.status}`);
     } catch (e: any) {
+      const proxyName = proxy || 'direct';
+      errors.push(`${proxyName}: ${e.message || 'Network error'}`);
       lastError = e;
       continue;
     }
   }
 
-  throw lastError || new Error(`Failed to fetch: ${url}`);
+  // Provide more detailed error message
+  const errorDetails = errors.length > 0 ? ` (${errors.join('; ')})` : '';
+  throw lastError || new Error(`Failed to fetch: ${url}${errorDetails}`);
 };
 
 // ==================== SMART CRAWL ====================
