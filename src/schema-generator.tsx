@@ -14,12 +14,20 @@ export interface SchemaGeneratorInput {
   content?: string;
   author?: string;
   authorName?: string;
+  authorUrl?: string;
   datePublished: string;
   dateModified?: string;
   url?: string;
   siteInfo?: SiteInfo | null;
   faqs?: FAQItem[];
   faqItems?: FAQItem[];
+  // Enterprise SOTA fields
+  pageType?: 'article' | 'pillar' | 'product' | 'service' | 'faq';
+  publisherLogo?: string;
+  publisher?: string;
+  featuredImage?: string;
+  wordCount?: number;
+  images?: string[];
 }
 
 // ==================== DEFAULT SITE INFO ====================
@@ -45,7 +53,7 @@ export const generateFullSchema = (
   siteInfoParam?: SiteInfo,
   faqsParam?: FAQItem[]
 ): Record<string, any> => {
-  
+
   // Handle both object and legacy parameter formats
   let title: string;
   let description: string;
@@ -62,26 +70,26 @@ export const generateFullSchema = (
     authorName = input.author || input.authorName || DEFAULT_SITE_INFO.authorName || 'Expert Author';
     datePublished = input.datePublished || new Date().toISOString();
     url = input.url || (typeof window !== 'undefined' ? window.location.href : '');
-    
+
     // CRITICAL: Defensive siteInfo handling
-    siteInfo = input.siteInfo 
+    siteInfo = input.siteInfo
       ? { ...DEFAULT_SITE_INFO, ...input.siteInfo }
       : { ...DEFAULT_SITE_INFO };
-    
+
     faqs = input.faqs || input.faqItems || [];
   } else {
     // LEGACY: Individual parameters format
-    title = input || 'Untitled';
+    title = (input as string) || 'Untitled';
     description = descriptionOrNothing || '';
     authorName = authorNameParam || DEFAULT_SITE_INFO.authorName || 'Expert Author';
     datePublished = datePublishedParam || new Date().toISOString();
     url = urlParam || (typeof window !== 'undefined' ? window.location.href : '');
-    
+
     // CRITICAL: Defensive siteInfo handling
-    siteInfo = siteInfoParam 
+    siteInfo = siteInfoParam
       ? { ...DEFAULT_SITE_INFO, ...siteInfoParam }
       : { ...DEFAULT_SITE_INFO };
-    
+
     faqs = faqsParam || [];
   }
 
@@ -147,7 +155,7 @@ export const generateFullSchema = (
   schemas.push(articleSchema);
 
   // 2. Breadcrumb Schema
-  const baseUrl = (typeof url === 'string' && url) ? url.split('/').slice(0, 3).join('/') : '';  const breadcrumbSchema = {
+  const baseUrl = (typeof url === 'string' && url) ? url.split('/').slice(0, 3).join('/') : ''; const breadcrumbSchema = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     "itemListElement": [

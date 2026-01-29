@@ -89,16 +89,28 @@ export interface GeneratedContent {
   metaDescription: string;
   primaryKeyword: string;
   semanticKeywords: string[];
-  strategy: ContentStrategy;
-  jsonLdSchema: Record<string, any>;
-  socialMediaCopy: SocialMediaCopy;
-  faqSection: FAQItem[];
-  keyTakeaways: string[];
-  outline: OutlineItem[];
-  references: Reference[];
-  imageDetails: ImageDetail[];
+  strategy?: ContentStrategy;
+  jsonLdSchema?: Record<string, any>;
+  socialMediaCopy?: SocialMediaCopy;
+  faqSection?: FAQItem[];
+  keyTakeaways?: string[];
+  outline?: OutlineItem[];
+  references?: Reference[];
+  imageDetails?: ImageDetail[];
   serpData?: SerpResult[];
   neuronAnalysis?: NeuronAnalysis;
+  // Enterprise fields for SOTA integration
+  schemaMarkup?: string;
+  youtubeVideo?: {
+    title: string;
+    videoId: string;
+    embedded: boolean;
+  } | null;
+  internalLinks?: {
+    anchorText: string;
+    targetSlug: string;
+    targetUrl: string;
+  }[];
 }
 
 export interface ContentStrategy {

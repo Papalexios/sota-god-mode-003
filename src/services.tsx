@@ -802,7 +802,7 @@ function findContextualAnchorEnhanced(paragraphText: string, page: SitemapPage):
     .filter(w => w.length > 2);
 
   const allTargetWords = [...new Set([...titleWords, ...slugWords])];
-  
+
   // Extract key topic phrases from title for better matching
   const titlePhrases: string[] = [];
   if (titleWords.length >= 2) {
@@ -907,12 +907,12 @@ function findContextualAnchorEnhanced(paragraphText: string, page: SitemapPage):
     for (let i = 0; i <= words.length - 3; i++) {
       const phraseWords = words.slice(i, i + 3);
       const phrase = phraseWords.join(' ').replace(/[.,!?;:'"()[\]{}]/g, '').trim();
-      
+
       if (phrase.length < 10 || phrase.length > 40) continue;
-      
+
       const phraseLower = phrase.toLowerCase();
       let score = 0;
-      
+
       // Check for topic relevance
       let matchedWords = 0;
       for (const targetWord of allTargetWords) {
@@ -921,13 +921,13 @@ function findContextualAnchorEnhanced(paragraphText: string, page: SitemapPage):
           score += 0.3;
         }
       }
-      
+
       if (matchedWords >= 2) score += 0.4;
-      
+
       // Must be descriptive
       const descriptive = ['guide', 'tips', 'how', 'best', 'top', 'training', 'review', 'comparison'];
       if (descriptive.some(d => phraseLower.includes(d))) score += 0.2;
-      
+
       if (score > highestScore && score >= 0.5 && matchedWords >= 1) {
         highestScore = score;
         bestCandidate = { text: phrase, score };
@@ -1045,7 +1045,7 @@ export const callAI = async (
               }
             })
           );
-          response = geminiResult?.response?.text?.() || geminiResult?.text || '';
+          response = (geminiResult as any)?.response?.text?.() || (geminiResult as any)?.text || '';
           break;
 
         case 'anthropic':
@@ -1453,35 +1453,46 @@ export const generateContent = {
           item.title, semanticKeywords, serperApiKey, wpConfig.url
         );
 
-        // Phase 6: Internal Links
+        // Phase 6: YouTube Injection (from placeholder or smart insertion)
+        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Video...' } });
+        let contentWithVideo = contentResponse;
+
+        // Try placeholder-based injection first
+        if (contentResponse.includes('[YOUTUBE_VIDEO_PLACEHOLDER]')) {
+          contentWithVideo = await injectYouTubeIntoContent(
+            contentResponse, item.title, serperApiKey
+          );
+        } else if (youtubeHtml) {
+          // Fallback: Smart insertion after 3rd H2 section
+          const h2Matches = [...contentResponse.matchAll(/<\/h2>/gi)];
+          if (h2Matches.length >= 3 && h2Matches[2].index !== undefined) {
+            const insertPos = h2Matches[2].index + 5;
+            const afterH2 = contentResponse.substring(insertPos);
+            const nextPMatch = afterH2.match(/<\/p>/i);
+            if (nextPMatch && nextPMatch.index !== undefined) {
+              const finalInsertPos = insertPos + nextPMatch.index + nextPMatch[0].length;
+              contentWithVideo = contentResponse.substring(0, finalInsertPos) + youtubeHtml + contentResponse.substring(finalInsertPos);
+            }
+          }
+        }
+
+        // Phase 7: Internal Links
         dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🔗 Links...' } });
-        let contentWithLinks = contentResponse;
+        let contentWithLinks = contentWithVideo;
         let linkResult = { linkCount: 0, links: [] as any[] };
 
         if (existingPages.length > 0) {
           const linkingResult = await generateEnhancedInternalLinks(
-            contentResponse, existingPages, item.title, null, ''
+            contentWithVideo, existingPages, item.title, null, ''
           );
           contentWithLinks = linkingResult.html;
           linkResult = { linkCount: linkingResult.linkCount, links: linkingResult.links };
         }
 
-        // Phase 7: Assemble & Polish
+        // Phase 8: Polish & Assemble
         dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '✨ Polishing...' } });
 
         let finalContent = polishContentHtml(contentWithLinks);
-        if (youtubeHtml) {
-          const h2Match = finalContent.match(/<\/h2>/i);
-          if (h2Match && h2Match.index !== undefined) {
-            const insertPos = h2Match.index + h2Match[0].length;
-            const afterH2 = finalContent.substring(insertPos);
-            const nextPMatch = afterH2.match(/<\/p>/i);
-            if (nextPMatch && nextPMatch.index !== undefined) {
-              const finalInsertPos = insertPos + nextPMatch.index + nextPMatch[0].length;
-              finalContent = finalContent.substring(0, finalInsertPos) + youtubeHtml + finalContent.substring(finalInsertPos);
-            }
-          }
-        }
 
         if (referencesHtml) {
           finalContent += referencesHtml;
@@ -1900,6 +1911,7 @@ class MaintenanceEngine {
       );
     };
 
+    // ========== PHASE 1: Semantic Keywords ==========
     this.log('🏷️ Extracting semantic keywords...');
     let semanticKeywords: string[] = [];
     try {
@@ -1910,47 +1922,74 @@ class MaintenanceEngine {
       semanticKeywords = [page.title || 'content'];
     }
 
-    this.log('✨ Optimizing content with AI...');
+    // ========== PHASE 2: SOTA Content Reconstruction (Using God Mode Agent) ==========
+    this.log('✨ Reconstructing content with GOD MODE AI Agent...');
     const optimizedContent = await callAIFn(
-      'content_optimizer',
-      [content, semanticKeywords, page.title],
+      'god_mode_autonomous_agent',
+      [content, page.title, semanticKeywords, this.context.existingPages, null],
       'html'
     );
 
-    this.log('📹 Finding relevant video...');
-    const { html: youtubeHtml } = await findRelevantYouTubeVideo(
-      page.title || semanticKeywords[0],
-      this.context.serperApiKey
-    );
+    // ========== PHASE 3: YouTube Injection (Placeholder-Based OR Smart Fallback) ==========
+    this.log('📹 Injecting YouTube video...');
+    let contentWithVideo = optimizedContent;
 
-    this.log('📚 Fetching verified references...');
-    const { html: referencesHtml } = await fetchVerifiedReferences(
-      page.title || semanticKeywords[0],
-      semanticKeywords,
-      this.context.serperApiKey,
-      this.context.wpConfig.url
-    );
+    // Try placeholder-based injection first (enterprise pattern)
+    if (optimizedContent.includes('[YOUTUBE_VIDEO_PLACEHOLDER]')) {
+      contentWithVideo = await injectYouTubeIntoContent(
+        optimizedContent,
+        page.title || semanticKeywords[0],
+        this.context.serperApiKey,
+        (msg) => this.log(msg)
+      );
+    } else {
+      // Smart fallback: inject after 3rd H2 section
+      const { html: youtubeHtml } = await findRelevantYouTubeVideo(
+        page.title || semanticKeywords[0],
+        this.context.serperApiKey
+      );
+      if (youtubeHtml) {
+        const h2Matches = [...optimizedContent.matchAll(/<\/h2>/gi)];
+        if (h2Matches.length >= 3 && h2Matches[2].index !== undefined) {
+          const insertPos = h2Matches[2].index + 5;
+          const afterH2 = optimizedContent.substring(insertPos);
+          const nextPMatch = afterH2.match(/<\/p>/i);
+          if (nextPMatch && nextPMatch.index !== undefined) {
+            const finalInsertPos = insertPos + nextPMatch.index + nextPMatch[0].length;
+            contentWithVideo = optimizedContent.substring(0, finalInsertPos) + youtubeHtml + optimizedContent.substring(finalInsertPos);
+          }
+        }
+      }
+    }
 
-    this.log('🔗 Injecting internal links...');
+    // ========== PHASE 4: Internal Links (Enhanced Strategy) ==========
+    this.log('🔗 Injecting internal links with descriptive anchors...');
     const linkResult = await generateEnhancedInternalLinks(
-      optimizedContent,
+      contentWithVideo,
       this.context.existingPages,
       page.title || '',
       null,
       ''
     );
 
-    let finalContent = linkResult.html;
-    if (youtubeHtml) {
-      const match = finalContent.match(/<\/h2>/i);
-      if (match && match.index !== undefined) {
-        const pos = match.index + match[0].length;
-        finalContent = finalContent.substring(0, pos) + youtubeHtml + finalContent.substring(pos);
-      }
-    }
+    // ========== PHASE 5: Verified References ==========
+    this.log('📚 Fetching verified references...');
+    const { html: referencesHtml, references } = await fetchVerifiedReferences(
+      page.title || semanticKeywords[0],
+      semanticKeywords,
+      this.context.serperApiKey,
+      this.context.wpConfig.url
+    );
+
+    // ========== PHASE 6: Polish & Assemble ==========
+    this.log('✨ Polishing final content...');
+    let finalContent = polishContentHtml(linkResult.html);
+
     if (referencesHtml) {
       finalContent += referencesHtml;
     }
+
+    this.log(`📊 Stats: ${linkResult.linkCount} links | ${semanticKeywords.length} keywords | ${references.length} references`);
 
     this.log('🌐 Publishing to WordPress...');
     const result = await publishItemToWordPress(
@@ -1990,13 +2029,8 @@ export const maintenanceEngine = new MaintenanceEngine();
 
 // ==================== EXPORTS ====================
 
-export {
-  analytics as generationAnalytics,
-  AnalyticsEngine,
-  YouTubeVideo,
-  VerifiedReference,
-  GenerationAnalytics
-};
+export { analytics as generationAnalytics, AnalyticsEngine };
+export type { YouTubeVideo, VerifiedReference, GenerationAnalytics };
 
 export default {
   callAI,
@@ -2005,6 +2039,7 @@ export default {
   maintenanceEngine,
   fetchVerifiedReferences,
   findRelevantYouTubeVideo,
+  injectYouTubeIntoContent,
   generateEnhancedInternalLinks,
   generateImageWithFallback,
   generationAnalytics: analytics
