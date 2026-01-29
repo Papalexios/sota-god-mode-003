@@ -722,11 +722,13 @@ export const generateEnhancedInternalLinks = async (
 
   const usedUrls = new Set<string>();
   const injectedLinks: any[] = [];
-  const targetLinkCount = Math.min(12, Math.max(6, Math.floor(paragraphs.length / 3)));
+  // CRITICAL: 4-8 internal links maximum, evenly distributed
+  const targetLinkCount = Math.min(8, Math.max(4, Math.floor(paragraphs.length / 4)));
 
   for (const paragraph of paragraphs) {
     if (injectedLinks.length >= targetLinkCount) break;
-    if (paragraph.querySelectorAll('a').length >= 2) continue;
+    // CRITICAL: Max 1 link per paragraph
+    if (paragraph.querySelectorAll('a').length >= 1) continue;
 
     const paragraphText = paragraph.textContent || '';
 
@@ -784,24 +786,132 @@ export const generateEnhancedInternalLinks = async (
   };
 };
 
+// =============================================================================
+// ULTRA SOTA ANCHOR TEXT ENGINE v3.0 - ZERO BROKEN FRAGMENTS
+// Guaranteed grammatically complete, semantically meaningful anchor text
+// =============================================================================
+
+// CRITICAL: Words that CANNOT start an anchor (would create fragments)
+const FORBIDDEN_START_WORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'but', 'nor', 'so', 'yet', 'for',
+  'is', 'are', 'was', 'were', 'be', 'been', 'being', 'am',
+  'it', 'its', 'this', 'that', 'these', 'those',
+  'to', 'of', 'in', 'on', 'at', 'by', 'with', 'from', 'as', 'into',
+  'than', 'if', 'then', 'also', 'just', 'only', 'even', 'still',
+  'very', 'really', 'quite', 'rather', 'too', 'more', 'most', 'less',
+  'which', 'who', 'whom', 'whose', 'where', 'when', 'while', 'because',
+  'although', 'though', 'unless', 'since', 'until', 'before', 'after',
+  'whether', 'however', 'therefore', 'thus', 'hence', 'moreover',
+  'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing',
+  'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can',
+  'not', "don't", "doesn't", "didn't", "won't", "wouldn't", "couldn't",
+  'he', 'she', 'they', 'we', 'you', 'i', 'me', 'him', 'her', 'us', 'them',
+  'my', 'your', 'his', 'our', 'their', 'its',
+  'some', 'any', 'no', 'every', 'each', 'all', 'both', 'few', 'many', 'much',
+  'other', 'another', 'such', 'same', 'different', 'own',
+  'totally', 'completely', 'absolutely', 'certainly', 'definitely', 'probably',
+  'actually', 'basically', 'essentially', 'generally', 'usually', 'often',
+  'always', 'never', 'sometimes', 'maybe', 'perhaps', 'likely',
+]);
+
+// CRITICAL: Words that CANNOT end an anchor (would create fragments)
+const FORBIDDEN_END_WORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'but', 'nor', 'so', 'yet', 'for',
+  'to', 'of', 'in', 'on', 'at', 'by', 'with', 'from', 'as', 'into',
+  'is', 'are', 'was', 'were', 'be', 'been', 'being',
+  'have', 'has', 'had', 'do', 'does', 'did',
+  'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can',
+  'which', 'who', 'whom', 'whose', 'where', 'when', 'that', 'whether',
+  'if', 'then', 'than', 'as', 'like',
+  'very', 'really', 'quite', 'rather', 'too', 'more', 'most', 'less',
+  'totally', 'completely', 'absolutely', 'highly', 'extremely',
+  'this', 'that', 'these', 'those', 'it', 'its',
+  'my', 'your', 'his', 'her', 'our', 'their',
+  'some', 'any', 'no', 'every', 'each', 'all', 'both',
+  'not', "don't", "doesn't", "didn't", "won't", "wouldn't",
+]);
+
+// REQUIRED: Anchor must contain at least one of these descriptive words
+const REQUIRED_DESCRIPTIVE_WORDS = new Set([
+  'guide', 'tips', 'strategies', 'techniques', 'methods', 'steps',
+  'practices', 'approach', 'framework', 'system', 'process', 'checklist',
+  'benefits', 'advantages', 'solutions', 'training', 'exercises', 'workouts',
+  'nutrition', 'diet', 'health', 'wellness', 'fitness', 'routine',
+  'plan', 'program', 'schedule', 'tools', 'resources', 'essentials',
+  'fundamentals', 'basics', 'principles', 'concepts', 'ideas',
+  'mistakes', 'problems', 'challenges', 'solutions', 'fixes',
+  'review', 'comparison', 'analysis', 'tutorial', 'lesson',
+  'beginner', 'advanced', 'professional', 'expert', 'complete', 'ultimate',
+  'best', 'top', 'proven', 'effective', 'essential', 'important',
+  'choosing', 'selecting', 'finding', 'building', 'creating', 'developing',
+  'improving', 'optimizing', 'maximizing', 'understanding', 'mastering',
+]);
+
+// Validate anchor text is grammatically complete
+function isGrammaticallyComplete(phrase: string): boolean {
+  const words = phrase.trim().split(/\s+/);
+  if (words.length < 4 || words.length > 8) return false;
+  
+  const firstWord = words[0].toLowerCase().replace(/[^a-z']/g, '');
+  const lastWord = words[words.length - 1].toLowerCase().replace(/[^a-z']/g, '');
+  
+  // Check forbidden start/end words
+  if (FORBIDDEN_START_WORDS.has(firstWord)) return false;
+  if (FORBIDDEN_END_WORDS.has(lastWord)) return false;
+  
+  // Check for fragment patterns at end
+  const fragmentEndPatterns = [
+    /\b(is|are|was|were|been|being)\s*$/i,
+    /\b(and|or|but|the|a|an)\s*$/i,
+    /\b(to|of|in|on|at|by|with|from)\s*$/i,
+    /\b(very|really|quite|rather|totally|completely)\s*$/i,
+    /\b(will|would|could|should|can|may|might|must)\s*$/i,
+    /\b(that|which|who|where|when|how|why)\s*$/i,
+  ];
+  
+  for (const pattern of fragmentEndPatterns) {
+    if (pattern.test(phrase)) return false;
+  }
+  
+  // Check for fragment patterns at start
+  const fragmentStartPatterns = [
+    /^(and|or|but|so|yet|nor)\s/i,
+    /^(that|which|who|whom|whose|where|when)\s/i,
+    /^(is|are|was|were|been|being)\s/i,
+    /^(very|really|quite|rather|totally)\s/i,
+  ];
+  
+  for (const pattern of fragmentStartPatterns) {
+    if (pattern.test(phrase)) return false;
+  }
+  
+  // Must contain at least one descriptive word
+  const hasDescriptive = words.some(w => 
+    REQUIRED_DESCRIPTIVE_WORDS.has(w.toLowerCase().replace(/[^a-z]/g, ''))
+  );
+  
+  return hasDescriptive;
+}
+
 // ULTRA ENHANCED: Enterprise-grade anchor text generation for maximum SEO value
 function findContextualAnchorEnhanced(paragraphText: string, page: SitemapPage): AnchorCandidate | null {
   const words = paragraphText.split(/\s+/).filter(w => w.length > 0);
-  if (words.length < 6) return null;
+  if (words.length < 8) return null;
 
   const pageTitle = (page.title || '').toLowerCase();
   const titleWords = pageTitle
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    .filter(w => w.length > 2 && !['the', 'and', 'for', 'with', 'that', 'this', 'from', 'your', 'what', 'how'].includes(w));
+    .filter(w => w.length > 3 && !FORBIDDEN_START_WORDS.has(w));
 
   const slugWords = (page.slug || '')
     .replace(/[-_]/g, ' ')
     .toLowerCase()
     .split(/\s+/)
-    .filter(w => w.length > 2);
+    .filter(w => w.length > 3);
 
   const allTargetWords = [...new Set([...titleWords, ...slugWords])];
+  if (allTargetWords.length === 0) return null;
 
   // Extract key topic phrases from title for better matching
   const titlePhrases: string[] = [];
@@ -821,18 +931,25 @@ function findContextualAnchorEnhanced(paragraphText: string, page: SitemapPage):
   for (let phraseLen = 4; phraseLen <= 7; phraseLen++) {
     for (let i = 0; i <= words.length - phraseLen; i++) {
       const phraseWords = words.slice(i, i + phraseLen);
-      const phrase = phraseWords.join(' ').replace(/[.,!?;:'"()[\]{}]/g, '').trim();
+      const phrase = phraseWords.join(' ')
+        .replace(/^[.,!?;:'"()[\]{}–—-]+/, '')
+        .replace(/[.,!?;:'"()[\]{}–—-]+$/, '')
+        .trim();
 
       if (phrase.length < 15 || phrase.length > 70) continue;
+
+      // CRITICAL: Validate grammatical completeness FIRST
+      if (!isGrammaticallyComplete(phrase)) continue;
 
       const phraseLower = phrase.toLowerCase();
       let score = 0;
 
-      // CRITICAL: Check for banned/generic anchors FIRST
+      // CRITICAL: Check for banned/generic anchors
       const bannedTerms = [
         'click here', 'read more', 'learn more', 'this article', 'check out',
         'click', 'here', 'this guide', 'this post', 'read this', 'see more',
-        'find out', 'discover more', 'more information', 'more details'
+        'find out', 'discover more', 'more information', 'more details',
+        'totally miss', 'rather', 'miss the', 'habits rather'
       ];
       if (bannedTerms.some(t => phraseLower.includes(t) || phraseLower === t)) continue;
 
@@ -878,10 +995,10 @@ function findContextualAnchorEnhanced(paragraphText: string, page: SitemapPage):
       const strongStarters = [
         'choosing', 'finding', 'understanding', 'selecting', 'best', 'top',
         'complete', 'ultimate', 'essential', 'proven', 'effective', 'comparing',
-        'how', 'why', 'when', 'what', 'guide', 'tips', 'strategies'
+        'guide', 'tips', 'strategies', 'professional', 'comprehensive'
       ];
       const firstWord = phraseWords[0].toLowerCase().replace(/[^a-z]/g, '');
-      if (strongStarters.includes(firstWord)) score += 0.2;
+      if (strongStarters.includes(firstWord)) score += 0.3;
 
       // BONUS: Contains topic-specific terms
       const topicTerms = ['training', 'guide', 'review', 'comparison', 'tutorial', 'checklist', 'template', 'strategy', 'method', 'technique', 'system', 'approach'];
@@ -891,44 +1008,7 @@ function findContextualAnchorEnhanced(paragraphText: string, page: SitemapPage):
       const vagueTerms = ['things', 'stuff', 'something', 'anything', 'everything', 'information', 'details'];
       if (vagueTerms.some(t => phraseLower.includes(t))) score -= 0.3;
 
-      // PENALTY: Starts with weak words
-      const weakStarters = ['a', 'an', 'the', 'it', 'this', 'that', 'these', 'those', 'is', 'are', 'was', 'were', 'be', 'been'];
-      if (weakStarters.includes(firstWord)) score -= 0.2;
-
-      if (score > highestScore && score >= 0.5) {
-        highestScore = score;
-        bestCandidate = { text: phrase, score };
-      }
-    }
-  }
-
-  // FALLBACK: Try 3-word phrases if no good 4-7 word match found
-  if (!bestCandidate || highestScore < 0.6) {
-    for (let i = 0; i <= words.length - 3; i++) {
-      const phraseWords = words.slice(i, i + 3);
-      const phrase = phraseWords.join(' ').replace(/[.,!?;:'"()[\]{}]/g, '').trim();
-
-      if (phrase.length < 10 || phrase.length > 40) continue;
-
-      const phraseLower = phrase.toLowerCase();
-      let score = 0;
-
-      // Check for topic relevance
-      let matchedWords = 0;
-      for (const targetWord of allTargetWords) {
-        if (targetWord.length > 3 && phraseLower.includes(targetWord)) {
-          matchedWords++;
-          score += 0.3;
-        }
-      }
-
-      if (matchedWords >= 2) score += 0.4;
-
-      // Must be descriptive
-      const descriptive = ['guide', 'tips', 'how', 'best', 'top', 'training', 'review', 'comparison'];
-      if (descriptive.some(d => phraseLower.includes(d))) score += 0.2;
-
-      if (score > highestScore && score >= 0.5 && matchedWords >= 1) {
+      if (score > highestScore && score >= 0.6) {
         highestScore = score;
         bestCandidate = { text: phrase, score };
       }

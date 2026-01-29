@@ -587,11 +587,14 @@ EXPERT INSIGHT (Blue - use 1-2 times):
 - **15+ gap keywords** that competitors miss (see GAP ANALYSIS above)
 - **Current year references** (${TARGET_YEAR} data, recent events, updated statistics)
 
-## INTERNAL LINKING REQUIREMENTS
-- Include **10-15 internal links** with **4-7 word descriptive anchor text**
-- NEVER use: "click here", "read more", "learn more", "this article"
-- Anchor text MUST describe the destination page's content
-- Example anchors: "complete guide to advanced keyword research", "step-by-step local SEO checklist", "comparing the top email marketing platforms"
+## INTERNAL LINKING REQUIREMENTS (STRICT RULES)
+- Include **4-8 internal links MAXIMUM** with **4-7 word descriptive anchor text**
+- **MAX 1 link per paragraph** - NEVER add multiple links in same paragraph
+- Links must be EVENLY DISTRIBUTED throughout the content (not clustered)
+- NEVER use: "click here", "read more", "learn more", "this article", "here"
+- Anchor text MUST be grammatically COMPLETE (no fragments like "healthy totally" or "and sustainable habits rather")
+- Example GOOD anchors: "complete guide to advanced keyword research", "professional dog training techniques for puppies", "proven nutrition strategies for athletes"
+- Example BAD anchors: "totally miss the", "and sustainable habits rather", "healthy" (too short), "the complete guide to" (starts with 'the')
 
 ## OUTPUT RULES
 1. Return strictly HTML5 body content (start with <p>...</p>)
@@ -632,11 +635,12 @@ The system will automatically inject a relevant video using Serper API.
 ${pagesStr}
 
 STRICT LINKING RULES:
-- MAX 1 inline link per sentence
-- MAX 3 inline links per paragraph  
+- **4-8 internal links TOTAL** in the entire article
+- **MAX 1 link per paragraph** - NEVER put 2 links in same paragraph
 - NEVER 2+ consecutive linked phrases
-- NEVER link-stuff the opening paragraph
-- SPACE links EVENLY throughout content
+- NEVER link-stuff the opening paragraph or conclusion
+- SPACE links EVENLY throughout content (every 3-4 paragraphs)
+- Anchor text MUST be 4-7 words, grammatically COMPLETE
 - Move "related articles" to a CHIP ROW section:
 
 <div class="sota-related-guides" style="margin: 2rem 0; padding: 1.25rem; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0;">
