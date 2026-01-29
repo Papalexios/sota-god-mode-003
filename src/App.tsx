@@ -36,6 +36,8 @@ import {
   findAndEmbedYouTubeVideo
 } from './YouTubeService';
 
+import { PriorityURL } from './GodModeURLInput';
+
 import {
   fetchVerifiedReferences as fetchReferencesService,
   generateReferencesHtml,
@@ -328,7 +330,7 @@ const App: React.FC = () => {
   const [selectedGroqModel, setSelectedGroqModel] = useState(() =>
     localStorage.getItem(STORAGE_KEYS.SELECTED_GROQ_MODEL) || AI_MODELS.GROQ_MODELS[0]
   );
-  const [openrouterModels, setOpenrouterModels] = useState<string[]>(AI_MODELS.OPENROUTER_DEFAULT);
+  const [openrouterModels, setOpenrouterModels] = useState<string[]>([...AI_MODELS.OPENROUTER_DEFAULT]);
 
   // ==================== WORDPRESS CONFIGURATION STATE ====================
   const [wpConfig, setWpConfig] = useState<WpConfig>(() =>
@@ -429,7 +431,7 @@ const App: React.FC = () => {
   const [excludedCategories, setExcludedCategories] = useState<string[]>(() =>
     getStorageItem(STORAGE_KEYS.EXCLUDED_CATEGORIES, [])
   );
-  const [priorityUrls, setPriorityUrls] = useState<string[]>(() =>
+  const [priorityUrls, setPriorityUrls] = useState<PriorityURL[]>(() =>
     getStorageItem(STORAGE_KEYS.PRIORITY_URLS, [])
   );
   const [priorityOnlyMode, setPriorityOnlyMode] = useState<boolean>(() =>
@@ -1131,14 +1133,17 @@ const App: React.FC = () => {
         'json'
       );
 
-      const parsedJson = await parseJsonWithAiRepair(responseText, aiRepairer);
+      const parsedJson = await parseJsonWithAiRepair(responseText, aiRepairer) as {
+        pillarTitle: string;
+        clusterTitles: { title: string }[];
+      };
 
       const newItems: Partial<ContentItem>[] = [
-        { id: parsedJson.pillarTitle, title: parsedJson.pillarTitle, type: 'pillar' },
+        { id: parsedJson.pillarTitle, title: parsedJson.pillarTitle, type: 'pillar' as const },
         ...parsedJson.clusterTitles.map((cluster: { title: string }) => ({
           id: cluster.title,
           title: cluster.title,
-          type: 'cluster'
+          type: 'cluster' as const
         }))
       ];
 
@@ -1672,9 +1677,11 @@ const App: React.FC = () => {
     await processConcurrently(
       selectedPages,
       processItem,
-      1,
-      (c, t) => setBulkAutoPublishProgress({ current: c, total: t }),
-      () => false
+      {
+        concurrency: 1,
+        onProgress: (c, t) => setBulkAutoPublishProgress({ current: c, total: t }),
+        shouldStop: () => false
+      }
     );
 
     setIsBulkAutoPublishing(false);

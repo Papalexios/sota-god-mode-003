@@ -383,7 +383,7 @@ interface ReviewModalProps {
     wpConfig: WpConfig;
     wpPassword: string;
     onPublishSuccess: (originalUrl: string) => void;
-    publishItem: (itemToPublish: ContentItem, currentWpPassword: string, status: 'publish' | 'draft') => Promise<{ success: boolean; message: React.ReactNode; link?: string }>;
+    publishItem: (itemToPublish: ContentItem, currentWpPassword: string, status: 'publish' | 'draft' | 'pending') => Promise<{ success: boolean; message?: string; url?: string; postId?: number }>;
     callAI: (promptKey: any, promptArgs: any[], responseFormat?: 'json' | 'html', useGrounding?: boolean) => Promise<string>;
     geoTargeting: ExpandedGeoTargeting;
     neuronConfig: NeuronConfig;
@@ -443,7 +443,8 @@ export const ReviewModal = ({ item, onClose, onSaveChanges, wpConfig, wpPassword
             const location = geoTargeting.enabled ? geoTargeting.location : null;
             const responseText = await callAI('seo_metadata_generator', [primaryKeyword, summary, strategy?.targetAudience, competitorTitles, location], 'json');
             const aiRepairer = (brokenText: string) => callAI('json_repair', [brokenText], 'json');
-            const { seoTitle, metaDescription } = await parseJsonWithAiRepair(responseText, aiRepairer);
+            const parsed = await parseJsonWithAiRepair(responseText, aiRepairer) as { seoTitle?: string; metaDescription?: string };
+            const { seoTitle, metaDescription } = parsed;
             if (field === 'title' && seoTitle) setEditedSeo(prev => ({ ...prev, title: seoTitle }));
             if (field === 'meta' && metaDescription) setEditedSeo(prev => ({ ...prev, metaDescription: metaDescription }));
         } catch (error) { console.error(error); } finally { setIsRegenerating(prev => ({ ...prev, [field]: false })); }
@@ -460,11 +461,11 @@ export const ReviewModal = ({ item, onClose, onSaveChanges, wpConfig, wpPassword
         const itemWithEdits = { ...item, generatedContent: { ...item.generatedContent!, title: editedSeo.title, metaDescription: editedSeo.metaDescription, slug: extractSlugFromUrl(editedSeo.slug), content: editedContent } };
         const result = await publishItem(itemWithEdits, wpPassword, item.originalUrl ? 'publish' : publishAction);
         setWpPublishStatus(result.success ? 'success' : 'error');
-        setWpPublishMessage(result.message);
-        if (result.success && result.link) {
-            setPublishedLink(result.link);
+        setWpPublishMessage(result.message || (result.success ? 'Published successfully' : 'Publish failed'));
+        if (result.success && result.url) {
+            setPublishedLink(result.url);
             // CRITICAL FIX: Pass the actual published URL to onPublishSuccess for BOTH new and updated posts
-            onPublishSuccess(result.link);
+            onPublishSuccess(result.url);
         }
     };
 
@@ -662,10 +663,10 @@ export const BulkPublishModal = ({ items, onClose, publishItem, wpConfig, wpPass
                 const result = await publishItem(item, wpPassword, status);
                 if (result.success) {
                     setLogs(prev => [...prev, `✅ Success: ${item.title}`]);
-                    if (onPublishSuccess) onPublishSuccess(result.link || item.title);
+                    if (onPublishSuccess) onPublishSuccess(result.url || item.title);
                     successCount++;
                 } else {
-                    setLogs(prev => [...prev, `❌ Failed: ${item.title} - ${result.message}`]);
+                    setLogs(prev => [...prev, `❌ Failed: ${item.title} - ${result.message || 'Unknown error'}`]);
                 }
             } catch (e: any) {
                 setLogs(prev => [...prev, `❌ Error: ${item.title} - ${e.message}`]);

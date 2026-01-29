@@ -185,6 +185,9 @@ export interface ContentAnalysis {
   recommendations: string[];
   seoScore: number;
   readabilityScore: number;
+  score?: number;
+  keyIssues?: string[];
+  opportunities?: string[];
 }
 
 // ==================== SEO & OPTIMIZATION TYPES ====================
