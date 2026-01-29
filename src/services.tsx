@@ -1491,11 +1491,7 @@ export const generateContent = {
           semanticKeywords = [item.title];
         }
 
-        // Phase 3: YouTube Video
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Video...' } });
-        const { html: youtubeHtml } = await findRelevantYouTubeVideo(item.title, serperApiKey);
-
-        // Phase 4: Main Content
+        // Phase 3: Main Content
         dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '✍️ Writing...' } });
         const contentResponse = await callAIFn(
           'ultra_sota_article_writer',
@@ -1503,33 +1499,27 @@ export const generateContent = {
           'html'
         );
 
-        // Phase 5: References
+        // Phase 4: References
         dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📚 References...' } });
         const { html: referencesHtml, references } = await fetchVerifiedReferences(
           item.title, semanticKeywords, serperApiKey, wpConfig.url
         );
 
-        // Phase 6: YouTube Injection (from placeholder or smart insertion)
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Video...' } });
-        let contentWithVideo = contentResponse;
+        // Phase 5: YouTube Video Injection (GUARANTEED)
+        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Finding Video...' } });
+        console.log(`[ContentGen] Injecting YouTube video for: "${item.title}"`);
 
-        // Try placeholder-based injection first
-        if (contentResponse.includes('[YOUTUBE_VIDEO_PLACEHOLDER]')) {
-          contentWithVideo = await injectYouTubeIntoContent(
-            contentResponse, item.title, serperApiKey
-          );
-        } else if (youtubeHtml) {
-          // Fallback: Smart insertion after 3rd H2 section
-          const h2Matches = [...contentResponse.matchAll(/<\/h2>/gi)];
-          if (h2Matches.length >= 3 && h2Matches[2].index !== undefined) {
-            const insertPos = h2Matches[2].index + 5;
-            const afterH2 = contentResponse.substring(insertPos);
-            const nextPMatch = afterH2.match(/<\/p>/i);
-            if (nextPMatch && nextPMatch.index !== undefined) {
-              const finalInsertPos = insertPos + nextPMatch.index + nextPMatch[0].length;
-              contentWithVideo = contentResponse.substring(0, finalInsertPos) + youtubeHtml + contentResponse.substring(finalInsertPos);
-            }
-          }
+        const contentWithVideo = await injectYouTubeIntoContent(
+          contentResponse,
+          item.title,
+          serperApiKey,
+          (msg) => console.log(msg)
+        );
+
+        if (contentWithVideo === contentResponse) {
+          console.warn(`[ContentGen] ⚠️ YouTube video not injected for: "${item.title}"`);
+        } else {
+          console.log(`[ContentGen] ✅ YouTube video successfully injected for: "${item.title}"`);
         }
 
         // Phase 7: Internal Links
@@ -1630,27 +1620,29 @@ export const generateContent = {
         'html'
       );
 
-      const { html: youtubeHtml } = await findRelevantYouTubeVideo(item.title, serperApiKey);
+      // Inject YouTube video using enhanced injection engine
+      const contentWithVideo = await injectYouTubeIntoContent(
+        optimizedContent,
+        item.title,
+        serperApiKey,
+        (msg) => console.log(`[Refresh] ${msg}`)
+      );
+
+      // Fetch verified references
       const { html: referencesHtml, references } = await fetchVerifiedReferences(
         item.title, semanticKeywords, serperApiKey, wpConfig.url
       );
 
-      let finalContent = optimizedContent;
+      // Add internal links
+      let finalContent = contentWithVideo;
       if (existingPages.length > 0) {
         const linkResult = await generateEnhancedInternalLinks(
-          optimizedContent, existingPages, item.title, null, ''
+          contentWithVideo, existingPages, item.title, null, ''
         );
         finalContent = linkResult.html;
       }
 
-      if (youtubeHtml) {
-        const insertMatch = finalContent.match(/<\/h2>/i);
-        if (insertMatch && insertMatch.index !== undefined) {
-          const pos = insertMatch.index + insertMatch[0].length;
-          finalContent = finalContent.substring(0, pos) + youtubeHtml + finalContent.substring(pos);
-        }
-      }
-
+      // Append references
       if (referencesHtml) {
         finalContent += referencesHtml;
       }

@@ -123,6 +123,8 @@ export async function fetchVerifiedReferences(
     logCallback?.(msg);
   };
 
+  console.log(`[References] 🔍 Fetching verified references for: "${keyword}"`);
+  console.log(`[References] Semantic keywords: ${semanticKeywords.slice(0, 5).join(', ')}`);
   log('Fetching verified references...');
 
   try {
@@ -130,6 +132,7 @@ export async function fetchVerifiedReferences(
     const categoryConfig = REFERENCE_CATEGORIES[category];
     const currentYear = new Date().getFullYear();
 
+    console.log(`[References] Detected category: ${category}`);
     log(`Category detected: ${category}`);
 
     let userDomain = '';
@@ -138,16 +141,32 @@ export async function fetchVerifiedReferences(
     }
 
     const searchQueries: string[] = [];
-    
+
+    // Build hyper-relevant search queries using semantic keywords
+    const topSemanticKeywords = semanticKeywords.slice(0, 3).join(' ');
+
     if (categoryConfig) {
-      const modifiers = categoryConfig.searchModifiers.slice(0, 2).join(' OR ');
-      const domains = categoryConfig.authorityDomains.slice(0, 3).map(d => `site:${d}`).join(' OR ');
-      searchQueries.push(`${keyword} "${modifiers}" (${domains}) ${currentYear}`);
-      searchQueries.push(`${keyword} research study ${currentYear}`);
+      // Query 1: Exact topic + authority domains
+      const topDomains = categoryConfig.authorityDomains.slice(0, 4).map(d => `site:${d}`).join(' OR ');
+      searchQueries.push(`"${keyword}" ${topSemanticKeywords} (${topDomains})`);
+
+      // Query 2: Topic + research/study + current year
+      searchQueries.push(`"${keyword}" ${topSemanticKeywords} research study ${currentYear}`);
+
+      // Query 3: Topic + specific modifiers for the category
+      const modifier = categoryConfig.searchModifiers[0];
+      searchQueries.push(`"${keyword}" ${topSemanticKeywords} "${modifier}" ${currentYear} OR ${currentYear - 1}`);
+
+      // Query 4: Topic + "comprehensive guide" or "complete overview"
+      searchQueries.push(`"${keyword}" comprehensive guide OR complete overview ${currentYear}`);
     } else {
-      searchQueries.push(`${keyword} "research" "study" "data" ${currentYear}`);
-      searchQueries.push(`${keyword} official guide ${currentYear}`);
+      // Generic but still highly relevant
+      searchQueries.push(`"${keyword}" ${topSemanticKeywords} research study evidence ${currentYear}`);
+      searchQueries.push(`"${keyword}" ${topSemanticKeywords} expert guide official`);
+      searchQueries.push(`"${keyword}" ${topSemanticKeywords} best practices ${currentYear}`);
     }
+
+    log(`Search queries: ${searchQueries.length} variations`);
 
     const potentialReferences: any[] = [];
 
@@ -175,6 +194,10 @@ export async function fetchVerifiedReferences(
 
     const validatedReferences: VerifiedReference[] = [];
 
+    // Calculate relevance score for each reference
+    const keywordLower = keyword.toLowerCase();
+    const semanticLower = semanticKeywords.map(k => k.toLowerCase());
+
     for (const ref of potentialReferences) {
       if (validatedReferences.length >= 10) break;
 
@@ -182,10 +205,46 @@ export async function fetchVerifiedReferences(
         const url = new URL(ref.link);
         const domain = url.hostname.replace('www.', '');
 
+        // Basic filters
         if (BLOCKED_DOMAINS.some(d => domain.includes(d))) continue;
         if (userDomain && domain.includes(userDomain)) continue;
         if (validatedReferences.some(r => r.domain === domain)) continue;
 
+        // Relevance scoring
+        const titleLower = (ref.title || '').toLowerCase();
+        const snippetLower = (ref.snippet || '').toLowerCase();
+        const combinedText = `${titleLower} ${snippetLower}`;
+
+        let relevanceScore = 0;
+
+        // Exact keyword match in title = high relevance
+        if (titleLower.includes(keywordLower)) relevanceScore += 100;
+
+        // Partial keyword match
+        const keywordWords = keywordLower.split(/\s+/).filter(w => w.length > 3);
+        for (const word of keywordWords) {
+          if (titleLower.includes(word)) relevanceScore += 20;
+          if (snippetLower.includes(word)) relevanceScore += 10;
+        }
+
+        // Semantic keyword matches
+        for (const semKey of semanticLower) {
+          if (combinedText.includes(semKey)) relevanceScore += 15;
+        }
+
+        // Boost for current year
+        const currentYear = new Date().getFullYear();
+        if (combinedText.includes(String(currentYear)) || combinedText.includes(String(currentYear - 1))) {
+          relevanceScore += 25;
+        }
+
+        // Minimum relevance threshold
+        if (relevanceScore < 50) {
+          log(`Rejected: ${domain} (low relevance score: ${relevanceScore})`);
+          continue;
+        }
+
+        // URL validation
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
 
@@ -205,6 +264,7 @@ export async function fetchVerifiedReferences(
           }
         } catch (e) {
           clearTimeout(timeoutId);
+          log(`Rejected: ${domain} (unreachable)`);
           continue;
         }
 
@@ -220,16 +280,29 @@ export async function fetchVerifiedReferences(
           category
         });
 
-        log(`✅ Verified: ${domain} (${authority} authority)`);
+        log(`✅ Verified: ${domain} (${authority} authority, relevance: ${relevanceScore})`);
       } catch (e) {
         continue;
       }
     }
 
+    // Sort by authority and domain quality
+    validatedReferences.sort((a, b) => {
+      const authorityScore = { high: 3, medium: 2, low: 1 };
+      return authorityScore[b.authority] - authorityScore[a.authority];
+    });
+
     if (validatedReferences.length === 0) {
+      console.warn(`[References] ⚠️ No references passed validation for "${keyword}"`);
       log('No references passed validation');
       return { html: '', references: [] };
     }
+
+    console.log(`[References] ✅ Successfully validated ${validatedReferences.length} high-quality references`);
+    console.log('[References] Top 3 references:');
+    validatedReferences.slice(0, 3).forEach((ref, i) => {
+      console.log(`  ${i + 1}. ${ref.title} (${ref.domain}) - ${ref.authority} authority`);
+    });
 
     log(`Successfully validated ${validatedReferences.length} references`);
 

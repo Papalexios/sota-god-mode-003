@@ -347,54 +347,102 @@ export async function injectYouTubeVideo(
   serperApiKey: string
 ): Promise<{ html: string; video: YouTubeSearchResult | null }> {
   if (!serperApiKey) {
+    console.warn('[YouTubeInjection] No Serper API key - skipping YouTube video injection');
     return { html, video: null };
   }
 
+  console.log(`[YouTubeInjection] Searching for video: "${keyword}"`);
+
   try {
-    const videos = await searchYouTubeVideos(keyword, serperApiKey, 1);
+    const videos = await searchYouTubeVideos(keyword, serperApiKey, 3);
     if (videos.length === 0) {
+      console.warn(`[YouTubeInjection] No videos found for "${keyword}"`);
       return { html, video: null };
     }
 
     const video = videos[0];
+    console.log(`[YouTubeInjection] ✅ Found: "${video.title}" by ${video.channel}`);
+
     const youtubeHtml = generateUltraPremiumYouTubeSection(video);
 
+    // Strategy 1: Replace placeholder if exists
     if (html.includes('[YOUTUBE_VIDEO_PLACEHOLDER]')) {
+      console.log('[YouTubeInjection] Replaced placeholder');
       return {
         html: html.replace('[YOUTUBE_VIDEO_PLACEHOLDER]', youtubeHtml),
         video
       };
     }
 
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
+    // Strategy 2: Insert after 2nd H2 (middle of content)
+    const h2Regex = /<\/h2>/gi;
+    const h2Matches = Array.from(html.matchAll(h2Regex));
 
-    const h2s = doc.querySelectorAll('h2');
-    const targetH2Index = Math.min(3, Math.floor(h2s.length / 2));
+    if (h2Matches.length >= 2) {
+      const insertIndex = h2Matches[1].index! + h2Matches[1][0].length;
 
-    if (h2s.length > targetH2Index) {
-      const targetH2 = h2s[targetH2Index];
-      const wrapper = doc.createElement('div');
-      wrapper.innerHTML = youtubeHtml;
-      targetH2.parentNode?.insertBefore(wrapper, targetH2);
+      // Find the next closing paragraph tag after the H2
+      const afterH2 = html.substring(insertIndex);
+      const nextPMatch = afterH2.match(/<\/p>/i);
 
-      return { html: doc.body.innerHTML, video };
+      if (nextPMatch && nextPMatch.index !== undefined) {
+        const finalInsertPos = insertIndex + nextPMatch.index + nextPMatch[0].length;
+        const result = html.substring(0, finalInsertPos) + '\n\n' + youtubeHtml + '\n\n' + html.substring(finalInsertPos);
+        console.log('[YouTubeInjection] Inserted after 2nd H2 section');
+        return { html: result, video };
+      }
     }
 
-    const faq = doc.querySelector('.sota-faq-ultra, .sota-faq, [class*="faq"]');
-    if (faq) {
-      const wrapper = doc.createElement('div');
-      wrapper.innerHTML = youtubeHtml;
-      faq.parentNode?.insertBefore(wrapper, faq);
-      return { html: doc.body.innerHTML, video };
+    // Strategy 3: Insert after 1st H2 if only 1 exists
+    if (h2Matches.length >= 1) {
+      const insertIndex = h2Matches[0].index! + h2Matches[0][0].length;
+      const afterH2 = html.substring(insertIndex);
+      const nextPMatch = afterH2.match(/<\/p>/i);
+
+      if (nextPMatch && nextPMatch.index !== undefined) {
+        const finalInsertPos = insertIndex + nextPMatch.index + nextPMatch[0].length;
+        const result = html.substring(0, finalInsertPos) + '\n\n' + youtubeHtml + '\n\n' + html.substring(finalInsertPos);
+        console.log('[YouTubeInjection] Inserted after 1st H2 section');
+        return { html: result, video };
+      }
     }
 
+    // Strategy 4: Insert before FAQ section if exists
+    const faqMatch = html.match(/<div[^>]*class="[^"]*faq[^"]*"[^>]*>/i);
+    if (faqMatch && faqMatch.index !== undefined) {
+      const result = html.substring(0, faqMatch.index) + youtubeHtml + '\n\n' + html.substring(faqMatch.index);
+      console.log('[YouTubeInjection] Inserted before FAQ section');
+      return { html: result, video };
+    }
+
+    // Strategy 5: Insert in the middle (50% through content)
+    const middlePoint = Math.floor(html.length / 2);
+    const nearMiddle = html.substring(middlePoint);
+    const middlePMatch = nearMiddle.match(/<\/p>/i);
+
+    if (middlePMatch && middlePMatch.index !== undefined) {
+      const finalInsertPos = middlePoint + middlePMatch.index + middlePMatch[0].length;
+      const result = html.substring(0, finalInsertPos) + '\n\n' + youtubeHtml + '\n\n' + html.substring(finalInsertPos);
+      console.log('[YouTubeInjection] Inserted at content midpoint');
+      return { html: result, video };
+    }
+
+    // Strategy 6: Last resort - append before any conclusion/final section
+    const conclusionMatch = html.match(/<h2[^>]*>.*?(conclusion|final|summary|wrap).*?<\/h2>/i);
+    if (conclusionMatch && conclusionMatch.index !== undefined) {
+      const result = html.substring(0, conclusionMatch.index) + youtubeHtml + '\n\n' + html.substring(conclusionMatch.index);
+      console.log('[YouTubeInjection] Inserted before conclusion');
+      return { html: result, video };
+    }
+
+    // Strategy 7: Absolute fallback - append to end (but before references if they exist)
+    console.log('[YouTubeInjection] Appended to end of content');
     return {
-      html: html + youtubeHtml,
+      html: html + '\n\n' + youtubeHtml,
       video
     };
-  } catch (error) {
-    console.error('[SOTAContentEnhancer] YouTube injection failed:', error);
+  } catch (error: any) {
+    console.error('[YouTubeInjection] FAILED:', error.message);
     return { html, video: null };
   }
 }

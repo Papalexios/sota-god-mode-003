@@ -43,11 +43,18 @@ export async function searchYouTubeVideos(
   }
 
   try {
+    // Build highly specific queries for maximum relevance
+    const currentYear = new Date().getFullYear();
+
     const queries = [
-      `${keyword} tutorial`,
-      `${keyword} guide how to`,
-      `${keyword} explained`
+      `"${keyword}" tutorial ${currentYear}`,
+      `"${keyword}" complete guide ${currentYear}`,
+      `"${keyword}" explained ${currentYear}`,
+      `${keyword} how to ${currentYear} OR ${currentYear - 1}`,
+      `${keyword} beginner guide tutorial`
     ];
+
+    console.log(`[YouTubeService] Searching with ${queries.length} optimized queries`);
 
     const allResults: YouTubeSearchResult[] = [];
 
@@ -144,38 +151,83 @@ function extractVideoId(url: string): string | null {
  */
 function calculateRelevanceScore(video: YouTubeSearchResult, keyword: string): number {
   const titleLower = video.title.toLowerCase();
+  const descriptionLower = (video.description || '').toLowerCase();
   const keywordLower = keyword.toLowerCase();
   const keywordWords = keywordLower.split(/\s+/).filter(w => w.length > 2);
 
   let score = 0;
 
-  // Full keyword match
-  if (titleLower.includes(keywordLower)) score += 50;
+  // Exact keyword match in title - HIGHEST priority
+  if (titleLower.includes(keywordLower)) score += 100;
 
-  // Individual word matches
+  // Individual keyword word matches
   for (const word of keywordWords) {
-    if (titleLower.includes(word)) score += 10;
+    if (titleLower.includes(word)) score += 15;
+    if (descriptionLower.includes(word)) score += 5;
   }
 
-  // Quality indicators
-  if (titleLower.includes('tutorial')) score += 20;
-  if (titleLower.includes('guide')) score += 15;
-  if (titleLower.includes('how to')) score += 15;
-  if (titleLower.includes('explained')) score += 10;
-  if (titleLower.includes('beginner')) score += 8;
-  if (titleLower.includes('complete')) score += 8;
+  // Educational quality indicators
+  if (titleLower.includes('tutorial')) score += 30;
+  if (titleLower.includes('complete guide') || titleLower.includes('full guide')) score += 35;
+  if (titleLower.includes('step by step') || titleLower.includes('step-by-step')) score += 25;
+  if (titleLower.includes('how to')) score += 20;
+  if (titleLower.includes('explained')) score += 15;
+  if (titleLower.includes('beginner')) score += 12;
+  if (titleLower.includes('ultimate')) score += 10;
+  if (titleLower.includes('comprehensive')) score += 10;
 
-  // Freshness bonus
+  // Authority indicators
+  const authorityChannels = ['official', 'academy', 'institute', 'university', 'professional'];
+  const channelLower = video.channel.toLowerCase();
+  if (authorityChannels.some(term => channelLower.includes(term))) score += 20;
+
+  // Freshness bonus (recent = more relevant)
+  const currentYear = new Date().getFullYear();
+  if (titleLower.includes(String(currentYear))) score += 40;
+  if (titleLower.includes(String(currentYear - 1))) score += 25;
   if (titleLower.includes('2024') || titleLower.includes('2025') || titleLower.includes('2026')) {
-    score += 25;
+    score += 20;
   }
 
-  // Penalties
-  if (titleLower.includes('reaction')) score -= 30;
-  if (titleLower.includes('unboxing')) score -= 20;
-  if (video.title.length < 15) score -= 20;
+  // Duration indicators (longer = more comprehensive)
+  if (video.duration) {
+    const durationLower = video.duration.toLowerCase();
+    // Prefer 10-30 minute videos (sweet spot for tutorials)
+    if (durationLower.match(/1[0-9]:|2[0-9]:/)) score += 15;
+    // Very short videos might be low quality
+    if (durationLower.match(/^[0-2]:/)) score -= 10;
+  }
 
-  return score;
+  // STRONG penalties for irrelevant content
+  const badIndicators = [
+    'reaction', 'reacting', 'react to',
+    'unboxing', 'haul',
+    'vlog', 'daily vlog',
+    'drama', 'exposed',
+    'clickbait', 'shocking',
+    'prank', 'challenge',
+    'review only', 'first look',
+    'livestream', 'stream',
+    'compilation', 'funny moments'
+  ];
+
+  for (const bad of badIndicators) {
+    if (titleLower.includes(bad)) score -= 50;
+  }
+
+  // Penalty for very short titles (often low quality)
+  if (video.title.length < 20) score -= 15;
+
+  // Penalty for ALL CAPS titles (often clickbait)
+  if (video.title === video.title.toUpperCase() && video.title.length > 5) {
+    score -= 25;
+  }
+
+  // Penalty for excessive punctuation (clickbait indicator)
+  const punctuationCount = (video.title.match(/[!?]{2,}/g) || []).length;
+  if (punctuationCount > 0) score -= (punctuationCount * 15);
+
+  return Math.max(0, score); // Never return negative scores
 }
 
 /**
