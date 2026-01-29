@@ -28,17 +28,22 @@ Your app is now fully optimized for Cloudflare Pages deployment with zero Supaba
 
 Go to your Cloudflare Pages project → Settings → Environment Variables
 
-**Set these:**
+**CRITICAL: Set AT LEAST ONE AI API Key (Required for the app to work):**
 ```
-VITE_ANTHROPIC_API_KEY=your_key_here
-VITE_OPENAI_API_KEY=your_key_here
-VITE_GOOGLE_API_KEY=your_key_here
+VITE_ANTHROPIC_API_KEY=sk-ant-your-actual-key-here
+VITE_OPENAI_API_KEY=sk-your-actual-key-here
+VITE_GOOGLE_API_KEY=your-actual-google-key-here
 ```
+
+Get your API keys from:
+- **Anthropic**: https://console.anthropic.com/account/keys
+- **OpenAI**: https://platform.openai.com/api-keys
+- **Google AI**: https://aistudio.google.com/app/apikey
 
 **IMPORTANT: Leave these EMPTY or remove them:**
 ```
-VITE_SUPABASE_URL=(empty)
-VITE_SUPABASE_ANON_KEY=(empty)
+VITE_SUPABASE_URL=(empty or not set)
+VITE_SUPABASE_ANON_KEY=(empty or not set)
 ```
 
 ### Step 2: Redeploy

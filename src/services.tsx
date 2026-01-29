@@ -1066,10 +1066,23 @@ export const callAI = async (
     : String(promptTemplate.userPrompt);
 
   const modelOrder = [selectedModel, 'gemini', 'anthropic', 'openai', 'openrouter', 'groq'];
+  const availableClients = modelOrder.filter(m => apiClients[m as keyof ApiClients]);
+
+  if (availableClients.length === 0) {
+    console.error('[callAI] No API clients available. Please check your API keys in Settings.');
+    throw new Error('No AI providers configured. Please add your API keys in the Settings tab.');
+  }
+
+  console.log(`[callAI] Available providers: ${availableClients.join(', ')}`);
 
   for (const model of modelOrder) {
     const client = apiClients[model as keyof ApiClients];
-    if (!client) continue;
+    if (!client) {
+      console.log(`[callAI] Skipping ${model} (no client initialized)`);
+      continue;
+    }
+
+    console.log(`[callAI] Trying ${model}...`);
 
     try {
       let response: string = '';

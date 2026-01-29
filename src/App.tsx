@@ -257,12 +257,12 @@ interface OptimizedLog {
 // ==================== DEFAULT VALUES ====================
 
 const DEFAULT_API_KEYS = {
-  geminiApiKey: '',
-  openaiApiKey: '',
-  anthropicApiKey: '',
-  openrouterApiKey: '',
-  serperApiKey: '',
-  groqApiKey: ''
+  geminiApiKey: import.meta.env.VITE_GOOGLE_API_KEY || '',
+  openaiApiKey: import.meta.env.VITE_OPENAI_API_KEY || '',
+  anthropicApiKey: import.meta.env.VITE_ANTHROPIC_API_KEY || '',
+  openrouterApiKey: import.meta.env.VITE_OPENROUTER_API_KEY || '',
+  serperApiKey: import.meta.env.VITE_SERPER_API_KEY || '',
+  groqApiKey: import.meta.env.VITE_GROQ_API_KEY || ''
 };
 
 const DEFAULT_WP_CONFIG: WpConfig = { url: '', username: '' };
@@ -312,9 +312,17 @@ const App: React.FC = () => {
   const [activeView, setActiveView] = useState<string>('setup');
 
   // ==================== API CONFIGURATION STATE ====================
-  const [apiKeys, setApiKeys] = useState(() =>
-    getStorageItem(STORAGE_KEYS.API_KEYS, DEFAULT_API_KEYS)
-  );
+  const [apiKeys, setApiKeys] = useState(() => {
+    const stored = getStorageItem(STORAGE_KEYS.API_KEYS, {});
+    return {
+      geminiApiKey: stored.geminiApiKey || DEFAULT_API_KEYS.geminiApiKey,
+      openaiApiKey: stored.openaiApiKey || DEFAULT_API_KEYS.openaiApiKey,
+      anthropicApiKey: stored.anthropicApiKey || DEFAULT_API_KEYS.anthropicApiKey,
+      openrouterApiKey: stored.openrouterApiKey || DEFAULT_API_KEYS.openrouterApiKey,
+      serperApiKey: stored.serperApiKey || DEFAULT_API_KEYS.serperApiKey,
+      groqApiKey: stored.groqApiKey || DEFAULT_API_KEYS.groqApiKey
+    };
+  });
   const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatusMap>(DEFAULT_API_KEY_STATUS);
   const [editingApiKey, setEditingApiKey] = useState<string | null>(null);
   const [apiClients, setApiClients] = useState<ApiClients>({
@@ -545,8 +553,15 @@ const App: React.FC = () => {
 
   // Validate API keys on mount
   useEffect(() => {
+    console.log('[App Init] Checking API keys from environment/localStorage:', {
+      gemini: apiKeys.geminiApiKey ? '✓ Present' : '✗ Missing',
+      openai: apiKeys.openaiApiKey ? '✓ Present' : '✗ Missing',
+      anthropic: apiKeys.anthropicApiKey ? '✓ Present' : '✗ Missing'
+    });
+
     Object.entries(apiKeys).forEach(([key, value]) => {
       if (value) {
+        console.log(`[App Init] Auto-validating ${key}...`);
         validateApiKey(key.replace('ApiKey', ''), value as string);
       }
     });
@@ -708,7 +723,10 @@ const App: React.FC = () => {
             break;
 
           case 'anthropic':
-            client = new Anthropic({ apiKey: key });
+            client = new Anthropic({
+              apiKey: key,
+              dangerouslyAllowBrowser: true
+            });
             await callAiWithRetry(() =>
               client.messages.create({
                 model: AI_MODELS.ANTHROPIC_HAIKU,
