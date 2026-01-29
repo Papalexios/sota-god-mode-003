@@ -1926,247 +1926,791 @@ export const generateImageWithFallback = async (
   return null;
 };
 
-// ==================== MAINTENANCE ENGINE (GOD MODE) ====================
+// ==================== ULTRA-PREMIUM MAINTENANCE ENGINE (GOD MODE ENTERPRISE) ====================
 
-class MaintenanceEngine {
+interface PageScore {
+  page: SitemapPage;
+  score: number;
+  factors: {
+    priority: number;
+    recency: number;
+    importance: number;
+    urgency: number;
+  };
+}
+
+interface HealthMetrics {
+  successCount: number;
+  failureCount: number;
+  avgProcessingTime: number;
+  lastHealthCheck: number;
+  apiQuotaUsage: number;
+  errorRate: number;
+}
+
+interface ProcessingStats {
+  startTime: number;
+  endTime?: number;
+  phaseTimes: Map<string, number>;
+  success: boolean;
+  errorMessage?: string;
+}
+
+class UltraPremiumMaintenanceEngine {
   isRunning: boolean = false;
   logCallback: ((msg: string) => void) | null = null;
   private context: GenerationContext | null = null;
   private intervalId: ReturnType<typeof setInterval> | null = null;
+  private healthCheckId: ReturnType<typeof setInterval> | null = null;
+  private isProcessing: boolean = false;
+  private consecutiveFailures: number = 0;
+  private lastSuccessTime: number = 0;
+  private processingQueue: Set<string> = new Set();
+
+  // Performance tracking
+  private health: HealthMetrics = {
+    successCount: 0,
+    failureCount: 0,
+    avgProcessingTime: 0,
+    lastHealthCheck: Date.now(),
+    apiQuotaUsage: 0,
+    errorRate: 0
+  };
+
+  // Rate limiting
+  private readonly MAX_REQUESTS_PER_HOUR = 50;
+  private readonly MIN_PROCESSING_INTERVAL_MS = 2000; // 2 seconds between requests
+  private lastProcessingTime: number = 0;
+  private requestsThisHour: number = 0;
+  private hourResetTime: number = Date.now() + 3600000;
 
   start(context: GenerationContext) {
-    if (this.isRunning) return;
+    if (this.isRunning) {
+      this.log('⚠️ God Mode already running', 'warning');
+      return;
+    }
 
-    // Validate API clients
+    // CRITICAL: Validate API clients
     const hasValidClient = context.apiClients && (
       context.apiClients.gemini ||
       context.apiClients.anthropic ||
       context.apiClients.openai ||
-      context.apiClients.openrouter
+      context.apiClients.openrouter ||
+      context.apiClients.groq
     );
 
     if (!hasValidClient) {
-      this.log('❌ CRITICAL ERROR: No AI API client initialized!');
-      this.log('🔧 REQUIRED: Configure at least one AI API key in Settings');
-      this.log('🛑 STOPPING: God Mode requires a valid AI API client');
+      this.log('❌ CRITICAL ERROR: No AI API client initialized!', 'error');
+      this.log('🔧 REQUIRED: Configure at least one AI API key in Settings', 'error');
+      this.log('🛑 STOPPING: God Mode requires a valid AI API client', 'error');
+      return;
+    }
+
+    // CRITICAL: Validate WordPress configuration
+    if (!context.wpConfig?.url || !context.wpConfig?.username) {
+      this.log('❌ CRITICAL ERROR: WordPress configuration incomplete!', 'error');
+      this.log('🔧 REQUIRED: Configure WordPress URL and credentials in Settings', 'error');
+      this.log('🛑 STOPPING: God Mode requires WordPress configuration', 'error');
       return;
     }
 
     this.isRunning = true;
     this.context = context;
-    this.log('🚀 GOD MODE ACTIVATED - Autonomous Optimization Engine');
-    this.log(`📊 Found ${context.existingPages.length} pages in sitemap`);
+    this.consecutiveFailures = 0;
+    this.lastSuccessTime = Date.now();
 
-    this.runCycle();
+    // Reset metrics
+    this.health = {
+      successCount: 0,
+      failureCount: 0,
+      avgProcessingTime: 0,
+      lastHealthCheck: Date.now(),
+      apiQuotaUsage: 0,
+      errorRate: 0
+    };
+
+    this.log('🚀 ULTRA-PREMIUM GOD MODE ACTIVATED', 'success');
+    this.log(`🎯 Enterprise Autonomous Optimization Engine v2.0`, 'info');
+    this.log(`📊 Sitemap: ${context.existingPages.length} pages`, 'info');
+    this.log(`⚡ Priority Queue: ${context.priorityUrls?.length || 0} URLs`, 'info');
+    this.log(`🚫 Exclusions: ${context.excludedUrls?.length || 0} URLs, ${context.excludedCategories?.length || 0} categories`, 'info');
+    this.log(`🎯 Mode: ${context.priorityOnlyMode ? 'Priority Only' : 'Full Sitemap'} `, 'info');
+
+    // Start health monitoring
+    this.startHealthMonitoring();
+
+    // Initial cycle (delayed to allow UI to update)
+    setTimeout(() => this.runCycle(), 3000);
+
+    // Schedule recurring cycles (every 60 seconds)
     this.intervalId = setInterval(() => this.runCycle(), 60000);
   }
 
   stop() {
+    if (!this.isRunning) return;
+
     this.isRunning = false;
+    this.isProcessing = false;
+
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
-    this.log('🛑 GOD MODE DEACTIVATED');
+
+    if (this.healthCheckId) {
+      clearInterval(this.healthCheckId);
+      this.healthCheckId = null;
+    }
+
+    this.processingQueue.clear();
+
+    // Log final statistics
+    const successRate = this.health.successCount + this.health.failureCount > 0
+      ? ((this.health.successCount / (this.health.successCount + this.health.failureCount)) * 100).toFixed(1)
+      : 0;
+
+    this.log('🛑 GOD MODE DEACTIVATED', 'info');
+    this.log(`📊 Session Stats: ${this.health.successCount} successes, ${this.health.failureCount} failures (${successRate}% success rate)`, 'info');
   }
 
   updateContext(context: GenerationContext) {
     this.context = context;
+    this.log('🔄 Context updated', 'debug');
   }
 
-  private log(msg: string) {
-    console.log(`[GOD MODE] ${msg}`);
-    if (this.logCallback) {
-      this.logCallback(msg);
-    }
+  private startHealthMonitoring() {
+    // Health check every 5 minutes
+    this.healthCheckId = setInterval(() => {
+      this.performHealthCheck();
+    }, 300000);
   }
 
-  private async runCycle() {
-    if (!this.isRunning || !this.context) return;
+  private performHealthCheck() {
+    const now = Date.now();
+    const timeSinceLastSuccess = now - this.lastSuccessTime;
 
-    const { existingPages, priorityUrls, excludedUrls, priorityOnlyMode } = this.context;
+    // Calculate error rate
+    const total = this.health.successCount + this.health.failureCount;
+    this.health.errorRate = total > 0 ? (this.health.failureCount / total) * 100 : 0;
 
-    let pagesToProcess = existingPages.filter(page => {
-      if (excludedUrls?.some(url => page.id.includes(url))) return false;
+    this.log('🏥 Health Check', 'info');
+    this.log(`  ✅ Successes: ${this.health.successCount}`, 'debug');
+    this.log(`  ❌ Failures: ${this.health.failureCount}`, 'debug');
+    this.log(`  📊 Error Rate: ${this.health.errorRate.toFixed(1)}%`, 'debug');
+    this.log(`  ⏱️ Avg Processing: ${(this.health.avgProcessingTime / 1000).toFixed(1)}s`, 'debug');
 
-      const lastProcessed = localStorage.getItem(`sota_last_proc_${page.id}`);
-      if (lastProcessed) {
-        const hoursSince = (Date.now() - parseInt(lastProcessed)) / (1000 * 60 * 60);
-        if (hoursSince < 24) return false;
-      }
-
-      return true;
-    });
-
-    if (priorityOnlyMode && priorityUrls && priorityUrls.length > 0) {
-      pagesToProcess = pagesToProcess.filter(page =>
-        priorityUrls.some((p: any) => page.id.includes(typeof p === 'string' ? p : p.url))
-      );
-    } else if (priorityUrls && priorityUrls.length > 0) {
-      pagesToProcess.sort((a, b) => {
-        const aIsPriority = priorityUrls.some((p: any) => a.id.includes(typeof p === 'string' ? p : p.url));
-        const bIsPriority = priorityUrls.some((p: any) => b.id.includes(typeof p === 'string' ? p : p.url));
-        if (aIsPriority && !bIsPriority) return -1;
-        if (!aIsPriority && bIsPriority) return 1;
-        return 0;
-      });
+    // Self-recovery logic
+    if (this.consecutiveFailures >= 5) {
+      this.log('⚠️ High failure rate detected - entering recovery mode', 'warning');
+      this.consecutiveFailures = 0;
+      // Wait 5 minutes before retrying
+      setTimeout(() => {
+        this.log('🔄 Recovery mode complete - resuming operations', 'info');
+      }, 300000);
     }
 
-    if (pagesToProcess.length === 0) {
-      this.log('💤 No pages need optimization at this time');
-      return;
-    }
-
-    const page = pagesToProcess[0];
-    this.log(`🎯 Processing: ${page.title || page.id}`);
-
-    try {
-      await this.optimizePage(page);
-      localStorage.setItem(`sota_last_proc_${page.id}`, Date.now().toString());
-      this.log(`✅ SUCCESS|${page.title}|${page.id}`);
-    } catch (error: any) {
-      this.log(`❌ FAILED: ${page.title} - ${error.message}`);
-    }
-  }
-
-  private async optimizePage(page: SitemapPage) {
-    if (!this.context) throw new Error('No context');
-
-    this.log('📥 Crawling page content...');
-    const content = await smartCrawl(page.id);
-
-    if (!content || content.length < 500) {
-      throw new Error('Content too short to optimize');
-    }
-
-    const callAIFn = (promptKey: string, args: any[], format: 'json' | 'html' = 'json') => {
-      return callAI(
-        this.context!.apiClients,
-        this.context!.selectedModel,
-        this.context!.geoTargeting,
-        this.context!.openrouterModels || [],
-        this.context!.selectedGroqModel || '',
-        promptKey,
-        args,
-        format
-      );
-    };
-
-    // ========== PHASE 1: Semantic Keywords ==========
-    this.log('🏷️ Extracting semantic keywords...');
-    let semanticKeywords: string[] = [];
-    try {
-      const kwResponse = await callAIFn('semantic_keyword_extractor', [content, page.title], 'json');
-      const kwData = safeParseJSON<any>(kwResponse, { keywords: [] });
-      semanticKeywords = kwData?.keywords || [];
-    } catch (e) {
-      semanticKeywords = [page.title || 'content'];
-    }
-
-    // ========== PHASE 2: SOTA Content Reconstruction (Using God Mode Agent) ==========
-    this.log('✨ Reconstructing content with GOD MODE AI Agent...');
-    const optimizedContent = await callAIFn(
-      'god_mode_autonomous_agent',
-      [content, page.title, semanticKeywords, this.context.existingPages, null],
-      'html'
-    );
-
-    // ========== PHASE 3: YouTube Injection (Placeholder-Based OR Smart Fallback) ==========
-    this.log('📹 Injecting YouTube video...');
-    let contentWithVideo = optimizedContent;
-
-    // Try placeholder-based injection first (enterprise pattern)
-    if (optimizedContent.includes('[YOUTUBE_VIDEO_PLACEHOLDER]')) {
-      contentWithVideo = await injectYouTubeIntoContent(
-        optimizedContent,
-        page.title || semanticKeywords[0],
-        this.context.serperApiKey,
-        (msg) => this.log(msg)
-      );
-    } else {
-      // Smart fallback: inject after 3rd H2 section
-      const { html: youtubeHtml } = await findRelevantYouTubeVideo(
-        page.title || semanticKeywords[0],
-        this.context.serperApiKey
-      );
-      if (youtubeHtml) {
-        const h2Matches = [...optimizedContent.matchAll(/<\/h2>/gi)];
-        if (h2Matches.length >= 3 && h2Matches[2].index !== undefined) {
-          const insertPos = h2Matches[2].index + 5;
-          const afterH2 = optimizedContent.substring(insertPos);
-          const nextPMatch = afterH2.match(/<\/p>/i);
-          if (nextPMatch && nextPMatch.index !== undefined) {
-            const finalInsertPos = insertPos + nextPMatch.index + nextPMatch[0].length;
-            contentWithVideo = optimizedContent.substring(0, finalInsertPos) + youtubeHtml + optimizedContent.substring(finalInsertPos);
-          }
+    // Check if stalled (no success in 30 minutes while running)
+    if (this.isRunning && timeSinceLastSuccess > 1800000) {
+      this.log('⚠️ System appears stalled - performing self-diagnostic', 'warning');
+      // Perform diagnostic
+      if (this.context) {
+        const hasClient = !!(this.context.apiClients?.gemini || this.context.apiClients?.anthropic || this.context.apiClients?.openai || this.context.apiClients?.openrouter);
+        if (!hasClient) {
+          this.log('❌ Diagnostic: AI client disconnected - stopping God Mode', 'error');
+          this.stop();
         }
       }
     }
 
-    // ========== PHASE 4: Internal Links (Enhanced Strategy) ==========
-    this.log('🔗 Injecting internal links with descriptive anchors...');
-    const linkResult = await generateEnhancedInternalLinks(
-      contentWithVideo,
-      this.context.existingPages,
-      page.title || '',
-      null,
-      ''
-    );
+    this.health.lastHealthCheck = now;
+  }
 
-    // ========== PHASE 5: Verified References ==========
-    this.log('📚 Fetching verified references...');
-    const { html: referencesHtml, references } = await fetchVerifiedReferences(
-      page.title || semanticKeywords[0],
-      semanticKeywords,
-      this.context.serperApiKey,
-      this.context.wpConfig.url
-    );
+  private log(msg: string, level: 'info' | 'success' | 'error' | 'warning' | 'debug' = 'info') {
+    const prefix = {
+      info: '📝',
+      success: '✅',
+      error: '❌',
+      warning: '⚠️',
+      debug: '🔍'
+    }[level];
 
-    // ========== PHASE 6: Polish & Assemble ==========
-    this.log('✨ Polishing final content...');
-    let finalContent = polishContentHtml(linkResult.html);
+    const formattedMsg = `${prefix} ${msg}`;
+    console.log(`[GOD MODE] ${formattedMsg}`);
 
-    if (referencesHtml) {
-      finalContent += referencesHtml;
+    if (this.logCallback && level !== 'debug') {
+      this.logCallback(formattedMsg);
+    }
+  }
+
+  private async runCycle() {
+    // Prevent concurrent executions
+    if (this.isProcessing || !this.isRunning || !this.context) {
+      return;
     }
 
-    this.log(`📊 Stats: ${linkResult.linkCount} links | ${semanticKeywords.length} keywords | ${references.length} references`);
+    // Rate limiting check
+    const now = Date.now();
+    if (now >= this.hourResetTime) {
+      this.requestsThisHour = 0;
+      this.hourResetTime = now + 3600000;
+    }
 
-    this.log('🌐 Publishing to WordPress...');
-    const result = await publishItemToWordPress(
-      {
-        id: page.id,
-        title: page.title || 'Optimized Content',
-        type: 'refresh',
-        status: 'idle',
-        statusText: '',
-        generatedContent: {
+    if (this.requestsThisHour >= this.MAX_REQUESTS_PER_HOUR) {
+      this.log(`⏸️ Rate limit reached (${this.MAX_REQUESTS_PER_HOUR}/hour) - pausing until reset`, 'warning');
+      return;
+    }
+
+    const timeSinceLastProcessing = now - this.lastProcessingTime;
+    if (timeSinceLastProcessing < this.MIN_PROCESSING_INTERVAL_MS) {
+      this.log(`⏸️ Throttling - waiting ${((this.MIN_PROCESSING_INTERVAL_MS - timeSinceLastProcessing) / 1000).toFixed(1)}s`, 'debug');
+      return;
+    }
+
+    this.isProcessing = true;
+    const cycleStartTime = now;
+
+    try {
+      const { existingPages, priorityUrls, excludedUrls, excludedCategories, priorityOnlyMode } = this.context;
+
+      // Filter and score pages
+      const scoredPages = this.intelligentPageSelection(
+        existingPages,
+        priorityUrls,
+        excludedUrls,
+        excludedCategories,
+        priorityOnlyMode
+      );
+
+      if (scoredPages.length === 0) {
+        this.log('💤 No pages need optimization - all up to date', 'info');
+        this.isProcessing = false;
+        return;
+      }
+
+      // Select best candidate
+      const bestCandidate = scoredPages[0];
+      this.log(`🎯 Selected: "${bestCandidate.page.title || 'Untitled'}" (Score: ${bestCandidate.score.toFixed(2)})`, 'info');
+      this.log(`  📊 Priority: ${bestCandidate.factors.priority.toFixed(2)} | Urgency: ${bestCandidate.factors.urgency.toFixed(2)} | Importance: ${bestCandidate.factors.importance.toFixed(2)}`, 'debug');
+
+      // Add to processing queue
+      this.processingQueue.add(bestCandidate.page.id);
+
+      // Optimize the page
+      const stats = await this.optimizePage(bestCandidate.page);
+
+      // Success handling
+      this.processingQueue.delete(bestCandidate.page.id);
+      localStorage.setItem(`sota_last_proc_${bestCandidate.page.id}`, Date.now().toString());
+      localStorage.setItem(`sota_proc_count_${bestCandidate.page.id}`, String(this.getProcessCount(bestCandidate.page.id) + 1));
+
+      this.health.successCount++;
+      this.consecutiveFailures = 0;
+      this.lastSuccessTime = Date.now();
+      this.requestsThisHour++;
+      this.lastProcessingTime = Date.now();
+
+      // Update avg processing time
+      const processingTime = stats.endTime! - stats.startTime;
+      this.health.avgProcessingTime = this.health.avgProcessingTime === 0
+        ? processingTime
+        : (this.health.avgProcessingTime * 0.8 + processingTime * 0.2); // Exponential moving average
+
+      this.log(`✅ SUCCESS: "${bestCandidate.page.title}" optimized in ${(processingTime / 1000).toFixed(1)}s`, 'success');
+      this.log(`✅ SUCCESS|${bestCandidate.page.title}|${bestCandidate.page.id}`, 'success');
+
+    } catch (error: any) {
+      this.health.failureCount++;
+      this.consecutiveFailures++;
+
+      this.log(`❌ Cycle failed: ${error.message}`, 'error');
+
+      // Exponential backoff on failures
+      if (this.consecutiveFailures >= 3) {
+        const backoffTime = Math.min(this.consecutiveFailures * 60000, 600000); // Max 10 minutes
+        this.log(`⏸️ Multiple failures detected - backing off for ${(backoffTime / 60000).toFixed(1)} minutes`, 'warning');
+      }
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  /**
+   * ULTRA-PREMIUM INTELLIGENT PAGE SELECTION ALGORITHM
+   * Uses multi-factor scoring to prioritize pages for optimization
+   */
+  private intelligentPageSelection(
+    pages: SitemapPage[],
+    priorityUrls: any[] | undefined,
+    excludedUrls: string[] | undefined,
+    excludedCategories: string[] | undefined,
+    priorityOnlyMode: boolean | undefined
+  ): PageScore[] {
+    const now = Date.now();
+    const scoredPages: PageScore[] = [];
+
+    for (const page of pages) {
+      // EXCLUSION FILTERS
+      // Skip if in excluded URLs
+      if (excludedUrls?.some(url => page.id.toLowerCase().includes(url.toLowerCase()))) {
+        continue;
+      }
+
+      // Skip if matches excluded category
+      if (excludedCategories?.some(cat => page.id.toLowerCase().includes(cat.toLowerCase()))) {
+        continue;
+      }
+
+      // Skip if currently processing
+      if (this.processingQueue.has(page.id)) {
+        continue;
+      }
+
+      // PRIORITY URL MATCHING
+      const priorityMatch = priorityUrls?.find((p: any) => {
+        const url = typeof p === 'string' ? p : p.url;
+        return page.id.includes(url);
+      });
+
+      const isPriority = !!priorityMatch;
+
+      // Skip non-priority pages if in priority-only mode
+      if (priorityOnlyMode && !isPriority) {
+        continue;
+      }
+
+      // RECENCY ANALYSIS
+      const lastProcessed = localStorage.getItem(`sota_last_proc_${page.id}`);
+      let hoursSinceProcessed = Infinity;
+      if (lastProcessed) {
+        hoursSinceProcessed = (now - parseInt(lastProcessed)) / (1000 * 60 * 60);
+        // Skip if processed within last 24 hours
+        if (hoursSinceProcessed < 24) {
+          continue;
+        }
+      }
+
+      // MULTI-FACTOR SCORING
+      const factors = {
+        priority: this.calculatePriorityScore(isPriority, priorityMatch),
+        recency: this.calculateRecencyScore(hoursSinceProcessed),
+        importance: this.calculateImportanceScore(page),
+        urgency: this.calculateUrgencyScore(page, hoursSinceProcessed)
+      };
+
+      // Weighted total score
+      const score =
+        factors.priority * 0.40 +      // 40% weight - Priority URLs get huge boost
+        factors.recency * 0.25 +       // 25% weight - Older content needs updates
+        factors.importance * 0.20 +    // 20% weight - Important pages prioritized
+        factors.urgency * 0.15;        // 15% weight - Urgent updates
+
+      scoredPages.push({ page, score, factors });
+    }
+
+    // Sort by score (highest first)
+    return scoredPages.sort((a, b) => b.score - a.score);
+  }
+
+  private calculatePriorityScore(isPriority: boolean, priorityMatch: any): number {
+    if (!isPriority) return 0;
+
+    // If priority match has explicit priority level
+    if (priorityMatch && typeof priorityMatch === 'object') {
+      const priorityLevels = { critical: 100, high: 80, medium: 50, low: 30 };
+      return priorityLevels[priorityMatch.priority as keyof typeof priorityLevels] || 100;
+    }
+
+    return 100; // Default priority score
+  }
+
+  private calculateRecencyScore(hoursSinceProcessed: number): number {
+    if (hoursSinceProcessed === Infinity) {
+      return 100; // Never processed - highest urgency
+    }
+
+    // Score increases with time since last processing
+    // 24 hours = 0, 168 hours (1 week) = 50, 720 hours (30 days) = 100
+    return Math.min(100, ((hoursSinceProcessed - 24) / 696) * 100);
+  }
+
+  private calculateImportanceScore(page: SitemapPage): number {
+    let score = 50; // Base score
+
+    const url = page.id.toLowerCase();
+    const title = (page.title || '').toLowerCase();
+
+    // Homepage or main pages
+    if (url.endsWith('/') || url.match(/\/(index|home|about|contact|services|products)[\/?]?$/)) {
+      score += 30;
+    }
+
+    // Pillar content indicators
+    if (title.includes('guide') || title.includes('complete') || title.includes('ultimate') || title.includes('definitive')) {
+      score += 20;
+    }
+
+    // Short URL = likely important page
+    const pathDepth = url.split('/').filter(Boolean).length;
+    if (pathDepth <= 2) {
+      score += 15;
+    } else if (pathDepth <= 3) {
+      score += 5;
+    }
+
+    return Math.min(100, score);
+  }
+
+  private calculateUrgencyScore(page: SitemapPage, hoursSinceProcessed: number): number {
+    let score = 0;
+
+    // Never processed = urgent
+    if (hoursSinceProcessed === Infinity) {
+      score += 50;
+    }
+
+    // Time-sensitive content
+    const title = (page.title || '').toLowerCase();
+    const url = page.id.toLowerCase();
+
+    if (title.match(/202[4-6]|2026|2025|2024|latest|new|current|updated/)) {
+      score += 25;
+    }
+
+    if (title.match(/news|trend|breaking|recent/)) {
+      score += 25;
+    }
+
+    // Pages with dates in URL are time-sensitive
+    if (url.match(/\/202[0-9]\/|\/\d{4}-\d{2}-\d{2}/)) {
+      score += 20;
+    }
+
+    return Math.min(100, score);
+  }
+
+  private getProcessCount(pageId: string): number {
+    return parseInt(localStorage.getItem(`sota_proc_count_${pageId}`) || '0');
+  }
+
+  /**
+   * ULTRA-PREMIUM PAGE OPTIMIZATION ENGINE
+   * Complete end-to-end content optimization with all SOTA features
+   */
+  private async optimizePage(page: SitemapPage): Promise<ProcessingStats> {
+    if (!this.context) throw new Error('No context available');
+
+    const stats: ProcessingStats = {
+      startTime: Date.now(),
+      phaseTimes: new Map(),
+      success: false
+    };
+
+    const phaseTimer = (phaseName: string) => {
+      const start = Date.now();
+      return () => stats.phaseTimes.set(phaseName, Date.now() - start);
+    };
+
+    try {
+      // ========== PHASE 0: Pre-flight Checks ==========
+      this.log(`🔍 Pre-flight checks for: ${page.title || page.id}`, 'debug');
+
+      if (!this.context.wpConfig?.url || !this.context.wpConfig?.username) {
+        throw new Error('WordPress configuration missing');
+      }
+
+      const wpPassword = localStorage.getItem('sota_wp_password');
+      if (!wpPassword) {
+        throw new Error('WordPress password not configured');
+      }
+
+      // ========== PHASE 1: Smart Content Crawling ==========
+      let phaseEnd = phaseTimer('crawl');
+      this.log('📥 Crawling page content...', 'info');
+
+      const content = await smartCrawl(page.id);
+      phaseEnd();
+
+      if (!content || content.length < 500) {
+        throw new Error(`Content too short: ${content?.length || 0} characters (minimum 500 required)`);
+      }
+
+      this.log(`  ✓ Crawled ${(content.length / 1000).toFixed(1)}KB content`, 'debug');
+
+      // Helper function for AI calls
+      const callAIFn = (promptKey: string, args: any[], format: 'json' | 'html' = 'json') => {
+        return callAI(
+          this.context!.apiClients,
+          this.context!.selectedModel,
+          this.context!.geoTargeting,
+          this.context!.openrouterModels || [],
+          this.context!.selectedGroqModel || '',
+          promptKey,
+          args,
+          format
+        );
+      };
+
+      // ========== PHASE 2: Semantic Keyword Extraction ==========
+      phaseEnd = phaseTimer('keywords');
+      this.log('🏷️ Extracting semantic keywords...', 'info');
+
+      let semanticKeywords: string[] = [];
+      try {
+        const kwResponse = await callAIFn('semantic_keyword_extractor', [content, page.title], 'json');
+        const kwData = safeParseJSON<any>(kwResponse, { keywords: [] });
+        semanticKeywords = kwData?.keywords || [];
+
+        if (semanticKeywords.length === 0) {
+          semanticKeywords = [page.title || 'content'];
+        }
+
+        this.log(`  ✓ Extracted ${semanticKeywords.length} keywords`, 'debug');
+      } catch (e) {
+        this.log(`  ⚠️ Keyword extraction failed, using fallback`, 'warning');
+        semanticKeywords = [page.title || 'content'];
+      }
+      phaseEnd();
+
+      // ========== PHASE 2.5: NeuronWriter Integration (if enabled) ==========
+      let neuronTermsFormatted: string | null = null;
+      if (this.context.neuronConfig?.enabled && this.context.neuronConfig.apiKey && this.context.neuronConfig.projectId) {
+        phaseEnd = phaseTimer('neuronwriter');
+        this.log('🧠 Fetching NeuronWriter SEO terms...', 'info');
+
+        try {
+          const { fetchNeuronTerms, formatNeuronTermsForPrompt } = await import('./neuronwriter');
+
+          const neuronTerms = await fetchNeuronTerms(
+            this.context.neuronConfig.apiKey,
+            this.context.neuronConfig.projectId,
+            page.title || semanticKeywords[0]
+          );
+
+          if (neuronTerms) {
+            neuronTermsFormatted = formatNeuronTermsForPrompt(neuronTerms);
+
+            // Merge NeuronWriter terms with semantic keywords
+            const neuronKeywords = [
+              neuronTerms.h1,
+              neuronTerms.h2,
+              neuronTerms.content_basic
+            ]
+              .filter(Boolean)
+              .join(' ')
+              .split(/[,;]/)
+              .map(k => k.trim())
+              .filter(k => k.length > 2)
+              .slice(0, 10);
+
+            semanticKeywords = [...new Set([...semanticKeywords, ...neuronKeywords])];
+            this.log(`  ✓ Merged ${neuronKeywords.length} NeuronWriter terms`, 'debug');
+          } else {
+            this.log(`  ⚠️ NeuronWriter returned no terms`, 'warning');
+          }
+        } catch (e: any) {
+          this.log(`  ⚠️ NeuronWriter failed: ${e.message}`, 'warning');
+        }
+        phaseEnd();
+      }
+
+      // ========== PHASE 3: GOD MODE CONTENT RECONSTRUCTION ==========
+      phaseEnd = phaseTimer('reconstruction');
+      this.log('✨ Reconstructing content with ULTRA AI Agent...', 'info');
+
+      const optimizedContent = await callAIFn(
+        'god_mode_autonomous_agent',
+        [content, page.title, semanticKeywords, this.context.existingPages, neuronTermsFormatted],
+        'html'
+      );
+
+      if (!optimizedContent || optimizedContent.length < 1000) {
+        throw new Error('AI generated insufficient content');
+      }
+
+      this.log(`  ✓ Generated ${(optimizedContent.length / 1000).toFixed(1)}KB optimized content`, 'debug');
+      phaseEnd();
+
+      // ========== PHASE 4: YouTube Video Injection ==========
+      phaseEnd = phaseTimer('youtube');
+      this.log('📹 Injecting YouTube video...', 'info');
+
+      let contentWithVideo = optimizedContent;
+
+      try {
+        if (optimizedContent.includes('[YOUTUBE_VIDEO_PLACEHOLDER]')) {
+          // Placeholder-based injection (preferred)
+          contentWithVideo = await injectYouTubeIntoContent(
+            optimizedContent,
+            page.title || semanticKeywords[0],
+            this.context.serperApiKey,
+            (msg) => this.log(`  ${msg}`, 'debug')
+          );
+        } else {
+          // Smart fallback injection
+          const { html: youtubeHtml } = await findRelevantYouTubeVideo(
+            page.title || semanticKeywords[0],
+            this.context.serperApiKey
+          );
+
+          if (youtubeHtml) {
+            // Try to inject after 3rd H2
+            const h2Matches = [...optimizedContent.matchAll(/<\/h2>/gi)];
+            if (h2Matches.length >= 3 && h2Matches[2].index !== undefined) {
+              const insertPos = h2Matches[2].index + 5;
+              const afterH2 = optimizedContent.substring(insertPos);
+              const nextPMatch = afterH2.match(/<\/p>/i);
+
+              if (nextPMatch && nextPMatch.index !== undefined) {
+                const finalInsertPos = insertPos + nextPMatch.index + nextPMatch[0].length;
+                contentWithVideo = optimizedContent.substring(0, finalInsertPos) + youtubeHtml + optimizedContent.substring(finalInsertPos);
+                this.log(`  ✓ Video injected after 3rd H2`, 'debug');
+              }
+            } else {
+              // Fallback: append to end
+              contentWithVideo = optimizedContent + youtubeHtml;
+              this.log(`  ✓ Video appended to end`, 'debug');
+            }
+          }
+        }
+      } catch (e: any) {
+        this.log(`  ⚠️ YouTube injection failed: ${e.message}`, 'warning');
+        contentWithVideo = optimizedContent; // Continue without video
+      }
+      phaseEnd();
+
+      // ========== PHASE 5: Internal Link Injection ==========
+      phaseEnd = phaseTimer('linking');
+      this.log('🔗 Injecting internal links...', 'info');
+
+      const linkResult = await generateEnhancedInternalLinks(
+        contentWithVideo,
+        this.context.existingPages,
+        page.title || '',
+        null,
+        ''
+      );
+
+      this.log(`  ✓ Injected ${linkResult.linkCount} internal links`, 'debug');
+      phaseEnd();
+
+      // ========== PHASE 6: Verified External References ==========
+      phaseEnd = phaseTimer('references');
+      this.log('📚 Fetching verified references...', 'info');
+
+      let referencesHtml = '';
+      let referencesCount = 0;
+
+      try {
+        const { html, references } = await fetchVerifiedReferences(
+          page.title || semanticKeywords[0],
+          semanticKeywords,
+          this.context.serperApiKey,
+          this.context.wpConfig.url
+        );
+
+        referencesHtml = html;
+        referencesCount = references.length;
+        this.log(`  ✓ Added ${referencesCount} verified references`, 'debug');
+      } catch (e: any) {
+        this.log(`  ⚠️ Reference fetching failed: ${e.message}`, 'warning');
+      }
+      phaseEnd();
+
+      // ========== PHASE 7: Content Assembly & Polish ==========
+      phaseEnd = phaseTimer('polish');
+      this.log('✨ Polishing and assembling final content...', 'info');
+
+      let finalContent = polishContentHtml(linkResult.html);
+
+      if (referencesHtml) {
+        finalContent += referencesHtml;
+      }
+
+      // Quality assurance checks
+      const wordCount = finalContent.split(/\s+/).length;
+      const hasH2 = /<h2/i.test(finalContent);
+      const hasLinks = /<a /i.test(finalContent);
+
+      if (wordCount < 800) {
+        this.log(`  ⚠️ Warning: Content is short (${wordCount} words)`, 'warning');
+      }
+
+      if (!hasH2) {
+        this.log(`  ⚠️ Warning: No H2 headings found`, 'warning');
+      }
+
+      this.log(`  ✓ Final content: ${wordCount} words, ${linkResult.linkCount} links, ${referencesCount} references`, 'debug');
+      phaseEnd();
+
+      // ========== PHASE 8: WordPress Publishing ==========
+      phaseEnd = phaseTimer('publish');
+      this.log('🌐 Publishing to WordPress...', 'info');
+
+      const publishResult = await publishItemToWordPress(
+        {
+          id: page.id,
           title: page.title || 'Optimized Content',
-          content: finalContent,
-          metaDescription: `${page.title} - Comprehensive guide`,
-          slug: page.slug || extractSlugFromUrl(page.id),
-          schemaMarkup: '',
-          primaryKeyword: page.title || '',
-          semanticKeywords
+          type: 'refresh',
+          status: 'idle',
+          statusText: '',
+          generatedContent: {
+            title: page.title || 'Optimized Content',
+            content: finalContent,
+            metaDescription: `${page.title} - Updated comprehensive guide with latest insights and expert analysis.`,
+            slug: page.slug || extractSlugFromUrl(page.id),
+            schemaMarkup: '',
+            primaryKeyword: page.title || '',
+            semanticKeywords
+          },
+          originalUrl: page.id,
+          crawledContent: null
         },
-        originalUrl: page.id,
-        crawledContent: null
-      },
-      localStorage.getItem('sota_wp_password') || '',
-      'publish',
-      fetch,
-      this.context.wpConfig
-    );
+        wpPassword,
+        'publish',
+        fetch,
+        this.context.wpConfig
+      );
 
-    if (!result.success) {
-      throw new Error(result.message || 'Publish failed');
+      if (!publishResult.success) {
+        throw new Error(publishResult.message || 'WordPress publish failed');
+      }
+
+      this.log(`  ✓ Published successfully to WordPress`, 'debug');
+      phaseEnd();
+
+      // ========== SUCCESS ==========
+      stats.endTime = Date.now();
+      stats.success = true;
+
+      // Log performance metrics
+      const totalTime = stats.endTime - stats.startTime;
+      this.log(`📊 Performance Metrics:`, 'debug');
+      this.log(`  Total: ${(totalTime / 1000).toFixed(1)}s`, 'debug');
+      stats.phaseTimes.forEach((time, phase) => {
+        this.log(`  ${phase}: ${(time / 1000).toFixed(1)}s`, 'debug');
+      });
+
+      return stats;
+
+    } catch (error: any) {
+      stats.endTime = Date.now();
+      stats.success = false;
+      stats.errorMessage = error.message;
+
+      this.log(`❌ Optimization failed: ${error.message}`, 'error');
+
+      // Log stack trace for debugging
+      if (error.stack) {
+        console.error('[GOD MODE] Stack trace:', error.stack);
+      }
+
+      throw error;
     }
-
-    this.log(`📊 Stats: ${linkResult.linkCount} links, ${semanticKeywords.length} keywords`);
   }
 }
 
-export const maintenanceEngine = new MaintenanceEngine();
+// Export the ULTRA-PREMIUM instance
+export const maintenanceEngine = new UltraPremiumMaintenanceEngine();
 
 // ==================== EXPORTS ====================
 
