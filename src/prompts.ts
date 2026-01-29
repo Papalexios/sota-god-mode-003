@@ -171,10 +171,14 @@ const BEAUTIFUL_HTML_ELEMENTS = `
   </div>
 </div>
 
-### 11. REFERENCES SECTION (MANDATORY - At very end) - SOLID BACKGROUND
+### 11. YOUTUBE VIDEO SECTION (MANDATORY - After 3rd H2)
+Include this placeholder and the system will auto-inject a relevant video:
+[YOUTUBE_VIDEO_PLACEHOLDER]
+
+### 12. REFERENCES SECTION (MANDATORY - At very end) - SOLID BACKGROUND
 <div class="sota-references" style="margin: 3rem 0; padding: 2rem; background: #0f172a; border-radius: 20px; border-left: 5px solid #3b82f6; border: 2px solid #334155;">
   <h2 style="display: flex; align-items: center; gap: 0.75rem; margin: 0 0 1.5rem; color: #f1f5f9; font-size: 1.5rem;"><span>📚</span> References & Further Reading</h2>
-  <p style="margin: 0 0 1.5rem; color: #94a3b8; font-size: 0.9rem;">✅ All sources verified as of [Current Date] • [X] authoritative references</p>
+  <p style="margin: 0 0 1.5rem; color: #94a3b8; font-size: 0.9rem;">All sources verified • Authoritative references</p>
   <ol style="list-style: none; padding: 0; margin: 0;">
     <li style="display: flex; gap: 1rem; padding: 1rem; margin-bottom: 0.75rem; background: #1e293b; border-radius: 10px; border: 1px solid #475569;">
       <div style="flex-shrink: 0; width: 32px; height: 32px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.85rem;">1</div>
@@ -587,14 +591,23 @@ EXPERT INSIGHT (Blue - use 1-2 times):
 - **15+ gap keywords** that competitors miss (see GAP ANALYSIS above)
 - **Current year references** (${TARGET_YEAR} data, recent events, updated statistics)
 
-## INTERNAL LINKING REQUIREMENTS (STRICT RULES)
-- Include **4-8 internal links MAXIMUM** with **4-7 word descriptive anchor text**
-- **MAX 1 link per paragraph** - NEVER add multiple links in same paragraph
-- Links must be EVENLY DISTRIBUTED throughout the content (not clustered)
-- NEVER use: "click here", "read more", "learn more", "this article", "here"
-- Anchor text MUST be grammatically COMPLETE (no fragments like "healthy totally" or "and sustainable habits rather")
-- Example GOOD anchors: "complete guide to advanced keyword research", "professional dog training techniques for puppies", "proven nutrition strategies for athletes"
-- Example BAD anchors: "totally miss the", "and sustainable habits rather", "healthy" (too short), "the complete guide to" (starts with 'the')
+## INTERNAL LINKING REQUIREMENTS (CRITICAL - FOLLOW EXACTLY)
+IMPORTANT: The system will automatically inject 4-8 internal links with proper anchor text AFTER you generate the content. You do NOT need to manually add internal links.
+- DO NOT manually add internal links in your content
+- Focus on writing natural, flowing content
+- The automated link injection system will:
+  - Add 4-8 relevant internal links
+  - Use 4-7 word grammatically complete anchor text
+  - Distribute links evenly (max 1 per paragraph)
+  - Only use verified URLs from the sitemap
+- If you want to suggest related content, use this chip row format instead of inline links:
+
+<div class="sota-related-guides" style="margin: 2rem 0; padding: 1.25rem; background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%); border-radius: 16px; border: 1px solid rgba(59, 130, 246, 0.2);">
+  <span style="font-weight: 700; color: #94a3b8; font-size: 0.9rem;">Related Guides:</span>
+  <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem;">
+    <!-- Links will be injected automatically -->
+  </div>
+</div>
 
 ## OUTPUT RULES
 1. Return strictly HTML5 body content (start with <p>...</p>)

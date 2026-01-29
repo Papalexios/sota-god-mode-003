@@ -30,7 +30,19 @@ import {
   safeParseJSON
 } from './utils';
 
-console.log('[SOTA Services v12.0] Enterprise Engine Initialized');
+import {
+  processContentWithInternalLinks,
+  validateAnchorText,
+  InternalPage
+} from './SOTAInternalLinkEngine';
+
+import {
+  enhanceContentFully,
+  injectYouTubeVideo,
+  generateUltraPremiumYouTubeSection
+} from './SOTAContentEnhancer';
+
+console.log('[SOTA Services v13.0] ULTRA ENTERPRISE ENGINE Initialized');
 
 // ==================== CONSTANTS ====================
 
@@ -338,27 +350,33 @@ export const injectYouTubeIntoContent = async (
   serperApiKey: string,
   logCallback?: (msg: string) => void
 ): Promise<string> => {
-  // Check for placeholder
-  if (!content.includes('[YOUTUBE_VIDEO_PLACEHOLDER]')) {
-    logCallback?.('[YouTube] No placeholder found in content');
-    return content;
-  }
-
   if (!serperApiKey) {
-    logCallback?.('[YouTube] ⚠️ No Serper API key - removing placeholder');
+    logCallback?.('[YouTube] No Serper API key - skipping');
     return content.replace('[YOUTUBE_VIDEO_PLACEHOLDER]', '');
   }
 
   logCallback?.('[YouTube] Finding relevant video for: ' + keyword);
 
   try {
-    const { html: videoHtml } = await findRelevantYouTubeVideo(keyword, serperApiKey, logCallback);
+    const result = await injectYouTubeVideo(content, keyword, serperApiKey);
 
-    if (videoHtml) {
-      logCallback?.('[YouTube] ✅ Video found and injected');
-      return content.replace('[YOUTUBE_VIDEO_PLACEHOLDER]', videoHtml);
+    if (result.video) {
+      logCallback?.(`[YouTube] Injected: "${result.video.title}"`);
+      return result.html;
     } else {
-      logCallback?.('[YouTube] No suitable video found - removing placeholder');
+      const { html: fallbackHtml, video } = await findRelevantYouTubeVideo(keyword, serperApiKey, logCallback);
+      if (fallbackHtml && video) {
+        const ultraYoutubeHtml = generateUltraPremiumYouTubeSection(video);
+        if (content.includes('[YOUTUBE_VIDEO_PLACEHOLDER]')) {
+          return content.replace('[YOUTUBE_VIDEO_PLACEHOLDER]', ultraYoutubeHtml);
+        }
+        const h2Matches = [...content.matchAll(/<\/h2>/gi)];
+        if (h2Matches.length >= 3 && h2Matches[2].index !== undefined) {
+          const insertPos = h2Matches[2].index + 5;
+          return content.substring(0, insertPos) + ultraYoutubeHtml + content.substring(insertPos);
+        }
+        return content + ultraYoutubeHtml;
+      }
       return content.replace('[YOUTUBE_VIDEO_PLACEHOLDER]', '');
     }
   } catch (error: any) {
@@ -651,7 +669,8 @@ function generateReferencesHtml(references: VerifiedReference[], keyword: string
 </div>`;
 }
 
-// ==================== ENHANCED INTERNAL LINKING ====================
+// ==================== SOTA INTERNAL LINKING ENGINE v4.0 ====================
+// Bulletproof anchor text - ZERO broken fragments, perfect distribution
 
 export const generateEnhancedInternalLinks = async (
   content: string,
@@ -662,127 +681,71 @@ export const generateEnhancedInternalLinks = async (
   logCallback?: (msg: string) => void
 ): Promise<{ html: string; linkCount: number; links: any[] }> => {
   if (!existingPages || existingPages.length === 0) {
-    logCallback?.('[Internal Links] ⚠️ No existing pages available for linking');
+    logCallback?.('[Internal Links] No pages available');
     return { html: content, linkCount: 0, links: [] };
   }
 
-  analytics.log('links', 'SOTA Internal Linking Engine v2.0 - Using VERIFIED sitemap URLs only...', {
+  analytics.log('links', 'SOTA Internal Link Engine v4.0 - BULLETPROOF ANCHORS', {
     pageCount: existingPages.length,
     keyword: primaryKeyword
   });
 
-  const doc = new DOMParser().parseFromString(content, 'text/html');
-  const paragraphs = Array.from(doc.querySelectorAll('p, li')).filter(p => {
-    const text = p.textContent || '';
-    return text.length > 80 && !p.closest('blockquote') && !p.closest('.faq-section') && !p.closest('.sota-references');
-  });
-
-  // CRITICAL FIX: Build validated URL map from sitemap - ONLY use URLs that exist in sitemap
   const validatedPages = existingPages.filter(page => {
-    // Must have a valid URL (page.id contains the full URL from sitemap)
     const hasValidUrl = page.id && (page.id.startsWith('http://') || page.id.startsWith('https://'));
     const hasTitle = page.title && page.title.length > 3;
     const hasSlug = page.slug && page.slug.length > 3;
-
-    // Exclude self-referential links
     const pageTitleLower = (page.title || '').toLowerCase();
     const keywordLower = primaryKeyword.toLowerCase();
-    const isSelfReference = pageTitleLower === keywordLower ||
-      (pageTitleLower.includes(keywordLower) && keywordLower.includes(pageTitleLower));
-
+    const isSelfReference = pageTitleLower === keywordLower;
     return (hasValidUrl || hasSlug) && hasTitle && !isSelfReference;
   });
 
   if (validatedPages.length === 0) {
-    analytics.log('warning', 'No validated pages for internal linking');
     return { html: content, linkCount: 0, links: [] };
   }
 
-  // Sort pages by relevance to primary keyword
-  const scoredPages = validatedPages.map(page => {
-    const titleLower = (page.title || '').toLowerCase();
-    const keywordLower = primaryKeyword.toLowerCase();
-    const keywordWords = keywordLower.split(/\s+/);
+  const internalPages: InternalPage[] = validatedPages.map(p => ({
+    title: p.title || '',
+    slug: p.slug || '',
+    url: p.id && p.id.startsWith('http') ? p.id : undefined
+  }));
 
-    let relevanceScore = 0;
-    keywordWords.forEach(word => {
-      if (word.length > 3 && titleLower.includes(word)) {
-        relevanceScore += 0.2;
-      }
-    });
+  const baseUrl = validatedPages[0]?.id?.match(/^https?:\/\/[^\/]+/)?.[0] || '';
 
-    // Boost for semantic match
-    const semanticTerms = ['guide', 'tips', 'how', 'best', 'top', 'review', 'vs', 'compare'];
-    semanticTerms.forEach(term => {
-      if (titleLower.includes(term)) relevanceScore += 0.1;
-    });
-
-    return { ...page, relevanceScore };
-  }).sort((a, b) => b.relevanceScore - a.relevanceScore);
-
-  const usedUrls = new Set<string>();
-  const injectedLinks: any[] = [];
-  // CRITICAL: 4-8 internal links maximum, evenly distributed
-  const targetLinkCount = Math.min(8, Math.max(4, Math.floor(paragraphs.length / 4)));
-
-  for (const paragraph of paragraphs) {
-    if (injectedLinks.length >= targetLinkCount) break;
-    // CRITICAL: Max 1 link per paragraph
-    if (paragraph.querySelectorAll('a').length >= 1) continue;
-
-    const paragraphText = paragraph.textContent || '';
-
-    for (const page of scoredPages) {
-      // CRITICAL: Use the ACTUAL URL from sitemap (page.id) - this guarantees no 404s
-      const actualUrl = page.id && page.id.startsWith('http')
-        ? page.id
-        : (page.slug ? `/${page.slug}/` : null);
-
-      if (!actualUrl) continue;
-      if (usedUrls.has(actualUrl)) continue;
-      if (injectedLinks.length >= targetLinkCount) break;
-
-      // Find rich contextual anchor text
-      const anchor = findContextualAnchorEnhanced(paragraphText, page);
-
-      if (anchor && anchor.score >= 0.4) {
-        if (paragraphText.toLowerCase().includes(anchor.text.toLowerCase())) {
-          // Use the VERIFIED URL from the sitemap
-          const linkHtml = `<a href="${actualUrl}" title="${page.title || ''}">${anchor.text}</a>`;
-
-          const escapedAnchor = anchor.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const regex = new RegExp(`\\b${escapedAnchor}\\b`, 'i');
-
-          if (regex.test(paragraph.innerHTML) && !paragraph.innerHTML.includes(`href="${actualUrl}"`)) {
-            paragraph.innerHTML = paragraph.innerHTML.replace(regex, linkHtml);
-            usedUrls.add(actualUrl);
-
-            injectedLinks.push({
-              anchor: anchor.text,
-              targetUrl: actualUrl,
-              targetSlug: page.slug,
-              targetTitle: page.title,
-              score: anchor.score,
-              wordCount: anchor.text.split(/\s+/).length,
-              verified: true
-            });
-
-            analytics.log('links', `✅ VERIFIED LINK: "${anchor.text}" → ${actualUrl}`, {
-              score: anchor.score.toFixed(2),
-              verified: true
-            });
-          }
-        }
-      }
+  const result = processContentWithInternalLinks(
+    content,
+    internalPages,
+    baseUrl,
+    {
+      minLinksPerPost: 4,
+      maxLinksPerPost: 8,
+      minAnchorWords: 4,
+      maxAnchorWords: 7,
+      maxLinksPerParagraph: 1,
+      minWordsBetweenLinks: 150,
+      avoidFirstParagraph: true,
+      avoidLastParagraph: true
     }
-  }
+  );
 
-  analytics.log('links', `SOTA Linking Complete: ${injectedLinks.length} VERIFIED links injected (0% 404 risk)`);
+  const links = result.placements.map(p => ({
+    anchor: p.anchorText,
+    targetUrl: p.targetUrl,
+    targetSlug: p.targetSlug,
+    targetTitle: p.targetTitle,
+    wordCount: p.anchorText.split(/\s+/).length,
+    verified: true
+  }));
+
+  analytics.log('links', `SOTA v4.0 Complete: ${result.stats.successful}/${result.stats.total} links (4-7 word anchors, max 1/paragraph)`, {
+    successful: result.stats.successful,
+    failed: result.stats.failed
+  });
 
   return {
-    html: doc.body.innerHTML,
-    linkCount: injectedLinks.length,
-    links: injectedLinks
+    html: result.html,
+    linkCount: result.stats.successful,
+    links
   };
 };
 
