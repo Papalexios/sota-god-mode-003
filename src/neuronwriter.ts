@@ -102,7 +102,7 @@ export const listNeuronProjects = async (apiKey: string): Promise<NeuronProject[
   console.log('[NeuronWriter] Fetching projects via Edge Function...');
 
   try {
-    const result = await callNeuronWriterProxy('/projects', apiKey, 'GET');
+    const result = await callNeuronWriterProxy('/list-projects', apiKey, 'POST', {});
 
     if (!result.success) {
       throw new Error(result.error || `API error: ${result.status}`);
@@ -149,10 +149,15 @@ export const fetchNeuronTerms = async (
 
   try {
     const analysisResult = await callNeuronWriterProxy(
-      `/projects/${projectId}/queries`,
+      '/new-query',
       apiKey,
       'POST',
-      { query }
+      {
+        project: projectId,
+        keyword: query,
+        engine: 'google',
+        language: 'en'
+      }
     );
 
     if (!analysisResult.success) {
@@ -160,7 +165,7 @@ export const fetchNeuronTerms = async (
       return null;
     }
 
-    const queryId = analysisResult.data?.id || analysisResult.data?.query_id;
+    const queryId = analysisResult.data?.query || analysisResult.data?.id || analysisResult.data?.query_id;
 
     if (!queryId) {
       console.warn('[NeuronWriter] No query ID returned');
@@ -176,16 +181,17 @@ export const fetchNeuronTerms = async (
       console.log(`[NeuronWriter] Polling for terms (attempt ${attempts}/${maxAttempts})...`);
 
       const termsResult = await callNeuronWriterProxy(
-        `/projects/${projectId}/queries/${queryId}/terms`,
+        '/get-query',
         apiKey,
-        'GET'
+        'POST',
+        { query: queryId }
       );
 
       if (termsResult.success && termsResult.data) {
         const termsData = termsResult.data;
 
-        if (termsData.status === 'completed' || termsData.terms_txt || termsData.terms) {
-          const termsTxt = termsData.terms_txt || termsData.terms || {};
+        if (termsData.status === 'ready' || termsData.terms || termsData.content_terms) {
+          const termsTxt = termsData.terms || termsData.content_terms || {};
 
           terms = {
             h1: termsTxt.h1 || termsTxt.H1 || '',
@@ -228,30 +234,65 @@ export const getNeuronWriterData = async (
   console.log(`[NeuronWriter] Fetching content editor data for: "${keyword}"`);
 
   try {
-    const result = await callNeuronWriterProxy(
-      `/projects/${projectId}/content-editor`,
+    const createResult = await callNeuronWriterProxy(
+      '/new-query',
       apiKey,
       'POST',
       {
+        project: projectId,
         keyword,
-        language: 'en',
-        country: 'us',
+        engine: 'google',
+        language: 'en'
       }
     );
 
-    if (!result.success) {
-      console.warn('[NeuronWriter] Content editor request failed:', result.error);
+    if (!createResult.success) {
+      console.warn('[NeuronWriter] Query creation failed:', createResult.error);
       return null;
     }
 
-    const data = result.data;
+    const queryId = createResult.data?.query || createResult.data?.id;
 
-    return {
-      terms: extractTerms(data.terms || data.nlp_terms || []),
-      competitors: extractCompetitors(data.competitors || data.serp || []),
-      questions: data.questions || data.paa || data.people_also_ask || [],
-      headings: data.headings || data.suggested_headings || [],
-    };
+    if (!queryId) {
+      console.warn('[NeuronWriter] No query ID returned');
+      return null;
+    }
+
+    let attempts = 0;
+    const maxAttempts = 12;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+      await new Promise(resolve => setTimeout(resolve, 2500));
+
+      const result = await callNeuronWriterProxy(
+        '/get-query',
+        apiKey,
+        'POST',
+        { query: queryId }
+      );
+
+      if (result.success && result.data) {
+        const data = result.data;
+
+        if (data.status === 'ready') {
+          return {
+            terms: extractTerms(data.terms || data.content_terms || []),
+            competitors: extractCompetitors(data.competitors || data.serp || []),
+            questions: data.ideas || data.questions || data.paa || [],
+            headings: data.headings || data.suggested_headings || [],
+          };
+        }
+
+        if (data.status === 'failed') {
+          console.warn('[NeuronWriter] Analysis failed');
+          return null;
+        }
+      }
+    }
+
+    console.warn('[NeuronWriter] Timed out waiting for analysis');
+    return null;
   } catch (error: any) {
     console.error('[NeuronWriter] Error:', error.message);
     return null;

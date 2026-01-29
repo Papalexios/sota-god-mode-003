@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, X-NeuronWriter-Key",
 };
 
-const NEURON_API_BASE = "https://app.neuronwriter.com/api/v1";
+const NEURON_API_BASE = "https://app.neuronwriter.com/neuron-api/0.5/writer";
 
 interface ProxyRequest {
   endpoint: string;
