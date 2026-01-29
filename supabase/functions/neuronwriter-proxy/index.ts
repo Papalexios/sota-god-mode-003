@@ -21,6 +21,7 @@ async function makeNeuronRequest(
   apiKey: string,
   body?: Record<string, unknown>
 ): Promise<Response> {
+  const cleanApiKey = apiKey.trim();
   const url = `${NEURON_API_BASE}${endpoint}`;
 
   const controller = new AbortController();
@@ -30,7 +31,7 @@ async function makeNeuronRequest(
     const fetchOptions: RequestInit = {
       method,
       headers: {
-        "X-API-KEY": apiKey,
+        "X-API-KEY": cleanApiKey,
         "Content-Type": "application/json",
         "Accept": "application/json",
         "User-Agent": "ContentOptimizer/1.0",
