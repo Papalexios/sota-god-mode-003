@@ -326,15 +326,27 @@ export const validateAndFixAnchor = (
 
 // ==================== PROXY FETCH ====================
 
-// Use our own serverless API proxy first, then fallback to public CORS proxies
+// Use multiple CORS proxies with fallback chain
 const getProxyUrls = (): string[] => {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  return [
-    `${origin}/api/proxy?url=`,  // Our own serverless proxy (most reliable)
-    'https://api.codetabs.com/v1/proxy?quest=',
-    'https://corsproxy.io/?',
+  const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1');
+  
+  // For local development, skip our own proxy (it won't work without serverless runtime)
+  // For production (Vercel/Cloudflare), use our proxy first
+  const proxies: string[] = [];
+  
+  if (!isLocalhost) {
+    proxies.push(`${origin}/api/proxy?url=`);  // Our own serverless proxy (production only)
+  }
+  
+  // Public CORS proxies as fallbacks
+  proxies.push(
     'https://api.allorigins.win/raw?url=',
-  ];
+    'https://corsproxy.io/?',
+    'https://api.codetabs.com/v1/proxy?quest=',
+  );
+  
+  return proxies;
 };
 
 export const fetchWithProxies = async (

@@ -10,6 +10,20 @@ export default defineConfig({
       '@': resolve(__dirname, 'src'),
     },
   },
+
+  server: {
+    proxy: {
+      '/api/proxy': {
+        target: 'https://api.allorigins.win',
+        changeOrigin: true,
+        rewrite: (path) => {
+          const url = new URL(path, 'http://localhost');
+          const targetUrl = url.searchParams.get('url');
+          return `/raw?url=${targetUrl}`;
+        },
+      },
+    },
+  },
   
   build: {
     target: 'esnext',
