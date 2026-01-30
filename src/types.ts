@@ -104,12 +104,15 @@ export interface GeneratedContent {
   youtubeVideo?: {
     title: string;
     videoId: string;
-    embedded: boolean;
+    channel?: string;
+    thumbnail?: string;
+    embedded?: boolean;
   } | null;
   internalLinks?: {
     anchorText: string;
-    targetSlug: string;
+    targetSlug?: string;
     targetUrl: string;
+    targetTitle?: string;
   }[];
 }
 
@@ -165,6 +168,7 @@ export interface SitemapPage {
   id: string;
   title: string;
   slug: string;
+  url?: string;
   lastMod: string | null;
   wordCount: number | null;
   crawledContent: string | null;

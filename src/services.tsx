@@ -32,8 +32,10 @@ import {
 
 import {
   processContentWithInternalLinks,
+  processContentWithHybridInternalLinks,
   validateAnchorText,
-  InternalPage
+  InternalPage,
+  AILinkingConfig
 } from './SOTAInternalLinkEngine';
 
 import {
@@ -43,8 +45,16 @@ import {
 } from './SOTAContentEnhancer';
 
 import {
+  searchYouTubeVideos,
+  guaranteedYouTubeInjection,
+  YouTubeSearchResult
+} from './YouTubeService';
+
+import {
   fetchNeuronTerms,
   formatNeuronTermsForPrompt,
+  calculateNeuronContentScore,
+  getMissingNeuronTerms,
   NeuronTerms
 } from './neuronwriter';
 
@@ -165,6 +175,146 @@ class AnalyticsEngine {
 }
 
 const analytics = new AnalyticsEngine();
+
+// ==================== NEURONWRITER ENFORCEMENT ENGINE ====================
+
+/**
+ * MANDATORY NeuronWriter Term Enforcement
+ * Forces AI to incorporate missing NeuronWriter terms into the content
+ * Uses a score-check → missing-terms → patch loop until target reached
+ */
+async function enforceNeuronWriterTerms(
+  html: string,
+  neuronTerms: NeuronTerms,
+  callAiFn: (prompt: string) => Promise<string>,
+  targetScore: number = 85,
+  maxPasses: number = 3
+): Promise<{ html: string; score: number; passes: number; termsAdded: number }> {
+  let currentHtml = html;
+  let score = calculateNeuronContentScore(currentHtml, neuronTerms);
+  let totalTermsAdded = 0;
+  
+  console.log(`[NeuronEnforce] Initial score: ${score}% (target: ${targetScore}%)`);
+  
+  if (score >= targetScore) {
+    console.log(`[NeuronEnforce] ✅ Already meets target score`);
+    return { html: currentHtml, score, passes: 0, termsAdded: 0 };
+  }
+  
+  for (let pass = 1; pass <= maxPasses && score < targetScore; pass++) {
+    const missingTerms = getMissingNeuronTerms(currentHtml, neuronTerms, 25);
+    
+    if (missingTerms.length === 0) {
+      console.log(`[NeuronEnforce] No more missing terms after pass ${pass - 1}`);
+      break;
+    }
+    
+    console.log(`[NeuronEnforce] Pass ${pass}: Adding ${missingTerms.length} missing terms...`);
+    
+    const enforcementPrompt = `You are an expert SEO content editor. Your MANDATORY task is to integrate specific SEO terms into the existing content.
+
+## CRITICAL INSTRUCTIONS:
+1. You MUST add ALL of the following terms naturally into the content
+2. Do NOT create a keyword list or glossary section
+3. Integrate terms into existing headings, paragraphs, or add new supporting sentences
+4. Keep the overall structure and formatting intact
+5. Terms should read naturally - not forced or awkward
+6. Return ONLY the updated HTML content (no markdown fences, no explanations)
+
+## MISSING TERMS THAT MUST BE ADDED (${missingTerms.length} terms):
+${missingTerms.map((t, i) => `${i + 1}. "${t}"`).join('\n')}
+
+## STRATEGIES FOR NATURAL INTEGRATION:
+- Add terms to H2/H3 headings where relevant
+- Include terms in the first sentence of relevant paragraphs
+- Add terms to lists and bullet points
+- Include in expert quotes or pro tips
+- Add to comparison table rows
+- Include in FAQ answers
+- Add to conclusion/summary sections
+
+## CURRENT HTML CONTENT:
+${currentHtml}
+
+Return the updated HTML with ALL missing terms naturally integrated:`;
+
+    try {
+      const updatedContent = await callAiFn(enforcementPrompt);
+      
+      // Clean response if wrapped in markdown
+      let cleanedContent = updatedContent.trim();
+      if (cleanedContent.startsWith('```')) {
+        cleanedContent = cleanedContent.replace(/```html?\s*/gi, '').replace(/```\s*$/gi, '').trim();
+      }
+      
+      // Validate we got HTML back
+      if (!cleanedContent.includes('<') || cleanedContent.length < 500) {
+        console.warn(`[NeuronEnforce] Invalid response in pass ${pass}, skipping`);
+        continue;
+      }
+      
+      currentHtml = cleanedContent;
+      const newScore = calculateNeuronContentScore(currentHtml, neuronTerms);
+      const termsAddedThisPass = missingTerms.filter(
+        t => currentHtml.toLowerCase().includes(t.toLowerCase())
+      ).length;
+      
+      totalTermsAdded += termsAddedThisPass;
+      
+      console.log(`[NeuronEnforce] Pass ${pass} complete: Score ${score}% → ${newScore}% (+${termsAddedThisPass} terms)`);
+      score = newScore;
+      
+    } catch (error: any) {
+      console.error(`[NeuronEnforce] Pass ${pass} failed:`, error.message);
+    }
+  }
+  
+  console.log(`[NeuronEnforce] Final score: ${score}% after ${maxPasses} passes (${totalTermsAdded} terms added)`);
+  
+  return {
+    html: currentHtml,
+    score,
+    passes: maxPasses,
+    termsAdded: totalTermsAdded
+  };
+}
+
+// ==================== GUARANTEED YOUTUBE INJECTION ====================
+
+/**
+ * GUARANTEED YouTube video finder and injector
+ * Uses Serper.dev API to find the most relevant video
+ * Returns video data for final injection step
+ */
+async function findBestYouTubeVideo(
+  keyword: string,
+  serperApiKey: string,
+  logCallback?: (msg: string) => void
+): Promise<YouTubeSearchResult | null> {
+  if (!serperApiKey) {
+    logCallback?.('[YouTube] ⚠️ No Serper API key - skipping');
+    return null;
+  }
+  
+  console.log(`[YouTube] Searching for video: "${keyword}"`);
+  
+  try {
+    const videos = await searchYouTubeVideos(keyword, serperApiKey, 3);
+    
+    if (videos.length === 0) {
+      console.warn(`[YouTube] No videos found for: "${keyword}"`);
+      return null;
+    }
+    
+    const bestVideo = videos[0];
+    console.log(`[YouTube] ✅ Found: "${bestVideo.title}" by ${bestVideo.channel}`);
+    
+    return bestVideo;
+  } catch (error: any) {
+    console.error(`[YouTube] Search failed:`, error.message);
+    return null;
+  }
+}
 
 // ==================== SAFE JSON PARSING WRAPPER ====================
 
@@ -1594,64 +1744,128 @@ export const generateContent = {
           console.log(`[NeuronWriter] Integration DISABLED or not configured`);
         }
 
-        // Phase 3: Main Content
+        // Phase 3: Main Content Generation
         dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '✍️ Writing...' } });
-        const contentResponse = await callAIFn(
+        let contentResponse = await callAIFn(
           'ultra_sota_article_writer',
           [item.title, semanticKeywords, existingPages, serpData, neuronTermsFormatted, null],
           'html'
         );
 
-        // Phase 4: References
+        // Phase 3.5: MANDATORY NeuronWriter Term Enforcement
+        let neuronScore = 0;
+        if (neuronTerms) {
+          dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🧠 Enforcing NeuronWriter...' } });
+          console.log(`[ContentGen] Enforcing NeuronWriter terms for: "${item.title}"`);
+          
+          const enforceResult = await enforceNeuronWriterTerms(
+            contentResponse,
+            neuronTerms,
+            async (prompt: string) => await callAIFn('dom_content_polisher', [prompt, 'neuron_enforcement'], 'html'),
+            85, // Target score
+            3   // Max passes
+          );
+          
+          contentResponse = enforceResult.html;
+          neuronScore = enforceResult.score;
+          console.log(`[ContentGen] NeuronWriter enforcement complete: ${neuronScore}% score, ${enforceResult.termsAdded} terms added`);
+        }
+
+        // Phase 4: References (Using Improved Serper Queries)
         dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📚 References...' } });
         const { html: referencesHtml, references } = await fetchVerifiedReferences(
           item.title, semanticKeywords, serperApiKey, wpConfig.url
         );
+        console.log(`[ContentGen] Fetched ${references.length} verified references`);
 
-        // Phase 5: YouTube Video Injection (GUARANTEED)
+        // Phase 5: Find YouTube Video (GUARANTEED - search first, inject last)
         dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Finding Video...' } });
-        console.log(`[ContentGen] Injecting YouTube video for: "${item.title}"`);
-
-        const contentWithVideo = await injectYouTubeIntoContent(
-          contentResponse,
+        console.log(`[ContentGen] Finding YouTube video for: "${item.title}"`);
+        
+        const youtubeVideo = await findBestYouTubeVideo(
           item.title,
           serperApiKey,
           (msg) => console.log(msg)
         );
-
-        if (contentWithVideo === contentResponse) {
-          console.warn(`[ContentGen] ⚠️ YouTube video not injected for: "${item.title}"`);
+        
+        if (youtubeVideo) {
+          console.log(`[ContentGen] ✅ YouTube video found: "${youtubeVideo.title}"`);
         } else {
-          console.log(`[ContentGen] ✅ YouTube video successfully injected for: "${item.title}"`);
+          console.warn(`[ContentGen] ⚠️ No YouTube video found for: "${item.title}"`);
         }
 
-        // Phase 6: Internal Links (4-8 links with rich anchor text)
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🔗 Adding Links...' } });
-        let contentWithLinks = contentWithVideo;
+        // Phase 6: AI-Powered Internal Links (with hybrid fallback)
+        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🔗 Adding AI Links...' } });
+        let contentWithLinks = contentResponse;
         let linkResult = { linkCount: 0, links: [] as any[] };
 
         console.log(`[Internal Links] existingPages count: ${existingPages.length}`);
 
         if (existingPages.length > 0) {
-          console.log(`[Internal Links] Generating 4-8 internal links for: "${item.title}"`);
-          const linkingResult = await generateEnhancedInternalLinks(
-            contentWithVideo, existingPages, item.title, null, '',
-            (msg) => console.log(`[Internal Links] ${msg}`)
+          console.log(`[Internal Links] Using AI-powered internal linking for: "${item.title}"`);
+          
+          // Create AI linking config
+          const aiLinkConfig: AILinkingConfig = {
+            callAiFn: async (prompt: string) => await callAIFn('dom_content_polisher', [prompt, 'internal_linking'], 'json'),
+            primaryKeyword: item.title,
+            minLinks: 4,
+            maxLinks: 8
+          };
+          
+          // Convert existing pages to InternalPage format
+          const internalPages: InternalPage[] = existingPages.map(p => ({
+            title: p.title,
+            slug: p.slug,
+            url: p.url || `${wpConfig.url}/${p.slug}/`
+          }));
+          
+          const baseUrl = wpConfig.url || '';
+          
+          // Use hybrid linking (AI-first with deterministic fallback)
+          const linkingResult = await processContentWithHybridInternalLinks(
+            contentResponse,
+            internalPages,
+            baseUrl,
+            aiLinkConfig
           );
+          
           contentWithLinks = linkingResult.html;
-          linkResult = { linkCount: linkingResult.linkCount, links: linkingResult.links };
-          console.log(`[Internal Links] SUCCESS - Added ${linkResult.linkCount} links`);
+          linkResult = { 
+            linkCount: linkingResult.stats.successful, 
+            links: linkingResult.placements.map(p => ({
+              anchorText: p.anchorText,
+              targetUrl: p.targetUrl,
+              targetTitle: p.targetTitle
+            }))
+          };
+          console.log(`[Internal Links] SUCCESS - Added ${linkResult.linkCount} links using ${linkingResult.stats.method} method`);
         } else {
           console.warn('[Internal Links] No existingPages available - cannot add internal links');
         }
 
-        // Phase 8: Polish & Assemble
+        // Phase 7: Polish Content
         dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '✨ Polishing...' } });
-
         let finalContent = polishContentHtml(contentWithLinks);
 
+        // Phase 7.5: Append References
         if (referencesHtml) {
           finalContent += referencesHtml;
+        }
+
+        // Phase 7.9: GUARANTEED YouTube Injection (LAST STEP before schema)
+        // This ensures YouTube video is ALWAYS present in final content
+        if (youtubeVideo) {
+          dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Injecting Video...' } });
+          console.log(`[ContentGen] GUARANTEED YouTube injection for: "${item.title}"`);
+          
+          finalContent = guaranteedYouTubeInjection(finalContent, youtubeVideo);
+          
+          // Verify injection worked
+          if (finalContent.includes(youtubeVideo.videoId)) {
+            console.log(`[ContentGen] ✅ YouTube video CONFIRMED in final content`);
+          } else {
+            console.error(`[ContentGen] ❌ YouTube video NOT FOUND in final content after injection!`);
+          }
         }
 
         // Phase 8: Schema
@@ -1683,7 +1897,12 @@ export const generateContent = {
           schemaMarkup: JSON.stringify(schemaData, null, 2),
           primaryKeyword: item.title,
           semanticKeywords,
-          youtubeVideo: null,
+          youtubeVideo: youtubeVideo ? {
+            videoId: youtubeVideo.videoId,
+            title: youtubeVideo.title,
+            channel: youtubeVideo.channel,
+            thumbnail: youtubeVideo.thumbnail
+          } : null,
           references: references.map(r => ({ title: r.title, url: r.url, verified: r.verified })),
           internalLinks: linkResult.links,
           neuronAnalysis: neuronTerms ? {
@@ -1699,7 +1918,7 @@ export const generateContent = {
             },
             questions: neuronTerms.questions || [],
             headings: neuronTerms.headings || [],
-            contentScore: 0,
+            contentScore: neuronScore,
             termCount: countNeuronTerms(neuronTerms)
           } : undefined
         };
@@ -1782,37 +2001,88 @@ export const generateContent = {
 
       dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '✨ Optimizing...' } });
 
-      const optimizedContent = await callAIFn(
+      let optimizedContent = await callAIFn(
         'content_refresher',
         [item.crawledContent, item.title, semanticKeywords, neuronTermsFormatted],
         'html'
       );
 
-      // Inject YouTube video using enhanced injection engine
-      const contentWithVideo = await injectYouTubeIntoContent(
-        optimizedContent,
-        item.title,
-        serperApiKey,
-        (msg) => console.log(`[Refresh] ${msg}`)
-      );
+      // MANDATORY NeuronWriter Term Enforcement
+      let neuronScore = 0;
+      if (neuronTerms) {
+        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🧠 Enforcing NeuronWriter...' } });
+        
+        const enforceResult = await enforceNeuronWriterTerms(
+          optimizedContent,
+          neuronTerms,
+          async (prompt: string) => await callAIFn('dom_content_polisher', [prompt, 'neuron_enforcement'], 'html'),
+          85,
+          3
+        );
+        
+        optimizedContent = enforceResult.html;
+        neuronScore = enforceResult.score;
+        console.log(`[Refresh] NeuronWriter enforcement: ${neuronScore}% score`);
+      }
 
-      // Fetch verified references
+      // Fetch verified references (with improved queries)
+      dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📚 References...' } });
       const { html: referencesHtml, references } = await fetchVerifiedReferences(
         item.title, semanticKeywords, serperApiKey, wpConfig.url
       );
 
-      // Add internal links
-      let finalContent = contentWithVideo;
+      // Find YouTube video (search first, inject last)
+      dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Finding Video...' } });
+      const youtubeVideo = await findBestYouTubeVideo(item.title, serperApiKey);
+
+      // AI-Powered Internal Links (with hybrid fallback)
+      dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🔗 Adding AI Links...' } });
+      let finalContent = optimizedContent;
+      let linkResult = { linkCount: 0, links: [] as any[] };
+
       if (existingPages.length > 0) {
-        const linkResult = await generateEnhancedInternalLinks(
-          contentWithVideo, existingPages, item.title, null, ''
+        const aiLinkConfig: AILinkingConfig = {
+          callAiFn: async (prompt: string) => await callAIFn('dom_content_polisher', [prompt, 'internal_linking'], 'json'),
+          primaryKeyword: item.title,
+          minLinks: 4,
+          maxLinks: 8
+        };
+        
+        const internalPages: InternalPage[] = existingPages.map(p => ({
+          title: p.title,
+          slug: p.slug,
+          url: p.url || `${wpConfig.url}/${p.slug}/`
+        }));
+        
+        const linkingResult = await processContentWithHybridInternalLinks(
+          optimizedContent,
+          internalPages,
+          wpConfig.url || '',
+          aiLinkConfig
         );
-        finalContent = linkResult.html;
+        
+        finalContent = linkingResult.html;
+        linkResult = {
+          linkCount: linkingResult.stats.successful,
+          links: linkingResult.placements.map(p => ({
+            anchorText: p.anchorText,
+            targetUrl: p.targetUrl,
+            targetTitle: p.targetTitle
+          }))
+        };
+        console.log(`[Refresh] Added ${linkResult.linkCount} internal links`);
       }
 
       // Append references
       if (referencesHtml) {
         finalContent += referencesHtml;
+      }
+
+      // GUARANTEED YouTube Injection (LAST STEP)
+      if (youtubeVideo) {
+        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Injecting Video...' } });
+        finalContent = guaranteedYouTubeInjection(finalContent, youtubeVideo);
+        console.log(`[Refresh] YouTube video injected: ${youtubeVideo.videoId}`);
       }
 
       const generatedContent: GeneratedContent = {
@@ -1823,7 +2093,14 @@ export const generateContent = {
         schemaMarkup: '',
         primaryKeyword: item.title,
         semanticKeywords,
+        youtubeVideo: youtubeVideo ? {
+          videoId: youtubeVideo.videoId,
+          title: youtubeVideo.title,
+          channel: youtubeVideo.channel,
+          thumbnail: youtubeVideo.thumbnail
+        } : null,
         references: references.map(r => ({ title: r.title, url: r.url, verified: r.verified })),
+        internalLinks: linkResult.links,
         neuronAnalysis: neuronTerms ? {
           terms_txt: {
             h1: neuronTerms.h1 || '',
@@ -1837,7 +2114,7 @@ export const generateContent = {
           },
           questions: neuronTerms.questions || [],
           headings: neuronTerms.headings || [],
-          contentScore: 0,
+          contentScore: neuronScore,
           termCount: countNeuronTerms(neuronTerms)
         } : undefined
       };
@@ -1855,14 +2132,14 @@ export const generateContent = {
 };
 
 
-// Add to generateContent function
-import { PREMIUM_THEMES, generateKeyTakeawaysHTML } from './PremiumDesignSystem';
+// Premium Design System Integration
+import { PREMIUM_THEMES, generateKeyTakeawaysHTML, PremiumTheme } from './PremiumDesignSystem';
 
 const applyThemeToContent = (
   htmlContent: string,
   themeId: string = 'glassmorphism-dark'
 ): string => {
-  const theme = PREMIUM_THEMES.find(t => t.id === themeId) || PREMIUM_THEMES[0];
+  const theme: PremiumTheme = PREMIUM_THEMES.find((t: PremiumTheme) => t.id === themeId) || PREMIUM_THEMES[0];
 
   // Wrap content with theme container
   return `
@@ -2006,7 +2283,7 @@ export const generateImageWithFallback = async (
         response_format: 'b64_json'
       });
 
-      if (response.data[0]?.b64_json) {
+      if (response.data && response.data[0]?.b64_json) {
         return `data:image/png;base64,${response.data[0].b64_json}`;
       }
     } catch (e) {

@@ -334,10 +334,159 @@ export async function findAndEmbedYouTubeVideo(
   return { html, video };
 }
 
+/**
+ * Generate WordPress Gutenberg-safe YouTube embed block
+ * This format survives WP sanitization and auto-renders
+ */
+export function generateWordPressYouTubeEmbed(videoId: string, videoTitle: string = ''): string {
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const safeTitle = videoTitle.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  
+  return `
+<!-- wp:embed {"url":"${url}","type":"video","providerNameSlug":"youtube","responsive":true,"className":"wp-embed-aspect-16-9 wp-has-aspect-ratio"} -->
+<figure class="wp-block-embed is-type-video is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio" style="margin: 2.5rem 0;">
+  <div class="wp-block-embed__wrapper" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+    <iframe 
+      src="https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1" 
+      title="${safeTitle}"
+      frameborder="0" 
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+      allowfullscreen
+      loading="lazy"
+      style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
+    ></iframe>
+  </div>
+  <figcaption style="text-align: center; color: #64748b; font-size: 0.9rem; margin-top: 0.75rem;">📹 ${safeTitle}</figcaption>
+</figure>
+<!-- /wp:embed -->
+`.trim();
+}
+
+/**
+ * Generate ultra-premium styled YouTube embed HTML
+ */
+function generateUltraPremiumYouTubeHtml(video: YouTubeSearchResult): string {
+  return `
+<div class="sota-youtube-ultra" style="margin: 3.5rem 0; padding: 2.5rem; background: linear-gradient(145deg, #0a0a14 0%, #111827 100%); border-radius: 24px; border: 2px solid rgba(99, 102, 241, 0.3); box-shadow: 0 30px 80px rgba(99, 102, 241, 0.15);">
+  <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.75rem; padding-bottom: 1.25rem; border-bottom: 1px solid rgba(99, 102, 241, 0.2);">
+    <div style="display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; background: linear-gradient(135deg, #ef4444, #dc2626); border-radius: 14px; box-shadow: 0 8px 25px rgba(239, 68, 68, 0.35);">
+      <span style="font-size: 1.5rem;">▶</span>
+    </div>
+    <div>
+      <h3 style="margin: 0; font-size: 1.35rem; font-weight: 800; color: #f1f5f9; letter-spacing: -0.02em;">Helpful Video Guide</h3>
+      <p style="margin: 0.25rem 0 0; font-size: 0.9rem; color: #94a3b8;">${video.channel}</p>
+    </div>
+  </div>
+  <div style="border-radius: 16px; overflow: hidden; box-shadow: 0 15px 50px rgba(0, 0, 0, 0.4);">
+    <div style="position: relative; padding-bottom: 56.25%; height: 0;">
+      <iframe
+        src="https://www.youtube.com/embed/${video.videoId}?rel=0&modestbranding=1"
+        title="${video.title.replace(/"/g, '&quot;')}"
+        frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen
+        loading="lazy"
+        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
+      ></iframe>
+    </div>
+  </div>
+  <div style="margin-top: 1.25rem; padding: 1rem 1.5rem; background: rgba(255, 255, 255, 0.05); border-radius: 12px;">
+    <p style="margin: 0; color: #e2e8f0; font-weight: 600; font-size: 1rem;">${video.title}</p>
+  </div>
+</div>`;
+}
+
+/**
+ * GUARANTEED YouTube video injection at the FINAL stage
+ * Uses multiple fallback strategies to ensure video is always present
+ */
+export function guaranteedYouTubeInjection(
+  html: string,
+  video: YouTubeSearchResult
+): string {
+  const videoId = video.videoId;
+  
+  // Check if video already exists
+  if (html.includes(videoId)) {
+    console.log('[YouTubeGuaranteed] Video already present');
+    return html;
+  }
+
+  // Generate both embed formats for maximum compatibility
+  const wpEmbed = generateWordPressYouTubeEmbed(videoId, video.title);
+  const styledEmbed = generateUltraPremiumYouTubeHtml(video);
+
+  // Use WordPress embed as primary (survives sanitization)
+  const embedHtml = `
+<div class="sota-youtube-guaranteed" data-video-id="${videoId}">
+  ${styledEmbed}
+  ${wpEmbed}
+</div>
+`.trim();
+
+  // Strategy 1: Replace placeholder
+  if (html.includes('[YOUTUBE_VIDEO_PLACEHOLDER]')) {
+    console.log('[YouTubeGuaranteed] ✅ Replaced placeholder');
+    return html.replace('[YOUTUBE_VIDEO_PLACEHOLDER]', embedHtml);
+  }
+
+  // Strategy 2: Insert after 2nd H2 (middle of content)
+  const h2Matches = [...html.matchAll(/<\/h2>/gi)];
+  if (h2Matches.length >= 2) {
+    const insertIdx = h2Matches[1].index! + h2Matches[1][0].length;
+    // Find next paragraph end
+    const afterH2 = html.substring(insertIdx);
+    const nextP = afterH2.match(/<\/p>/i);
+    if (nextP && nextP.index !== undefined) {
+      const finalPos = insertIdx + nextP.index + nextP[0].length;
+      console.log('[YouTubeGuaranteed] ✅ Inserted after 2nd H2');
+      return html.substring(0, finalPos) + '\n\n' + embedHtml + '\n\n' + html.substring(finalPos);
+    }
+  }
+
+  // Strategy 3: Insert before references section
+  const refMatch = html.match(/<div[^>]*class="[^"]*sota-references[^"]*"[^>]*>/i);
+  if (refMatch && refMatch.index !== undefined) {
+    console.log('[YouTubeGuaranteed] ✅ Inserted before references');
+    return html.substring(0, refMatch.index) + embedHtml + '\n\n' + html.substring(refMatch.index);
+  }
+
+  // Strategy 4: Insert before FAQ section
+  const faqMatch = html.match(/<div[^>]*class="[^"]*sota-faq[^"]*"[^>]*>/i);
+  if (faqMatch && faqMatch.index !== undefined) {
+    console.log('[YouTubeGuaranteed] ✅ Inserted before FAQ');
+    return html.substring(0, faqMatch.index) + embedHtml + '\n\n' + html.substring(faqMatch.index);
+  }
+
+  // Strategy 5: Insert before conclusion
+  const conclusionMatch = html.match(/<div[^>]*class="[^"]*sota-conclusion[^"]*"[^>]*>/i);
+  if (conclusionMatch && conclusionMatch.index !== undefined) {
+    console.log('[YouTubeGuaranteed] ✅ Inserted before conclusion');
+    return html.substring(0, conclusionMatch.index) + embedHtml + '\n\n' + html.substring(conclusionMatch.index);
+  }
+
+  // Strategy 6: Insert at content midpoint (find a paragraph ending near 50%)
+  const midPoint = Math.floor(html.length * 0.5);
+  const searchStart = Math.max(0, midPoint - 500);
+  const searchEnd = Math.min(html.length, midPoint + 500);
+  const midSection = html.substring(searchStart, searchEnd);
+  const midPMatch = midSection.match(/<\/p>/i);
+  if (midPMatch && midPMatch.index !== undefined) {
+    const insertPos = searchStart + midPMatch.index + midPMatch[0].length;
+    console.log('[YouTubeGuaranteed] ✅ Inserted at content midpoint');
+    return html.substring(0, insertPos) + '\n\n' + embedHtml + '\n\n' + html.substring(insertPos);
+  }
+
+  // Strategy 7: ABSOLUTE FALLBACK - Append at end
+  console.log('[YouTubeGuaranteed] ✅ Appended at end (fallback)');
+  return html + '\n\n' + embedHtml;
+}
+
 export default {
   searchYouTubeVideos,
   generateYouTubeEmbed,
   findAndEmbedYouTubeVideo,
-  extractVideoId
+  generateWordPressYouTubeEmbed,
+  guaranteedYouTubeInjection
 };
 

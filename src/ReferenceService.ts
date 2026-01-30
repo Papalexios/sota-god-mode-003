@@ -140,31 +140,35 @@ export async function fetchVerifiedReferences(
       try { userDomain = new URL(wpUrl).hostname.replace('www.', ''); } catch (e) {}
     }
 
+    // SOTA Intent-Specific Query Builder
+    const kw = `"${keyword}"`;
+    const topSemantic = semanticKeywords.slice(0, 5);
+    const semQuery = topSemantic.map(s => `"${s}"`).join(' OR ');
+    
     const searchQueries: string[] = [];
-
-    // Build hyper-relevant search queries using semantic keywords
-    const topSemanticKeywords = semanticKeywords.slice(0, 3).join(' ');
-
+    
+    // Authority domain scoped queries (highest relevance)
     if (categoryConfig) {
-      // Query 1: Exact topic + authority domains
-      const topDomains = categoryConfig.authorityDomains.slice(0, 4).map(d => `site:${d}`).join(' OR ');
-      searchQueries.push(`"${keyword}" ${topSemanticKeywords} (${topDomains})`);
-
-      // Query 2: Topic + research/study + current year
-      searchQueries.push(`"${keyword}" ${topSemanticKeywords} research study ${currentYear}`);
-
-      // Query 3: Topic + specific modifiers for the category
-      const modifier = categoryConfig.searchModifiers[0];
-      searchQueries.push(`"${keyword}" ${topSemanticKeywords} "${modifier}" ${currentYear} OR ${currentYear - 1}`);
-
-      // Query 4: Topic + "comprehensive guide" or "complete overview"
-      searchQueries.push(`"${keyword}" comprehensive guide OR complete overview ${currentYear}`);
-    } else {
-      // Generic but still highly relevant
-      searchQueries.push(`"${keyword}" ${topSemanticKeywords} research study evidence ${currentYear}`);
-      searchQueries.push(`"${keyword}" ${topSemanticKeywords} expert guide official`);
-      searchQueries.push(`"${keyword}" ${topSemanticKeywords} best practices ${currentYear}`);
+      const topDomains = categoryConfig.authorityDomains.slice(0, 6);
+      for (const domain of topDomains.slice(0, 3)) {
+        searchQueries.push(`${kw} site:${domain}`);
+      }
+      
+      // Combined authority query
+      const siteOr = topDomains.map(d => `site:${d}`).join(' OR ');
+      searchQueries.push(`${kw} (${siteOr})`);
     }
+    
+    // Intent-specific queries
+    searchQueries.push(`${kw} (${semQuery}) "research" OR "study" OR "systematic review" ${currentYear} OR ${currentYear - 1}`);
+    searchQueries.push(`${kw} (${semQuery}) "guidelines" OR "official" OR "fact sheet" ${currentYear}`);
+    searchQueries.push(`${kw} (${semQuery}) "statistics" OR "data" OR "survey" OR "report" ${currentYear}`);
+    searchQueries.push(`${kw} (${semQuery}) "how to" OR "tutorial" OR "best practices"`);
+    searchQueries.push(`${kw} (${semQuery}) "expert" OR "professional" OR "certified"`);
+    
+    // Exact match priority queries
+    searchQueries.push(`"${keyword}" complete guide ${currentYear}`);
+    searchQueries.push(`"${keyword}" official resource`);
 
     log(`Search queries: ${searchQueries.length} variations`);
 
@@ -194,9 +198,16 @@ export async function fetchVerifiedReferences(
 
     const validatedReferences: VerifiedReference[] = [];
 
-    // Calculate relevance score for each reference
+    // STRICT Relevance Enforcement
     const keywordLower = keyword.toLowerCase();
-    const semanticLower = semanticKeywords.map(k => k.toLowerCase());
+    const keywordTokens = keywordLower.split(/\s+/).filter(w => w.length > 3);
+    const semanticLower = semanticKeywords.map(k => k.toLowerCase()).filter(k => k.length > 3);
+    
+    // Off-topic blocklist (reject results containing these)
+    const offTopicPhrases = [
+      'unrelated', 'different topic', 'advertisement', 'sponsored',
+      'buy now', 'shop now', 'add to cart', 'free download', 'sign up free'
+    ];
 
     for (const ref of potentialReferences) {
       if (validatedReferences.length >= 10) break;
@@ -210,37 +221,68 @@ export async function fetchVerifiedReferences(
         if (userDomain && domain.includes(userDomain)) continue;
         if (validatedReferences.some(r => r.domain === domain)) continue;
 
-        // Relevance scoring
+        // Content analysis
         const titleLower = (ref.title || '').toLowerCase();
         const snippetLower = (ref.snippet || '').toLowerCase();
         const combinedText = `${titleLower} ${snippetLower}`;
 
+        // OFF-TOPIC REJECTION
+        if (offTopicPhrases.some(phrase => combinedText.includes(phrase))) {
+          log(`Rejected: ${domain} (off-topic phrase detected)`);
+          continue;
+        }
+
+        // STRICT RELEVANCE REQUIREMENTS
+        const exactKeywordMatch = combinedText.includes(keywordLower);
+        const matchedKeywordTokens = keywordTokens.filter(t => combinedText.includes(t));
+        const matchedSemantic = semanticLower.filter(s => combinedText.includes(s));
+
+        // MUST have either:
+        // 1. Exact keyword phrase match, OR
+        // 2. At least 2 keyword tokens + at least 1 semantic keyword
+        if (!exactKeywordMatch) {
+          if (matchedKeywordTokens.length < 2) {
+            log(`Rejected: ${domain} (insufficient keyword match: ${matchedKeywordTokens.length}/2)`);
+            continue;
+          }
+          if (matchedSemantic.length < 1) {
+            log(`Rejected: ${domain} (no semantic keyword match)`);
+            continue;
+          }
+        }
+
+        // Calculate relevance score
         let relevanceScore = 0;
-
-        // Exact keyword match in title = high relevance
-        if (titleLower.includes(keywordLower)) relevanceScore += 100;
-
-        // Partial keyword match
-        const keywordWords = keywordLower.split(/\s+/).filter(w => w.length > 3);
-        for (const word of keywordWords) {
-          if (titleLower.includes(word)) relevanceScore += 20;
-          if (snippetLower.includes(word)) relevanceScore += 10;
+        
+        // Exact phrase = highest priority
+        if (exactKeywordMatch) relevanceScore += 100;
+        
+        // Token matches
+        relevanceScore += matchedKeywordTokens.length * 20;
+        relevanceScore += matchedSemantic.length * 15;
+        
+        // Title matches are more valuable than snippet
+        for (const token of keywordTokens) {
+          if (titleLower.includes(token)) relevanceScore += 25;
+        }
+        
+        // Freshness bonus
+        if (combinedText.includes(String(currentYear))) relevanceScore += 30;
+        if (combinedText.includes(String(currentYear - 1))) relevanceScore += 15;
+        
+        // Authority domain bonus
+        if (categoryConfig?.authorityDomains.some(d => domain.includes(d))) {
+          relevanceScore += 50;
+        }
+        
+        // .gov/.edu bonus
+        if (domain.endsWith('.gov') || domain.endsWith('.edu')) {
+          relevanceScore += 40;
         }
 
-        // Semantic keyword matches
-        for (const semKey of semanticLower) {
-          if (combinedText.includes(semKey)) relevanceScore += 15;
-        }
-
-        // Boost for current year
-        const currentYear = new Date().getFullYear();
-        if (combinedText.includes(String(currentYear)) || combinedText.includes(String(currentYear - 1))) {
-          relevanceScore += 25;
-        }
-
-        // Minimum relevance threshold
-        if (relevanceScore < 50) {
-          log(`Rejected: ${domain} (low relevance score: ${relevanceScore})`);
+        // MINIMUM RELEVANCE THRESHOLD (raised from 50 to 80)
+        if (relevanceScore < 80) {
+          log(`Rejected: ${domain} (low relevance: ${relevanceScore})`);
           continue;
         }
 
@@ -286,9 +328,15 @@ export async function fetchVerifiedReferences(
       }
     }
 
-    // Sort by authority and domain quality
+    // QUALITY ASSURANCE: If we don't have enough high-quality references, be explicit
+    if (validatedReferences.length < 3) {
+      console.warn(`[References] ⚠️ Only ${validatedReferences.length} references passed strict validation`);
+      log(`Warning: Low reference count (${validatedReferences.length}). Consider broadening search or checking API limits.`);
+    }
+    
+    // Sort by relevance + authority
     validatedReferences.sort((a, b) => {
-      const authorityScore = { high: 3, medium: 2, low: 1 };
+      const authorityScore = { high: 100, medium: 50, low: 10 };
       return authorityScore[b.authority] - authorityScore[a.authority];
     });
 
