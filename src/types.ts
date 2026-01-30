@@ -239,10 +239,16 @@ export interface NeuronAnalysis {
     h1?: string;
     title?: string;
     h2?: string;
+    h3?: string;
     content_basic?: string;
     content_extended?: string;
+    entities_basic?: string;
+    entities_extended?: string;
   };
+  questions?: string[];
+  headings?: string[];
   contentScore?: number;
+  termCount?: number;
 }
 
 // ==================== SITE INFO TYPES ====================

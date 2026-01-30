@@ -186,12 +186,12 @@ export const fetchNeuronTerms = async (
     console.log(`[NeuronWriter] Query created: ${queryId} - Waiting for analysis...`);
 
     let attempts = 0;
-    const maxAttempts = 20;
+    const maxAttempts = 15;
     let terms: NeuronTerms | null = null;
 
     while (attempts < maxAttempts) {
       attempts++;
-      console.log(`[NeuronWriter] Polling for complete data (attempt ${attempts}/${maxAttempts})...`);
+      console.log(`[NeuronWriter] Polling for data (attempt ${attempts}/${maxAttempts})...`);
 
       const termsResult = await callNeuronWriterProxy(
         '/get-query',
@@ -243,7 +243,7 @@ export const fetchNeuronTerms = async (
         console.log(`[NeuronWriter] Status: ${data.status || 'processing'}...`);
       }
 
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
     if (!terms) {

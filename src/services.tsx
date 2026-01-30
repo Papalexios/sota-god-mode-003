@@ -48,7 +48,21 @@ import {
   NeuronTerms
 } from './neuronwriter';
 
-console.log('[SOTA Services v13.0] ULTRA ENTERPRISE ENGINE Initialized');
+console.log('[SOTA Services v14.0] ULTRA ENTERPRISE ENGINE Initialized');
+
+function countNeuronTerms(terms: NeuronTerms): number {
+  let count = 0;
+  if (terms.h1) count += terms.h1.split(',').length;
+  if (terms.h2) count += terms.h2.split(',').length;
+  if (terms.h3) count += terms.h3.split(',').length;
+  if (terms.content_basic) count += terms.content_basic.split(',').length;
+  if (terms.content_extended) count += terms.content_extended.split(',').length;
+  if (terms.entities_basic) count += terms.entities_basic.split(',').length;
+  if (terms.entities_extended) count += terms.entities_extended.split(',').length;
+  if (terms.questions) count += terms.questions.length;
+  if (terms.headings) count += terms.headings.length;
+  return count;
+}
 
 // ==================== CONSTANTS ====================
 
@@ -1611,17 +1625,24 @@ export const generateContent = {
           console.log(`[ContentGen] ✅ YouTube video successfully injected for: "${item.title}"`);
         }
 
-        // Phase 7: Internal Links
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🔗 Links...' } });
+        // Phase 6: Internal Links (4-8 links with rich anchor text)
+        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🔗 Adding Links...' } });
         let contentWithLinks = contentWithVideo;
         let linkResult = { linkCount: 0, links: [] as any[] };
 
+        console.log(`[Internal Links] existingPages count: ${existingPages.length}`);
+
         if (existingPages.length > 0) {
+          console.log(`[Internal Links] Generating 4-8 internal links for: "${item.title}"`);
           const linkingResult = await generateEnhancedInternalLinks(
-            contentWithVideo, existingPages, item.title, null, ''
+            contentWithVideo, existingPages, item.title, null, '',
+            (msg) => console.log(`[Internal Links] ${msg}`)
           );
           contentWithLinks = linkingResult.html;
           linkResult = { linkCount: linkingResult.linkCount, links: linkingResult.links };
+          console.log(`[Internal Links] SUCCESS - Added ${linkResult.linkCount} links`);
+        } else {
+          console.warn('[Internal Links] No existingPages available - cannot add internal links');
         }
 
         // Phase 8: Polish & Assemble
@@ -1664,7 +1685,23 @@ export const generateContent = {
           semanticKeywords,
           youtubeVideo: null,
           references: references.map(r => ({ title: r.title, url: r.url, verified: r.verified })),
-          internalLinks: linkResult.links
+          internalLinks: linkResult.links,
+          neuronAnalysis: neuronTerms ? {
+            terms_txt: {
+              h1: neuronTerms.h1 || '',
+              title: neuronTerms.title || '',
+              h2: neuronTerms.h2 || '',
+              h3: neuronTerms.h3 || '',
+              content_basic: neuronTerms.content_basic || '',
+              content_extended: neuronTerms.content_extended || '',
+              entities_basic: neuronTerms.entities_basic || '',
+              entities_extended: neuronTerms.entities_extended || ''
+            },
+            questions: neuronTerms.questions || [],
+            headings: neuronTerms.headings || [],
+            contentScore: 0,
+            termCount: countNeuronTerms(neuronTerms)
+          } : undefined
         };
 
         dispatch({ type: 'SET_CONTENT', payload: { id: item.id, content: generatedContent } });
@@ -1786,7 +1823,23 @@ export const generateContent = {
         schemaMarkup: '',
         primaryKeyword: item.title,
         semanticKeywords,
-        references: references.map(r => ({ title: r.title, url: r.url, verified: r.verified }))
+        references: references.map(r => ({ title: r.title, url: r.url, verified: r.verified })),
+        neuronAnalysis: neuronTerms ? {
+          terms_txt: {
+            h1: neuronTerms.h1 || '',
+            title: neuronTerms.title || '',
+            h2: neuronTerms.h2 || '',
+            h3: neuronTerms.h3 || '',
+            content_basic: neuronTerms.content_basic || '',
+            content_extended: neuronTerms.content_extended || '',
+            entities_basic: neuronTerms.entities_basic || '',
+            entities_extended: neuronTerms.entities_extended || ''
+          },
+          questions: neuronTerms.questions || [],
+          headings: neuronTerms.headings || [],
+          contentScore: 0,
+          termCount: countNeuronTerms(neuronTerms)
+        } : undefined
       };
 
       dispatch({ type: 'SET_CONTENT', payload: { id: item.id, content: generatedContent } });
