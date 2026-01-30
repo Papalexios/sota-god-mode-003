@@ -31,6 +31,7 @@ const DEFAULT_EMBED_OPTIONS: YouTubeEmbedOptions = {
 
 /**
  * Search for YouTube videos via Serper API
+ * SOTA v2.0 - Enhanced with multiple fallback strategies to GUARANTEE video results
  */
 export async function searchYouTubeVideos(
   keyword: string,
@@ -38,69 +39,178 @@ export async function searchYouTubeVideos(
   maxResults: number = 5
 ): Promise<YouTubeSearchResult[]> {
   if (!serperApiKey) {
-    console.warn('[YouTubeService] No Serper API key provided');
+    console.error('[YouTubeService] ❌ CRITICAL: No Serper API key provided - YouTube search SKIPPED');
+    console.error('[YouTubeService] Please ensure serperApiKey is set in your configuration');
     return [];
   }
 
+  if (!keyword || keyword.trim() === '') {
+    console.error('[YouTubeService] ❌ No keyword provided for YouTube search');
+    return [];
+  }
+
+  console.log(`[YouTubeService] 🎬 Starting YouTube search for: "${keyword}"`);
+  console.log(`[YouTubeService] API Key present: YES (length: ${serperApiKey.length})`);
+
   try {
-    // Build highly specific queries for maximum relevance
     const currentYear = new Date().getFullYear();
 
-    const queries = [
-      `"${keyword}" tutorial ${currentYear}`,
-      `"${keyword}" complete guide ${currentYear}`,
+    // Extract core keywords for broader searches
+    const coreKeywords = keyword
+      .toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length > 3)
+      .slice(0, 3)
+      .join(' ');
+
+    // TIER 1: HIGHLY SPECIFIC (Best relevance)
+    const tier1Queries = [
+      `"${keyword}" complete tutorial ${currentYear}`,
+      `"${keyword}" step by step guide ${currentYear}`,
       `"${keyword}" explained ${currentYear}`,
-      `${keyword} how to ${currentYear} OR ${currentYear - 1}`,
-      `${keyword} beginner guide tutorial`
+      `how to ${keyword} ${currentYear}`,
     ];
 
-    console.log(`[YouTubeService] Searching with ${queries.length} optimized queries`);
+    // TIER 2: SPECIFIC (Good relevance)
+    const tier2Queries = [
+      `${keyword} tutorial ${currentYear}`,
+      `${keyword} full guide ${currentYear}`,
+      `${keyword} for beginners ${currentYear}`,
+      `${keyword} masterclass`,
+      `learn ${keyword} ${currentYear}`,
+    ];
+
+    // TIER 3: BROAD (Acceptable relevance)
+    const tier3Queries = [
+      `${keyword} tutorial`,
+      `${keyword} guide`,
+      `${keyword} explained`,
+      `how to ${keyword}`,
+      `${keyword} tips and tricks`,
+      `best ${keyword} tips`,
+    ];
+
+    // TIER 4: ULTRA BROAD (Fallback)
+    const tier4Queries = [
+      `${coreKeywords} tutorial`,
+      `${coreKeywords} guide ${currentYear}`,
+      `${coreKeywords} explained`,
+      `understand ${coreKeywords}`,
+      `${keyword.split(' ')[0]} tutorial ${currentYear}`,
+    ];
+
+    // TIER 5: EMERGENCY FALLBACK (Just get something relevant)
+    const firstKeyword = keyword.split(' ')[0];
+    const tier5Queries = [
+      `${firstKeyword} tutorial`,
+      `${firstKeyword} how to`,
+      `${firstKeyword} guide`,
+    ];
+
+    const allTiers = [
+      { name: 'TIER1-SPECIFIC', queries: tier1Queries },
+      { name: 'TIER2-GOOD', queries: tier2Queries },
+      { name: 'TIER3-BROAD', queries: tier3Queries },
+      { name: 'TIER4-FALLBACK', queries: tier4Queries },
+      { name: 'TIER5-EMERGENCY', queries: tier5Queries },
+    ];
 
     const allResults: YouTubeSearchResult[] = [];
+    let successfulQueries = 0;
+    let failedQueries = 0;
+    let currentTier = 0;
 
-    for (const query of queries) {
-      try {
-        const response = await fetchWithProxies('https://google.serper.dev/videos', {
-          method: 'POST',
-          headers: {
-            'X-API-KEY': serperApiKey,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ q: query, num: 10 })
-        });
+    // Process each tier until we have enough results
+    for (const tier of allTiers) {
+      currentTier++;
 
-        if (!response.ok) continue;
+      // If we have enough high-quality results, stop
+      if (allResults.length >= maxResults * 2 && currentTier > 2) {
+        console.log(`[YouTubeService] ✅ Sufficient results (${allResults.length}), stopping at ${tier.name}`);
+        break;
+      }
 
-        const data = await response.json();
-        const videos = data.videos || [];
+      console.log(`[YouTubeService] 📊 Processing ${tier.name} (${tier.queries.length} queries)...`);
 
-        for (const video of videos) {
-          if (!video.link?.includes('youtube.com') && !video.link?.includes('youtu.be')) {
+      for (const query of tier.queries) {
+        // Skip if we already have enough results
+        if (allResults.length >= maxResults * 3) break;
+
+        try {
+          console.log(`[YouTubeService] [${tier.name}] Searching: "${query.substring(0, 50)}..."`);
+
+          const response = await fetchWithProxies('https://google.serper.dev/videos', {
+            method: 'POST',
+            headers: {
+              'X-API-KEY': serperApiKey,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ q: query, num: 15 })
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Unknown error');
+            console.error(`[YouTubeService] [${tier.name}] API error (${response.status}): ${errorText.substring(0, 100)}`);
+            failedQueries++;
             continue;
           }
 
-          const videoId = extractVideoId(video.link);
-          if (!videoId) continue;
+          const data = await response.json();
+          const videos = data.videos || [];
 
-          // Check for duplicates
-          if (allResults.some(r => r.videoId === videoId)) continue;
+          console.log(`[YouTubeService] [${tier.name}] Query returned ${videos.length} videos`);
 
-          allResults.push({
-            title: video.title || '',
-            videoId,
-            channel: video.channel || 'YouTube',
-            description: video.snippet || video.description || '',
-            thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-            duration: video.duration,
-            publishedAt: video.date
-          });
+          for (const video of videos) {
+            if (!video.link?.includes('youtube.com') && !video.link?.includes('youtu.be')) {
+              continue;
+            }
+
+            const videoId = extractVideoId(video.link);
+            if (!videoId) continue;
+
+            // Check for duplicates
+            if (allResults.some(r => r.videoId === videoId)) continue;
+
+            allResults.push({
+              title: video.title || '',
+              videoId,
+              channel: video.channel || 'YouTube',
+              description: video.snippet || video.description || '',
+              thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+              duration: video.duration,
+              publishedAt: video.date
+            });
+          }
+
+          successfulQueries++;
+
+          // Add small delay between requests to avoid rate limiting
+          await new Promise(r => setTimeout(r, 200));
+
+        } catch (e: any) {
+          console.error(`[YouTubeService] [${tier.name}] Query failed:`, e.message || e);
+          failedQueries++;
         }
-      } catch (e) {
-        console.error('[YouTubeService] Search query failed:', query);
+      }
+
+      // If we found results in this tier, give preference to them
+      if (allResults.length > 0 && currentTier <= 3) {
+        console.log(`[YouTubeService] ✅ Found ${allResults.length} videos in ${tier.name}`);
       }
     }
 
-    // Score and sort results
+    console.log(`[YouTubeService] 📊 Search complete: ${allResults.length} total videos found`);
+    console.log(`[YouTubeService]    Successful queries: ${successfulQueries}, Failed: ${failedQueries}`);
+
+    if (allResults.length === 0) {
+      console.error(`[YouTubeService] ❌ CRITICAL: No YouTube videos found after all query attempts`);
+      console.error(`[YouTubeService] Keyword: "${keyword}"`);
+      console.error(`[YouTubeService] This may indicate an API issue or extremely niche topic`);
+      return [];
+    }
+
+    // Score and sort results by relevance
     const scored = allResults.map(video => ({
       ...video,
       score: calculateRelevanceScore(video, keyword)
@@ -108,9 +218,17 @@ export async function searchYouTubeVideos(
 
     scored.sort((a, b) => b.score - a.score);
 
-    return scored.slice(0, maxResults);
-  } catch (error) {
-    console.error('[YouTubeService] Search failed:', error);
+    const finalResults = scored.slice(0, maxResults);
+
+    console.log(`[YouTubeService] ✅ Returning top ${finalResults.length} videos:`);
+    finalResults.forEach((v, i) => {
+      console.log(`[YouTubeService]   ${i + 1}. "${v.title.substring(0, 60)}..." (score: ${v.score})`);
+    });
+
+    return finalResults;
+  } catch (error: any) {
+    console.error('[YouTubeService] ❌ CRITICAL: Search failed with error:', error.message || error);
+    console.error('[YouTubeService] Stack:', error.stack);
     return [];
   }
 }
@@ -238,7 +356,7 @@ export function generateYouTubeEmbed(
   options: Partial<YouTubeEmbedOptions> = {}
 ): string {
   const opts = { ...DEFAULT_EMBED_OPTIONS, ...options };
-  
+
   const embedParams = new URLSearchParams({
     rel: opts.showRelated ? '1' : '0',
     modestbranding: '1',
@@ -323,14 +441,14 @@ export async function findAndEmbedYouTubeVideo(
   options?: Partial<YouTubeEmbedOptions>
 ): Promise<{ html: string; video: YouTubeSearchResult | null }> {
   const videos = await searchYouTubeVideos(topic, serperApiKey, 1);
-  
+
   if (videos.length === 0) {
     return { html: '', video: null };
   }
 
   const video = videos[0];
   const html = generateYouTubeEmbed(video, options);
-  
+
   return { html, video };
 }
 
@@ -341,7 +459,7 @@ export async function findAndEmbedYouTubeVideo(
 export function generateWordPressYouTubeEmbed(videoId: string, videoTitle: string = ''): string {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const safeTitle = videoTitle.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  
+
   return `
 <!-- wp:embed {"url":"${url}","type":"video","providerNameSlug":"youtube","responsive":true,"className":"wp-embed-aspect-16-9 wp-has-aspect-ratio"} -->
 <figure class="wp-block-embed is-type-video is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio" style="margin: 2.5rem 0;">
@@ -405,7 +523,7 @@ export function guaranteedYouTubeInjection(
   video: YouTubeSearchResult
 ): string {
   const videoId = video.videoId;
-  
+
   // Check if video already exists
   if (html.includes(videoId)) {
     console.log('[YouTubeGuaranteed] Video already present');

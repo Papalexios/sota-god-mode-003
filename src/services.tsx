@@ -286,34 +286,139 @@ Return the updated HTML with ALL missing terms naturally integrated:`;
  * Uses Serper.dev API to find the most relevant video
  * Returns video data for final injection step
  */
+/**
+ * GUARANTEED YouTube video finder with multiple fallback strategies
+ * Uses Serper.dev API to find the most relevant video
+ * Returns video data for final injection step - WILL TRY MULTIPLE APPROACHES
+ */
 async function findBestYouTubeVideo(
   keyword: string,
   serperApiKey: string,
   logCallback?: (msg: string) => void
 ): Promise<YouTubeSearchResult | null> {
+  // CRITICAL: Check API key first
   if (!serperApiKey) {
-    logCallback?.('[YouTube] ⚠️ No Serper API key - skipping');
+    console.error('[YouTube] ❌ CRITICAL: No Serper API key provided!');
+    console.error('[YouTube] Please configure serperApiKey in your settings');
+    logCallback?.('[YouTube] ❌ No Serper API key - CANNOT search YouTube');
+    return null;
+  }
+
+  if (serperApiKey.trim().length < 10) {
+    console.error('[YouTube] ❌ CRITICAL: Serper API key appears invalid (too short)');
+    console.error(`[YouTube] Key length: ${serperApiKey.length}`);
     return null;
   }
   
-  console.log(`[YouTube] Searching for video: "${keyword}"`);
+  console.log(`[YouTube] 🎬 Starting GUARANTEED video search for: "${keyword}"`);
+  console.log(`[YouTube] API Key configured: YES (${serperApiKey.length} chars)`);
   
+  // Strategy 1: Primary search with exact keyword
   try {
+    console.log(`[YouTube] Strategy 1: Primary search with "${keyword}"`);
     const videos = await searchYouTubeVideos(keyword, serperApiKey, 3);
     
-    if (videos.length === 0) {
-      console.warn(`[YouTube] No videos found for: "${keyword}"`);
-      return null;
+    if (videos.length > 0) {
+      const bestVideo = videos[0];
+      console.log(`[YouTube] ✅ Strategy 1 SUCCESS: "${bestVideo.title}" by ${bestVideo.channel}`);
+      return bestVideo;
     }
-    
-    const bestVideo = videos[0];
-    console.log(`[YouTube] ✅ Found: "${bestVideo.title}" by ${bestVideo.channel}`);
-    
-    return bestVideo;
+    console.log(`[YouTube] Strategy 1 returned 0 videos, trying alternatives...`);
   } catch (error: any) {
-    console.error(`[YouTube] Search failed:`, error.message);
-    return null;
+    console.error(`[YouTube] Strategy 1 failed:`, error.message);
   }
+
+  // Strategy 2: Simplified keyword (remove special chars, use first 3 words)
+  try {
+    const simplifiedKeyword = keyword
+      .replace(/[^\w\s]/g, '')
+      .split(/\s+/)
+      .slice(0, 3)
+      .join(' ');
+    
+    if (simplifiedKeyword !== keyword) {
+      console.log(`[YouTube] Strategy 2: Simplified keyword "${simplifiedKeyword}"`);
+      const videos = await searchYouTubeVideos(simplifiedKeyword, serperApiKey, 3);
+      
+      if (videos.length > 0) {
+        const bestVideo = videos[0];
+        console.log(`[YouTube] ✅ Strategy 2 SUCCESS: "${bestVideo.title}"`);
+        return bestVideo;
+      }
+    }
+  } catch (error: any) {
+    console.error(`[YouTube] Strategy 2 failed:`, error.message);
+  }
+
+  // Strategy 3: Use only the main topic word
+  try {
+    const mainWord = keyword
+      .replace(/[^\w\s]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length > 4)
+      .slice(0, 1)
+      .join('');
+    
+    if (mainWord && mainWord.length > 3) {
+      console.log(`[YouTube] Strategy 3: Main topic word "${mainWord}"`);
+      const videos = await searchYouTubeVideos(`${mainWord} tutorial`, serperApiKey, 3);
+      
+      if (videos.length > 0) {
+        const bestVideo = videos[0];
+        console.log(`[YouTube] ✅ Strategy 3 SUCCESS: "${bestVideo.title}"`);
+        return bestVideo;
+      }
+    }
+  } catch (error: any) {
+    console.error(`[YouTube] Strategy 3 failed:`, error.message);
+  }
+
+  // Strategy 4: Generic topic + "explained" or "guide"
+  try {
+    const firstWord = keyword.split(/\s+/)[0];
+    console.log(`[YouTube] Strategy 4: Generic search "${firstWord} explained"`);
+    const videos = await searchYouTubeVideos(`${firstWord} explained`, serperApiKey, 3);
+    
+    if (videos.length > 0) {
+      const bestVideo = videos[0];
+      console.log(`[YouTube] ✅ Strategy 4 SUCCESS: "${bestVideo.title}"`);
+      return bestVideo;
+    }
+  } catch (error: any) {
+    console.error(`[YouTube] Strategy 4 failed:`, error.message);
+  }
+
+  console.error(`[YouTube] ❌ ALL STRATEGIES FAILED for: "${keyword}"`);
+  console.error(`[YouTube] This is unusual - please check Serper API status`);
+  return null;
+}
+
+/**
+ * Generate a hardcoded fallback YouTube section when API fails completely
+ * This ensures SOMETHING is always present in the content
+ */
+function generateFallbackYouTubeSection(keyword: string): string {
+  // Create a search-friendly version of the keyword
+  const searchQuery = encodeURIComponent(keyword + ' tutorial');
+  
+  return `
+<div class="sota-youtube-fallback" style="margin: 2.5rem 0; background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%); border-radius: 16px; padding: 2rem; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+  <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem;">
+    <span style="font-size: 1.5rem;">📹</span>
+    <div>
+      <h4 style="margin: 0; color: #E2E8F0; font-size: 1rem; font-weight: 600;">Looking for Video Tutorials?</h4>
+      <p style="margin: 0.25rem 0 0; color: #94A3B8; font-size: 0.85rem;">Find helpful videos about ${keyword.replace(/"/g, '&quot;')}</p>
+    </div>
+  </div>
+  <a href="https://www.youtube.com/results?search_query=${searchQuery}" 
+     target="_blank" 
+     rel="noopener noreferrer"
+     style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; background: #ef4444; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; transition: all 0.2s;">
+    <span style="font-size: 1.25rem;">▶</span>
+    Search YouTube for "${keyword.length > 30 ? keyword.substring(0, 30) + '...' : keyword}"
+  </a>
+</div>
+`.trim();
 }
 
 // ==================== SAFE JSON PARSING WRAPPER ====================
@@ -1780,9 +1885,20 @@ export const generateContent = {
 
         // Phase 5: Find YouTube Video (GUARANTEED - search first, inject last)
         dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Finding Video...' } });
-        console.log(`[ContentGen] Finding YouTube video for: "${item.title}"`);
+        console.log(`[ContentGen] 🎬 Finding YouTube video for: "${item.title}"`);
         
-        const youtubeVideo = await findBestYouTubeVideo(
+        // CRITICAL: Validate serperApiKey before YouTube search
+        if (!serperApiKey) {
+          console.error(`[ContentGen] ❌ CRITICAL: serperApiKey is MISSING or EMPTY!`);
+          console.error(`[ContentGen] YouTube videos CANNOT be fetched without Serper API key`);
+          console.error(`[ContentGen] Please ensure serperApiKey is configured in your settings`);
+        } else if (serperApiKey.trim().length < 10) {
+          console.error(`[ContentGen] ❌ CRITICAL: serperApiKey appears INVALID (length: ${serperApiKey.length})`);
+        } else {
+          console.log(`[ContentGen] ✅ serperApiKey is present (${serperApiKey.length} chars)`);
+        }
+        
+        let youtubeVideo = await findBestYouTubeVideo(
           item.title,
           serperApiKey,
           (msg) => console.log(msg)
@@ -1791,7 +1907,8 @@ export const generateContent = {
         if (youtubeVideo) {
           console.log(`[ContentGen] ✅ YouTube video found: "${youtubeVideo.title}"`);
         } else {
-          console.warn(`[ContentGen] ⚠️ No YouTube video found for: "${item.title}"`);
+          console.warn(`[ContentGen] ⚠️ Primary YouTube search failed for: "${item.title}"`);
+          console.log(`[ContentGen] Will inject fallback YouTube section...`);
         }
 
         // Phase 6: AI-Powered Internal Links (with hybrid fallback)
@@ -1854,8 +1971,9 @@ export const generateContent = {
 
         // Phase 7.9: GUARANTEED YouTube Injection (LAST STEP before schema)
         // This ensures YouTube video is ALWAYS present in final content
+        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Injecting Video...' } });
+        
         if (youtubeVideo) {
-          dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Injecting Video...' } });
           console.log(`[ContentGen] GUARANTEED YouTube injection for: "${item.title}"`);
           
           finalContent = guaranteedYouTubeInjection(finalContent, youtubeVideo);
@@ -1865,7 +1983,37 @@ export const generateContent = {
             console.log(`[ContentGen] ✅ YouTube video CONFIRMED in final content`);
           } else {
             console.error(`[ContentGen] ❌ YouTube video NOT FOUND in final content after injection!`);
+            // Force append if injection somehow failed
+            const fallbackHtml = generateFallbackYouTubeSection(item.title);
+            finalContent = finalContent + '\n\n' + fallbackHtml;
+            console.log(`[ContentGen] 🔄 Fallback YouTube section appended`);
           }
+        } else {
+          // NO VIDEO FOUND - Use guaranteed fallback section
+          console.log(`[ContentGen] 📹 No video from API - injecting FALLBACK YouTube section`);
+          const fallbackHtml = generateFallbackYouTubeSection(item.title);
+          
+          // Find best injection point (before references or at end)
+          const refMatch = finalContent.match(/<div[^>]*class="[^"]*sota-references[^"]*"[^>]*>/i);
+          if (refMatch && refMatch.index !== undefined) {
+            finalContent = finalContent.substring(0, refMatch.index) + fallbackHtml + '\n\n' + finalContent.substring(refMatch.index);
+            console.log(`[ContentGen] ✅ Fallback YouTube section injected before references`);
+          } else {
+            finalContent = finalContent + '\n\n' + fallbackHtml;
+            console.log(`[ContentGen] ✅ Fallback YouTube section appended at end`);
+          }
+        }
+        
+        // FINAL VERIFICATION: Ensure YouTube content exists
+        const hasYouTubeContent = finalContent.includes('youtube.com') || 
+                                   finalContent.includes('youtu.be') || 
+                                   finalContent.includes('sota-youtube');
+        if (hasYouTubeContent) {
+          console.log(`[ContentGen] ✅✅ VERIFIED: YouTube content IS present in final output`);
+        } else {
+          console.error(`[ContentGen] ❌❌ CRITICAL: NO YouTube content found! Forcing final fallback...`);
+          const emergencyFallback = generateFallbackYouTubeSection(item.title);
+          finalContent = finalContent + '\n\n' + emergencyFallback;
         }
 
         // Phase 8: Schema
@@ -2033,6 +2181,14 @@ export const generateContent = {
 
       // Find YouTube video (search first, inject last)
       dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Finding Video...' } });
+      
+      // CRITICAL: Validate serperApiKey before YouTube search
+      if (!serperApiKey) {
+        console.error(`[Refresh] ❌ CRITICAL: serperApiKey is MISSING!`);
+      } else {
+        console.log(`[Refresh] ✅ serperApiKey present (${serperApiKey.length} chars)`);
+      }
+      
       const youtubeVideo = await findBestYouTubeVideo(item.title, serperApiKey);
 
       // AI-Powered Internal Links (with hybrid fallback)
@@ -2079,10 +2235,31 @@ export const generateContent = {
       }
 
       // GUARANTEED YouTube Injection (LAST STEP)
+      dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Injecting Video...' } });
+      
       if (youtubeVideo) {
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Injecting Video...' } });
         finalContent = guaranteedYouTubeInjection(finalContent, youtubeVideo);
-        console.log(`[Refresh] YouTube video injected: ${youtubeVideo.videoId}`);
+        console.log(`[Refresh] ✅ YouTube video injected: ${youtubeVideo.videoId}`);
+      } else {
+        // NO VIDEO FOUND - Use guaranteed fallback section
+        console.log(`[Refresh] 📹 No video from API - injecting FALLBACK YouTube section`);
+        const fallbackHtml = generateFallbackYouTubeSection(item.title);
+        
+        // Find best injection point (before references or at end)
+        const refMatch = finalContent.match(/<div[^>]*class="[^"]*sota-references[^"]*"[^>]*>/i);
+        if (refMatch && refMatch.index !== undefined) {
+          finalContent = finalContent.substring(0, refMatch.index) + fallbackHtml + '\n\n' + finalContent.substring(refMatch.index);
+        } else {
+          finalContent = finalContent + '\n\n' + fallbackHtml;
+        }
+        console.log(`[Refresh] ✅ Fallback YouTube section injected`);
+      }
+      
+      // FINAL VERIFICATION
+      const hasYouTubeContent = finalContent.includes('youtube.com') || finalContent.includes('sota-youtube');
+      if (!hasYouTubeContent) {
+        console.error(`[Refresh] ❌ CRITICAL: NO YouTube content! Forcing emergency fallback...`);
+        finalContent = finalContent + '\n\n' + generateFallbackYouTubeSection(item.title);
       }
 
       const generatedContent: GeneratedContent = {

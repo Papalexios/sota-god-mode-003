@@ -600,7 +600,29 @@ export const ReviewModal = ({ item, onClose, onSaveChanges, wpConfig, wpPassword
                                         <div className="nlp-term-cloud">{neuronAnalysisView.extended.map((t, i) => <span key={i} className={`badge ${t.exists ? 'pillar' : 'standard'}`}>{t.term}</span>)}</div>
                                     </div>
                                 </div>
-                            ) : <div style={{ padding: '3rem', textAlign: 'center', color: '#64748B' }}>No NeuronWriter data available. Ensure you have enabled the integration in Setup.</div>}
+                            ) : (
+                                <div style={{ padding: '3rem', textAlign: 'center', color: '#94A3B8' }}>
+                                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🧠</div>
+                                    <h3 style={{ color: '#E2E8F0', marginBottom: '1rem' }}>NeuronWriter Analysis Not Available</h3>
+                                    {neuronConfig?.enabled ? (
+                                        <div>
+                                            <p style={{ marginBottom: '1rem' }}>NeuronWriter integration is enabled but no data was captured for this content.</p>
+                                            <p style={{ fontSize: '0.85rem' }}>This can happen if:</p>
+                                            <ul style={{ textAlign: 'left', maxWidth: '400px', margin: '1rem auto', fontSize: '0.85rem' }}>
+                                                <li>The content was generated before enabling NeuronWriter</li>
+                                                <li>The NeuronWriter API request timed out or failed</li>
+                                                <li>The project ID is incorrect</li>
+                                            </ul>
+                                            <p style={{ marginTop: '1.5rem', fontSize: '0.85rem' }}>To fix: Regenerate this content with NeuronWriter enabled.</p>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <p>Enable NeuronWriter integration in Setup to analyze content with NLP terms.</p>
+                                            <p style={{ marginTop: '1rem', fontSize: '0.85rem' }}>Go to <strong>Setup → NeuronWriter Integration</strong> and enter your API key.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                     {activeTab === 'Rank Guardian' && (

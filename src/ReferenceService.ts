@@ -113,19 +113,25 @@ export async function fetchVerifiedReferences(
   wpUrl?: string,
   logCallback?: (msg: string) => void
 ): Promise<{ html: string; references: VerifiedReference[] }> {
-  if (!serperApiKey) {
-    logCallback?.('[References] ⚠️ No Serper API key');
-    return { html: '', references: [] };
-  }
-
   const log = (msg: string) => {
     console.log(`[ReferenceService] ${msg}`);
     logCallback?.(msg);
   };
 
-  console.log(`[References] 🔍 Fetching verified references for: "${keyword}"`);
+  // CRITICAL: Check Serper API key
+  if (!serperApiKey || serperApiKey.trim() === '') {
+    console.error('[References] ❌ CRITICAL: No Serper API key provided!');
+    log('⚠️ No Serper API key - returning fallback references section');
+    return { 
+      html: generateFallbackReferencesSection(keyword), 
+      references: [] 
+    };
+  }
+
+  console.log(`[References] 🔍 SOTA Reference Engine v2.0 starting for: "${keyword}"`);
+  console.log(`[References] 🔑 Serper API Key: ${serperApiKey.substring(0, 8)}...`);
   console.log(`[References] Semantic keywords: ${semanticKeywords.slice(0, 5).join(', ')}`);
-  log('Fetching verified references...');
+  log('Fetching verified references with SOTA engine...');
 
   try {
     const category = detectCategory(keyword, semanticKeywords);
@@ -140,37 +146,60 @@ export async function fetchVerifiedReferences(
       try { userDomain = new URL(wpUrl).hostname.replace('www.', ''); } catch (e) {}
     }
 
-    // SOTA Intent-Specific Query Builder
+    // ULTRA SOTA Query Builder - Maximum Relevance
     const kw = `"${keyword}"`;
-    const topSemantic = semanticKeywords.slice(0, 5);
-    const semQuery = topSemantic.map(s => `"${s}"`).join(' OR ');
+    const kwNoQuotes = keyword;
+    const topSemantic = semanticKeywords.slice(0, 8);
+    const semQuery = topSemantic.slice(0, 3).map(s => `"${s}"`).join(' OR ');
+    const coreWords = keyword.split(/\s+/).filter(w => w.length > 3).slice(0, 3);
     
     const searchQueries: string[] = [];
     
-    // Authority domain scoped queries (highest relevance)
+    // TIER 1: HIGH-AUTHORITY DOMAIN QUERIES (Government, Academic, Major Orgs)
+    const highAuthorityDomains = [
+      'gov', 'edu', 'nih.gov', 'cdc.gov', 'who.int', 'ncbi.nlm.nih.gov',
+      'mayoclinic.org', 'harvard.edu', 'stanford.edu', 'mit.edu'
+    ];
+    searchQueries.push(`${kw} site:gov OR site:edu`);
+    searchQueries.push(`${kw} site:nih.gov OR site:cdc.gov OR site:who.int`);
+    
+    // TIER 2: CATEGORY-SPECIFIC AUTHORITY DOMAINS
     if (categoryConfig) {
-      const topDomains = categoryConfig.authorityDomains.slice(0, 6);
-      for (const domain of topDomains.slice(0, 3)) {
+      const topDomains = categoryConfig.authorityDomains.slice(0, 8);
+      for (const domain of topDomains.slice(0, 4)) {
         searchQueries.push(`${kw} site:${domain}`);
       }
-      
-      // Combined authority query
       const siteOr = topDomains.map(d => `site:${d}`).join(' OR ');
-      searchQueries.push(`${kw} (${siteOr})`);
+      searchQueries.push(`${kwNoQuotes} (${siteOr})`);
     }
     
-    // Intent-specific queries
-    searchQueries.push(`${kw} (${semQuery}) "research" OR "study" OR "systematic review" ${currentYear} OR ${currentYear - 1}`);
-    searchQueries.push(`${kw} (${semQuery}) "guidelines" OR "official" OR "fact sheet" ${currentYear}`);
-    searchQueries.push(`${kw} (${semQuery}) "statistics" OR "data" OR "survey" OR "report" ${currentYear}`);
-    searchQueries.push(`${kw} (${semQuery}) "how to" OR "tutorial" OR "best practices"`);
-    searchQueries.push(`${kw} (${semQuery}) "expert" OR "professional" OR "certified"`);
+    // TIER 3: CONTENT-TYPE SPECIFIC QUERIES
+    searchQueries.push(`${kw} "research" OR "study" OR "systematic review" ${currentYear}`);
+    searchQueries.push(`${kw} "guidelines" OR "official guide" OR "fact sheet"`);
+    searchQueries.push(`${kw} "statistics" OR "data" OR "report" ${currentYear}`);
+    searchQueries.push(`${kw} "expert guide" OR "professional advice" OR "best practices"`);
+    searchQueries.push(`${kw} "comprehensive guide" OR "complete guide" ${currentYear}`);
     
-    // Exact match priority queries
-    searchQueries.push(`"${keyword}" complete guide ${currentYear}`);
-    searchQueries.push(`"${keyword}" official resource`);
+    // TIER 4: SEMANTIC KEYWORD ENHANCED QUERIES
+    if (topSemantic.length > 0) {
+      searchQueries.push(`${kw} ${topSemantic[0]} authoritative source`);
+      searchQueries.push(`${kwNoQuotes} ${semQuery} official`);
+    }
+    
+    // TIER 5: MAJOR PUBLICATION QUERIES  
+    const majorPubs = ['nytimes.com', 'bbc.com', 'reuters.com', 'forbes.com', 'wsj.com', 'theguardian.com'];
+    const pubsQuery = majorPubs.slice(0, 4).map(d => `site:${d}`).join(' OR ');
+    searchQueries.push(`${kw} (${pubsQuery})`);
+    
+    // TIER 6: FALLBACK BROAD QUERIES
+    searchQueries.push(`${kwNoQuotes} official information ${currentYear}`);
+    searchQueries.push(`${kwNoQuotes} trusted resource guide`);
+    if (coreWords.length > 0) {
+      searchQueries.push(`${coreWords.join(' ')} authoritative guide ${currentYear}`);
+    }
 
-    log(`Search queries: ${searchQueries.length} variations`);
+    console.log(`[References] 📊 Generated ${searchQueries.length} search queries across 6 tiers`);
+    log(`Search queries: ${searchQueries.length} variations (6-tier strategy)`);
 
     const potentialReferences: any[] = [];
 
@@ -328,27 +357,30 @@ export async function fetchVerifiedReferences(
       }
     }
 
-    // QUALITY ASSURANCE: If we don't have enough high-quality references, be explicit
-    if (validatedReferences.length < 3) {
-      console.warn(`[References] ⚠️ Only ${validatedReferences.length} references passed strict validation`);
-      log(`Warning: Low reference count (${validatedReferences.length}). Consider broadening search or checking API limits.`);
-    }
-    
     // Sort by relevance + authority
     validatedReferences.sort((a, b) => {
       const authorityScore = { high: 100, medium: 50, low: 10 };
       return authorityScore[b.authority] - authorityScore[a.authority];
     });
 
-    if (validatedReferences.length === 0) {
-      console.warn(`[References] ⚠️ No references passed validation for "${keyword}"`);
-      log('No references passed validation');
-      return { html: '', references: [] };
+    // QUALITY ASSURANCE: GUARANTEED minimum references
+    if (validatedReferences.length < 3) {
+      console.warn(`[References] ⚠️ Only ${validatedReferences.length} references passed validation - using fallback`);
+      log(`Warning: Low reference count (${validatedReferences.length}) - adding fallback section`);
+      
+      // Still return what we have + fallback HTML
+      const fallbackHtml = generateFallbackReferencesSection(keyword);
+      if (validatedReferences.length === 0) {
+        return { html: fallbackHtml, references: [] };
+      }
+      // Combine existing references with encouragement to verify
+      const html = generateReferencesHtml(validatedReferences, category, keyword);
+      return { html, references: validatedReferences };
     }
 
     console.log(`[References] ✅ Successfully validated ${validatedReferences.length} high-quality references`);
-    console.log('[References] Top 3 references:');
-    validatedReferences.slice(0, 3).forEach((ref, i) => {
+    console.log('[References] Top 5 references:');
+    validatedReferences.slice(0, 5).forEach((ref, i) => {
       console.log(`  ${i + 1}. ${ref.title} (${ref.domain}) - ${ref.authority} authority`);
     });
 
@@ -358,9 +390,42 @@ export async function fetchVerifiedReferences(
 
     return { html, references: validatedReferences };
   } catch (error: any) {
+    console.error(`[References] ❌ Reference fetch FAILED:`, error);
     log(`Reference fetch failed: ${error.message}`);
-    return { html: '', references: [] };
+    // ALWAYS return something - never fail silently
+    return { html: generateFallbackReferencesSection(keyword), references: [] };
   }
+}
+
+/**
+ * FALLBACK: Generate a styled references section when API fails
+ * This ensures every article has a references section
+ */
+function generateFallbackReferencesSection(keyword: string): string {
+  const searchQuery = encodeURIComponent(keyword);
+  return `
+<div class="sota-references-fallback" style="margin: 3rem 0; padding: 2rem; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 16px; border-left: 5px solid #f59e0b;">
+  <h2 style="display: flex; align-items: center; gap: 0.75rem; margin: 0 0 1.5rem; color: #92400e; font-size: 1.5rem;">
+    <span>📚</span> Further Reading & Research
+  </h2>
+  <p style="margin: 0 0 1rem; color: #78350f; font-size: 1rem; line-height: 1.6;">
+    For the most up-to-date and authoritative information on <strong>${keyword}</strong>, we recommend consulting these trusted sources:
+  </p>
+  <div style="display: grid; gap: 0.75rem; margin-top: 1rem;">
+    <a href="https://scholar.google.com/scholar?q=${searchQuery}" target="_blank" rel="noopener noreferrer" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: white; border-radius: 8px; color: #1e40af; text-decoration: none; font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+      🎓 Google Scholar - Peer-reviewed research
+    </a>
+    <a href="https://pubmed.ncbi.nlm.nih.gov/?term=${searchQuery}" target="_blank" rel="noopener noreferrer" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: white; border-radius: 8px; color: #1e40af; text-decoration: none; font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+      🏥 PubMed - Medical & scientific literature
+    </a>
+    <a href="https://www.google.com/search?q=${searchQuery}+site:gov+OR+site:edu" target="_blank" rel="noopener noreferrer" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: white; border-radius: 8px; color: #1e40af; text-decoration: none; font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+      🏛️ Government & Educational Resources
+    </a>
+  </div>
+  <p style="margin: 1.5rem 0 0; color: #92400e; font-size: 0.85rem; font-style: italic;">
+    💡 Tip: Always verify information from multiple authoritative sources before making important decisions.
+  </p>
+</div>`;
 }
 
 export function generateReferencesHtml(
