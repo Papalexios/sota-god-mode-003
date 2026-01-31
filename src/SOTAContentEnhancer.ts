@@ -351,6 +351,21 @@ export async function injectYouTubeVideo(
     return { html, video: null };
   }
 
+  // CRITICAL: Check if YouTube video already exists to prevent duplicates
+  const existingYouTubePatterns = [
+    /youtube\.com\/embed\//i,
+    /class="[^"]*youtube[^"]*"/i,
+    /class="[^"]*sota-youtube[^"]*"/i,
+    /wp-block-embed-youtube/i
+  ];
+  
+  for (const pattern of existingYouTubePatterns) {
+    if (pattern.test(html)) {
+      console.log('[YouTubeInjection] YouTube video already exists - skipping to prevent duplicate');
+      return { html, video: null };
+    }
+  }
+
   console.log(`[YouTubeInjection] Searching for video: "${keyword}"`);
 
   try {

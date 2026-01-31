@@ -833,32 +833,10 @@ function generateTopicFallbackRefs(keyword: string, seenDomains: Set<string>): V
 }
 
 function generateFallbackReferencesHtml(keyword: string): string {
-  const currentDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-
-  // Generate a basic references section with general authoritative sources
-  return `
-<div style="margin: 3rem 0; padding: 2rem; background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%); border-radius: 20px; border-left: 5px solid #3b82f6; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);">
-  <h2 style="display: flex; align-items: center; gap: 0.75rem; margin: 0 0 1.5rem; color: #e2e8f0; font-size: 1.5rem; font-weight: 800;">
-    <span style="font-size: 1.75rem;">📚</span> Recommended Resources
-  </h2>
-  <p style="margin: 0 0 1.5rem; color: #64748b; font-size: 0.9rem;">
-    Trusted sources for ${keyword.split(' ').slice(0, 4).join(' ')} information
-  </p>
-  <div style="display: grid; gap: 0.75rem;">
-    <div style="display: flex; gap: 1rem; padding: 1.25rem; background: rgba(59, 130, 246, 0.08); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.15);">
-      <div style="flex-shrink: 0; width: 36px; height: 36px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700;">1</div>
-      <div><a href="https://www.akc.org" target="_blank" rel="noopener" style="color: #60a5fa; font-weight: 600;">American Kennel Club (AKC)</a><p style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.85rem;">Official breed standards and health guidelines</p></div>
-    </div>
-    <div style="display: flex; gap: 1rem; padding: 1.25rem; background: rgba(59, 130, 246, 0.08); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.15);">
-      <div style="flex-shrink: 0; width: 36px; height: 36px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700;">2</div>
-      <div><a href="https://www.avma.org" target="_blank" rel="noopener" style="color: #60a5fa; font-weight: 600;">American Veterinary Medical Association</a><p style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.85rem;">Veterinary guidelines and pet health resources</p></div>
-    </div>
-    <div style="display: flex; gap: 1rem; padding: 1.25rem; background: rgba(59, 130, 246, 0.08); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.15);">
-      <div style="flex-shrink: 0; width: 36px; height: 36px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700;">3</div>
-      <div><a href="https://www.petmd.com" target="_blank" rel="noopener" style="color: #60a5fa; font-weight: 600;">PetMD</a><p style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.85rem;">Veterinarian-reviewed pet health information</p></div>
-    </div>
-  </div>
-</div>`;
+  // FIXED: Don't generate fake/hardcoded references
+  // Return empty string - references should come from Serper API
+  console.warn('[References] No Serper API key configured - cannot fetch real references. Please add your Serper API key in Settings.');
+  return '';
 }
 
 function determineAuthorityLevel(domain: string): 'high' | 'medium' | 'low' {

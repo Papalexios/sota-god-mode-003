@@ -398,34 +398,16 @@ export async function fetchVerifiedReferences(
 }
 
 /**
- * FALLBACK: Generate a styled references section when API fails
- * This ensures every article has a references section
+ * FALLBACK: Generate a minimal references section when API fails
+ * NOTE: This should only be used when Serper API key is missing or API completely fails
+ * Returns empty string to encourage proper API key configuration
  */
 function generateFallbackReferencesSection(keyword: string): string {
-  const searchQuery = encodeURIComponent(keyword);
-  return `
-<div class="sota-references-fallback" style="margin: 3rem 0; padding: 2rem; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 16px; border-left: 5px solid #f59e0b;">
-  <h2 style="display: flex; align-items: center; gap: 0.75rem; margin: 0 0 1.5rem; color: #92400e; font-size: 1.5rem;">
-    <span>📚</span> Further Reading & Research
-  </h2>
-  <p style="margin: 0 0 1rem; color: #78350f; font-size: 1rem; line-height: 1.6;">
-    For the most up-to-date and authoritative information on <strong>${keyword}</strong>, we recommend consulting these trusted sources:
-  </p>
-  <div style="display: grid; gap: 0.75rem; margin-top: 1rem;">
-    <a href="https://scholar.google.com/scholar?q=${searchQuery}" target="_blank" rel="noopener noreferrer" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: white; border-radius: 8px; color: #1e40af; text-decoration: none; font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-      🎓 Google Scholar - Peer-reviewed research
-    </a>
-    <a href="https://pubmed.ncbi.nlm.nih.gov/?term=${searchQuery}" target="_blank" rel="noopener noreferrer" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: white; border-radius: 8px; color: #1e40af; text-decoration: none; font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-      🏥 PubMed - Medical & scientific literature
-    </a>
-    <a href="https://www.google.com/search?q=${searchQuery}+site:gov+OR+site:edu" target="_blank" rel="noopener noreferrer" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: white; border-radius: 8px; color: #1e40af; text-decoration: none; font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-      🏛️ Government & Educational Resources
-    </a>
-  </div>
-  <p style="margin: 1.5rem 0 0; color: #92400e; font-size: 0.85rem; font-style: italic;">
-    💡 Tip: Always verify information from multiple authoritative sources before making important decisions.
-  </p>
-</div>`;
+  console.warn('[ReferenceService] Using fallback - no Serper API key or API failure. Configure Serper API key for real references.');
+  
+  // Return empty string - don't show fake references
+  // The app should be configured with a proper Serper API key
+  return '';
 }
 
 export function generateReferencesHtml(

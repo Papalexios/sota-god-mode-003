@@ -485,6 +485,7 @@ function generateUltraPremiumYouTubeHtml(video: YouTubeSearchResult): string {
 
 /**
  * GUARANTEED YouTube video injection at the FINAL stage
+ * FIXED: Only injects ONE video embed (not two)
  */
 export function guaranteedYouTubeInjection(
   html: string,
@@ -492,20 +493,34 @@ export function guaranteedYouTubeInjection(
 ): string {
   const videoId = video.videoId;
 
-  // Check if video already exists
+  // Check if video already exists - prevent duplicates
   if (html.includes(videoId)) {
-    console.log('[YouTubeGuaranteed] Video already present');
+    console.log('[YouTubeGuaranteed] Video already present - skipping to prevent duplicate');
     return html;
   }
 
-  // Generate both embed formats for maximum compatibility
-  const wpEmbed = generateWordPressYouTubeEmbed(videoId, video.title);
+  // Check for any existing YouTube embeds
+  const existingYouTubePatterns = [
+    /youtube\.com\/embed\//i,
+    /class="[^"]*youtube[^"]*"/i,
+    /class="[^"]*sota-youtube[^"]*"/i,
+    /wp-block-embed-youtube/i
+  ];
+  
+  for (const pattern of existingYouTubePatterns) {
+    if (pattern.test(html)) {
+      console.log('[YouTubeGuaranteed] YouTube embed already exists - skipping to prevent duplicate');
+      return html;
+    }
+  }
+
+  // FIXED: Generate ONLY the styled embed (not both styled AND WordPress embed)
+  // This prevents duplicate videos from appearing
   const styledEmbed = generateUltraPremiumYouTubeHtml(video);
 
   const embedHtml = `
 <div class="sota-youtube-guaranteed" data-video-id="${videoId}">
   ${styledEmbed}
-  ${wpEmbed}
 </div>
 `.trim();
 
