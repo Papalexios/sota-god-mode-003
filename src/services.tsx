@@ -776,25 +776,29 @@ export const fetchVerifiedReferences = async (
       }
     }
 
-    // Ensure we have at least 8 references
-    if (validatedReferences.length < 8) {
-      analytics.log('warning', `Only found ${validatedReferences.length} references, adding fallback sources`);
-      // Add topic-specific fallback references
-      const fallbackRefs = generateTopicFallbackRefs(keyword, seenDomains);
-      for (const fallback of fallbackRefs) {
-        if (validatedReferences.length >= 8) break;
-        validatedReferences.push(fallback);
-      }
+    // Log warning if we didn't get enough references
+    if (validatedReferences.length < 5) {
+      analytics.log('warning', `Only found ${validatedReferences.length} references - Serper API may need better queries`);
+      console.warn(`[References] ⚠️ Low reference count (${validatedReferences.length}). Check Serper API key and query quality.`);
     }
 
-    analytics.log('references', `Successfully validated ${validatedReferences.length} references`);
+    // Always generate HTML if we have ANY references
+    if (validatedReferences.length > 0) {
+      analytics.log('references', `Successfully validated ${validatedReferences.length} references from Serper API`);
+      const referencesHtml = generateReferencesHtml(validatedReferences, keyword);
+      return { html: referencesHtml, references: validatedReferences };
+    }
 
-    const referencesHtml = generateReferencesHtml(validatedReferences, keyword);
-    return { html: referencesHtml, references: validatedReferences };
+    // No references found - this is a critical issue
+    console.error(`[References] ❌ CRITICAL: No references found via Serper API for "${keyword}"`);
+    console.error(`[References] Verify your Serper API key is valid and has credits`);
+    analytics.log('error', `No references found for: ${keyword}`);
+    return { html: '', references: [] };
 
   } catch (error: any) {
     analytics.log('error', `Reference fetch failed: ${error.message}`);
-    return { html: generateFallbackReferencesHtml(keyword), references: [] };
+    console.error(`[References] ❌ Serper API call failed: ${error.message}`);
+    return { html: '', references: [] };
   }
 };
 
@@ -806,31 +810,8 @@ function getAuthorityScore(domain: string, highAuthorityDomains: string[]): numb
   return 40;
 }
 
-function generateTopicFallbackRefs(keyword: string, seenDomains: Set<string>): VerifiedReference[] {
-  const keywordLower = keyword.toLowerCase();
-  const topicWords = keyword.split(' ').slice(0, 3).join(' ');
-
-  const generalSources = [
-    { domain: 'britannica.com', title: 'Encyclopedia Britannica', searchPath: `/search?query=${encodeURIComponent(keyword)}` },
-    { domain: 'scholar.google.com', title: 'Google Scholar', searchPath: `/scholar?q=${encodeURIComponent(keyword)}` },
-    { domain: 'statista.com', title: 'Statista Research', searchPath: `/search/?q=${encodeURIComponent(keyword)}` },
-    { domain: 'forbes.com', title: 'Forbes', searchPath: `/search/?q=${encodeURIComponent(keyword)}` },
-    { domain: 'hbr.org', title: 'Harvard Business Review', searchPath: `/search?term=${encodeURIComponent(keyword)}` },
-    { domain: 'sciencedirect.com', title: 'ScienceDirect', searchPath: `/search?qs=${encodeURIComponent(keyword)}` },
-  ];
-
-  return generalSources
-    .filter(s => !seenDomains.has(s.domain))
-    .slice(0, 4)
-    .map(s => ({
-      title: `${s.title} - ${topicWords} Research`,
-      url: `https://www.${s.domain}${s.searchPath}`,
-      domain: s.domain,
-      description: `Authoritative research and information about ${topicWords} from ${s.title}.`,
-      authority: 'high' as const,
-      verified: true
-    }));
-}
+// REMOVED: generateTopicFallbackRefs - we no longer generate fake search links
+// All references MUST come from real Serper API results
 
 function generateFallbackReferencesHtml(keyword: string): string {
   // FIXED: Don't generate fake/hardcoded references
@@ -1784,12 +1765,28 @@ export const generateContent = {
           console.log(`[ContentGen] NeuronWriter enforcement complete: ${neuronScore}% score, ${enforceResult.termsAdded} terms added`);
         }
 
-        // Phase 4: References (Using Improved Serper Queries)
+        // Phase 4: References (Using Serper API - MANDATORY)
         dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📚 References...' } });
+        
+        // CRITICAL: Validate serperApiKey before fetching references
+        if (!serperApiKey || serperApiKey.trim().length < 10) {
+          console.error(`[ContentGen] ❌ CRITICAL: serperApiKey is MISSING or INVALID!`);
+          console.error(`[ContentGen] References CANNOT be fetched without a valid Serper API key`);
+          console.error(`[ContentGen] Please add your Serper API key in Settings → API Keys`);
+          console.error(`[ContentGen] Get your API key from: https://serper.dev`);
+        } else {
+          console.log(`[ContentGen] ✅ Serper API key present for references (${serperApiKey.length} chars)`);
+        }
+        
         const { html: referencesHtml, references } = await fetchVerifiedReferences(
           item.title, semanticKeywords, serperApiKey, wpConfig.url
         );
-        console.log(`[ContentGen] Fetched ${references.length} verified references`);
+        
+        if (references.length > 0) {
+          console.log(`[ContentGen] ✅ Fetched ${references.length} verified references via Serper API`);
+        } else {
+          console.error(`[ContentGen] ❌ NO REFERENCES FETCHED! Check your Serper API key.`);
+        }
 
         // Phase 5: Find YouTube Video (GUARANTEED - search first, inject last)
         dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Finding Video...' } });
