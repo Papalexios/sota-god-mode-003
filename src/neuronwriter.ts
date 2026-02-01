@@ -108,8 +108,8 @@ const callNeuronWriterProxy = async (
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown error');
-      console.error(`[NeuronWriter] Proxy error (${response.status}): ${errorText}`);
-      return { success: false, status: response.status, error: errorText };
+      console.warn(`[NeuronWriter] Proxy error (${response.status}): ${errorText}`);
+      return { success: false, status: response.status, error: errorText || `HTTP ${response.status}` };
     }
 
     const text = await response.text();

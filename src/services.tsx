@@ -1982,6 +1982,11 @@ export const generateContent = {
             );
           }, 'Content Generation', 3);
 
+          // CRITICAL: Validate content is not empty
+          if (!contentResponse || contentResponse.trim().length < 100) {
+            throw new Error('AI returned empty or too short content. This usually means the AI API call failed.');
+          }
+
           checkpoint.collectedData.contentResponse = contentResponse;
           checkpoint.phases[1].completed = true;
           checkpoint.currentPhase = 2;

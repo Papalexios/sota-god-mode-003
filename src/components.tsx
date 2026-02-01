@@ -391,6 +391,24 @@ interface ReviewModalProps {
 
 export const ReviewModal = ({ item, onClose, onSaveChanges, wpConfig, wpPassword, onPublishSuccess, publishItem, callAI, geoTargeting, neuronConfig }: ReviewModalProps) => {
     if (!item || !item.generatedContent) return null;
+
+    // CRITICAL: Validate content is not empty
+    if (!item.generatedContent.content || item.generatedContent.content.trim().length === 0) {
+        return (
+            <div className="modal-overlay" onClick={onClose}>
+                <div className="modal-content" onClick={e => e.stopPropagation()} style={{ padding: '2rem', textAlign: 'center' }}>
+                    <h3 style={{ color: '#EF4444', marginBottom: '1rem' }}>❌ Generation Error</h3>
+                    <p style={{ color: '#94A3B8', marginBottom: '1rem' }}>
+                        Content generation failed or produced empty content.
+                    </p>
+                    <p style={{ color: '#94A3B8', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                        This usually happens when API keys are missing or API calls failed. Check the console for detailed errors.
+                    </p>
+                    <button className="btn" onClick={onClose}>Close</button>
+                </div>
+            </div>
+        );
+    }
     const [activeTab, setActiveTab] = useState('Live Preview');
     const [editedSeo, setEditedSeo] = useState({ title: '', metaDescription: '', slug: '' });
     const [editedContent, setEditedContent] = useState('');
