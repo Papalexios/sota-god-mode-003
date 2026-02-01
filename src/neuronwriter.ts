@@ -683,51 +683,94 @@ export const formatNeuronTermsForPrompt = (terms: NeuronTerms | null): string =>
 
   const sections: string[] = [];
 
-  sections.push('=== NEURONWRITER SEO OPTIMIZATION TERMS ===');
-  sections.push('CRITICAL: Use these terms to achieve 90%+ NeuronWriter score!\n');
+  sections.push('╔══════════════════════════════════════════════════════════════════════════════╗');
+  sections.push('║                    🧠 NEURONWRITER SEO OPTIMIZATION TERMS                     ║');
+  sections.push('║                        ⚠️ MANDATORY - USE ALL TERMS ⚠️                        ║');
+  sections.push('╚══════════════════════════════════════════════════════════════════════════════╝\n');
+  sections.push('🎯 CRITICAL REQUIREMENT: Incorporate these terms NATURALLY throughout content.');
+  sections.push('📊 TARGET: Achieve 90%+ NeuronWriter score by using ALL basic terms!\n');
 
   if (terms.h1) {
-    sections.push(`## H1 TERMS (Must use in main heading):\n${terms.h1}\n`);
-  }
-
-  if (terms.title) {
-    sections.push(`## TITLE TERMS (Use in page title):\n${terms.title}\n`);
+    sections.push(`┌─────────────────────────────────────────────────────────────┐`);
+    sections.push(`│ 🏷️ H1/TITLE TERMS (MUST appear in main heading verbatim)   │`);
+    sections.push(`└─────────────────────────────────────────────────────────────┘`);
+    sections.push(`${terms.h1}\n`);
   }
 
   if (terms.h2) {
-    sections.push(`## H2 TERMS (Must use in subheadings):\n${terms.h2}\n`);
+    sections.push(`┌─────────────────────────────────────────────────────────────┐`);
+    sections.push(`│ 📌 H2 SUBHEADING TERMS (Use as H2 headings - REQUIRED)      │`);
+    sections.push(`└─────────────────────────────────────────────────────────────┘`);
+    sections.push(`${terms.h2}\n`);
   }
 
   if (terms.h3) {
-    sections.push(`## H3 TERMS (Use in sub-subheadings):\n${terms.h3}\n`);
+    sections.push(`┌─────────────────────────────────────────────────────────────┐`);
+    sections.push(`│ 📍 H3 TERMS (Use in sub-subheadings)                        │`);
+    sections.push(`└─────────────────────────────────────────────────────────────┘`);
+    sections.push(`${terms.h3}\n`);
   }
 
   if (terms.content_basic) {
-    sections.push(`## CONTENT BASIC TERMS (REQUIRED - Use ALL of these in body text):\n${terms.content_basic}\n`);
+    sections.push(`┌─────────────────────────────────────────────────────────────┐`);
+    sections.push(`│ ⭐ CONTENT BASIC TERMS - MANDATORY (USE 100% OF THESE!)     │`);
+    sections.push(`└─────────────────────────────────────────────────────────────┘`);
+    sections.push(`These terms MUST appear naturally in the body text:`);
+    sections.push(`${terms.content_basic}\n`);
+    sections.push(`💡 TIP: Weave these into sentences naturally, e.g.:`);
+    sections.push(`   - "When considering [TERM], it's essential to..."`);
+    sections.push(`   - "[TERM] plays a crucial role in..."\n`);
   }
 
   if (terms.content_extended) {
-    sections.push(`## CONTENT EXTENDED TERMS (Use as many as possible):\n${terms.content_extended}\n`);
+    sections.push(`┌─────────────────────────────────────────────────────────────┐`);
+    sections.push(`│ 📝 CONTENT EXTENDED TERMS (Use 80%+ for max score)          │`);
+    sections.push(`└─────────────────────────────────────────────────────────────┘`);
+    sections.push(`${terms.content_extended}\n`);
   }
 
   if (terms.entities_basic) {
-    sections.push(`## ENTITIES BASIC (Named entities to include):\n${terms.entities_basic}\n`);
+    sections.push(`┌─────────────────────────────────────────────────────────────┐`);
+    sections.push(`│ 🏢 ENTITIES BASIC - REQUIRED (Named entities to include)    │`);
+    sections.push(`└─────────────────────────────────────────────────────────────┘`);
+    sections.push(`Include these brands, organizations, experts, places:`);
+    sections.push(`${terms.entities_basic}\n`);
   }
 
   if (terms.entities_extended) {
-    sections.push(`## ENTITIES EXTENDED (Additional named entities):\n${terms.entities_extended}\n`);
+    sections.push(`┌─────────────────────────────────────────────────────────────┐`);
+    sections.push(`│ 🏛️ ENTITIES EXTENDED (Additional entities for depth)        │`);
+    sections.push(`└─────────────────────────────────────────────────────────────┘`);
+    sections.push(`${terms.entities_extended}\n`);
   }
 
   if (terms.questions && terms.questions.length > 0) {
-    sections.push(`## QUESTIONS TO ANSWER (Include in FAQ or content):\n${terms.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n`);
+    sections.push(`┌─────────────────────────────────────────────────────────────┐`);
+    sections.push(`│ ❓ QUESTIONS TO ANSWER (Include in FAQ or H2 sections)      │`);
+    sections.push(`└─────────────────────────────────────────────────────────────┘`);
+    sections.push(terms.questions.map((q, i) => `${i + 1}. ${q}`).join('\n'));
+    sections.push(``);
   }
 
   if (terms.headings && terms.headings.length > 0) {
-    sections.push(`## SUGGESTED H2 HEADINGS:\n${terms.headings.map((h, i) => `${i + 1}. ${h}`).join('\n')}\n`);
+    sections.push(`┌─────────────────────────────────────────────────────────────┐`);
+    sections.push(`│ 📋 SUGGESTED H2 HEADINGS (Use these exact or similar)       │`);
+    sections.push(`└─────────────────────────────────────────────────────────────┘`);
+    sections.push(terms.headings.map((h, i) => `${i + 1}. ${h}`).join('\n'));
+    sections.push(``);
   }
 
-  sections.push('\n=== END NEURONWRITER TERMS ===');
-  sections.push('INSTRUCTION: Incorporate ALL basic terms and as many extended terms as possible for maximum SEO score.');
+  sections.push(`\n╔══════════════════════════════════════════════════════════════════════════════╗`);
+  sections.push(`║                         ⚠️ FINAL INSTRUCTIONS ⚠️                             ║`);
+  sections.push(`╚══════════════════════════════════════════════════════════════════════════════╝`);
+  sections.push(`✅ Use ALL content_basic terms - these are REQUIRED for SEO`);
+  sections.push(`✅ Use 80%+ of content_extended terms`);
+  sections.push(`✅ Include ALL entities_basic naturally in content`);
+  sections.push(`✅ Answer ALL questions in FAQ or relevant sections`);
+  sections.push(`✅ Use suggested H2 headings as your structure`);
+  sections.push(`✅ Make term usage NATURAL - weave into sentences smoothly`);
+  sections.push(`❌ NEVER list terms artificially or "keyword stuff"`);
+  sections.push(`❌ NEVER skip basic terms - they are MANDATORY for ranking`);
 
   return sections.join('\n');
 };

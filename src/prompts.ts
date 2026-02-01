@@ -828,6 +828,13 @@ ${BEAUTIFUL_HTML_ELEMENTS}
 
 6. **10-15 internal links** (4-7 word anchors)
 
+7. **NEURONWRITER COMPLIANCE (MANDATORY)**
+   - Use ALL provided 'Basic Content Terms'
+   - Include ALL 'Basic Entities'
+   - Answer ALL 'Questions'
+   - Use 'Suggested Headings' for H2 structure
+   - NO KEYWORD STUFFING - Natural integration only
+
 ## BANNED PHRASES (NEVER USE)
 ${BANNED_AI_PHRASES.slice(0, 30).join(", ")}
 
@@ -853,7 +860,18 @@ Return ONLY HTML5 content. Start with <p>. NO markdown, NO code blocks.`,
 
 ## SEMANTIC KEYWORDS (incorporate naturally):
 ${keywordsStr}
-${neuronTerms ? `\n## 🧠 NEURONWRITER SEO TERMS (CRITICAL - Use these for ranking):\n${neuronTerms}\n` : ''}
+${neuronTerms ? `
+## 🧠 NEURONWRITER SEO TERMS (⚠️ MANDATORY FOR RANKING ⚠️):
+${neuronTerms}
+
+### NEURONWRITER INTEGRATION REQUIREMENTS:
+1. ✅ MUST use ALL content_basic terms naturally in body paragraphs
+2. ✅ MUST use suggested H2 headings as your section structure  
+3. ✅ MUST include ALL entities (brands, experts, organizations)
+4. ✅ MUST answer ALL questions in FAQ or dedicated sections
+5. ✅ Use 80%+ of content_extended terms throughout
+6. ❌ DO NOT keyword stuff - weave terms NATURALLY into sentences
+` : ''}
 ## INTERNAL LINK TARGETS (Use 10-15 with descriptive anchors):
 ${pagesStr}
 
@@ -867,8 +885,9 @@ Reconstruct this into ULTRA-PREMIUM HTML5 that:
 3. Has 10-15 internal links (4-7 word anchors, evenly spaced)
 4. Includes [YOUTUBE_VIDEO_PLACEHOLDER] for video injection
 5. Has ZERO AI detection patterns
-6. Incorporates all NeuronWriter terms naturally (if provided)
-7. Achieves 2800-3800 words of pure value
+6. **CRITICAL**: Uses 100% of NeuronWriter basic terms + 80% of extended terms NATURALLY
+7. Uses NeuronWriter suggested headings as H2 structure
+8. Achieves 2800-3800 words of pure value
 
 Transform and dominate.`;
     }
