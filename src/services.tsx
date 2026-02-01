@@ -1848,8 +1848,14 @@ export const generateContent = {
                   headers: { 'X-API-KEY': serperApiKey, 'Content-Type': 'application/json' },
                   body: JSON.stringify({ q: item.title, num: 10 })
                 });
-                const data = await response.json();
-                return data.organic || [];
+                const text = await response.text();
+                if (!text.trim()) return [];
+                try {
+                  const data = JSON.parse(text);
+                  return data.organic || [];
+                } catch {
+                  return [];
+                }
               }, []);
             }, 3600000);
           },

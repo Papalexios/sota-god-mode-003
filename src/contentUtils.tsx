@@ -470,14 +470,18 @@ export const fetchSitemapDirect = async (
 
       if (response.ok) {
         const contentType = response.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          const data = await response.json();
-          if (data.content) {
-            onProgress?.('Sitemap fetched via Cloudflare Pages');
-            return data.content;
+        const text = await response.text();
+        if (contentType.includes('application/json') && text.trim()) {
+          try {
+            const data = JSON.parse(text);
+            if (data.content) {
+              onProgress?.('Sitemap fetched via Cloudflare Pages');
+              return data.content;
+            }
+          } catch {
+            onProgress?.('Invalid JSON response');
           }
-        } else {
-          const text = await response.text();
+        } else if (text.trim()) {
           onProgress?.('Sitemap fetched via Cloudflare Pages');
           return text;
         }
@@ -499,10 +503,17 @@ export const fetchSitemapDirect = async (
       });
 
       if (response.ok) {
-        const data = await response.json();
-        if (data.content) {
-          onProgress?.('Sitemap fetched via Edge Function');
-          return data.content;
+        const text = await response.text();
+        if (text.trim()) {
+          try {
+            const data = JSON.parse(text);
+            if (data.content) {
+              onProgress?.('Sitemap fetched via Edge Function');
+              return data.content;
+            }
+          } catch {
+            onProgress?.('Invalid JSON from Edge Function');
+          }
         }
       }
     } catch (e) {

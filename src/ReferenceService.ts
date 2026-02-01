@@ -215,8 +215,15 @@ export async function fetchVerifiedReferences(
         });
 
         if (response.ok) {
-          const data = await response.json();
-          potentialReferences.push(...(data.organic || []));
+          const text = await response.text();
+          if (text && text.trim()) {
+            try {
+              const data = JSON.parse(text);
+              potentialReferences.push(...(data.organic || []));
+            } catch {
+              log(`Invalid JSON for query: ${query}`);
+            }
+          }
         }
       } catch (e) {
         log(`Search query failed: ${query}`);

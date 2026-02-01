@@ -112,8 +112,19 @@ const callNeuronWriterProxy = async (
       return { success: false, status: response.status, error: errorText };
     }
 
-    const result: ProxyResponse = await response.json();
-    return result;
+    const text = await response.text();
+    if (!text || text.trim().length === 0) {
+      console.error('[NeuronWriter] Empty response from server');
+      return { success: false, error: 'Empty response from server' };
+    }
+
+    try {
+      const result: ProxyResponse = JSON.parse(text);
+      return result;
+    } catch (parseError) {
+      console.error('[NeuronWriter] Failed to parse response:', text.substring(0, 200));
+      return { success: false, error: 'Invalid JSON response from server' };
+    }
   } catch (error: any) {
     clearTimeout(timeoutId);
 
