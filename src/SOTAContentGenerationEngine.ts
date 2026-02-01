@@ -142,7 +142,6 @@ function extractSafeAnchorsFromSentence(sentence: string, targetTitle: string): 
 }
 
 // ==================== YOUTUBE VIDEO INJECTION - GUARANTEED ====================
-
 /**
  * GUARANTEED YouTube video injection - will NEVER leave a placeholder
  */
@@ -157,26 +156,47 @@ export async function guaranteedYouTubeVideoInject(
         logCallback?.(msg);
     };
 
-    // ALWAYS remove placeholder first - this is the CRITICAL FIX
-    let resultHtml = html.replace(/\[YOUTUBE_VIDEO_PLACEHOLDER\]/g, '');
+    // CRITICAL: ULTRA-AGGRESSIVE placeholder removal
+    // Catches variations: YOUTUBE_VIDEO_PLACEHOLDER, typos like PLACEHER, etc.
+    let resultHtml = html
+        .replace(/\[YOUTUBE_VIDEO_PLACEHOLDER\]/gi, '')
+        .replace(/\[YOUTUBE_VIDEO_PLACE[A-Z]*\]/gi, '') // Catch typos
+        .replace(/\[?YOUTUBE[\s_-]*VIDEO[\s_-]*PLACE[\w]*\]?/gi, '')
+        .replace(/📹\s*<h4><strong>Looking for Video Tutorials\?<\/strong><\/h4>[\s\S]*?Search YouTube for.*?<\/a>/gi, '') // Remove broken AI-generated YouTube sections
+        .replace(/<p>📹<\/p>\s*<h4>.*?Video Tutorials.*?<\/h4>[\s\S]*?youtube\.com\/results[\s\S]*?<\/a>\s*<\/p>/gi, ''); // Another pattern
 
     // Check if API key is available
     if (!serperApiKey || serperApiKey.trim().length < 10) {
         log('⚠️ No valid Serper API key - cannot search YouTube');
+        log('To fix: Add Serper API key in Settings → API Keys (get from serper.dev)');
         return { html: resultHtml, video: null, success: false };
     }
 
-    // Check if video already exists
+    // Check if video already exists (has real embed)
     if (resultHtml.includes('youtube.com/embed/') || resultHtml.includes('sota-youtube')) {
         log('✅ YouTube video already present');
         return { html: resultHtml, video: null, success: true };
     }
 
-    log(`🎬 Searching for: "${keyword}"`);
+    // Sanitize keyword - if it's a URL, extract title
+    let searchKeyword = keyword;
+    if (keyword.includes('://') || keyword.includes('/')) {
+        try {
+            const url = new URL(keyword.startsWith('http') ? keyword : `https://example.com${keyword}`);
+            const pathParts = url.pathname.split('/').filter(p => p.length > 0);
+            const lastPart = pathParts[pathParts.length - 1] || '';
+            searchKeyword = lastPart.replace(/-/g, ' ').replace(/_/g, ' ').trim() || keyword;
+            log(`📍 Extracted search keyword from URL: "${searchKeyword}"`);
+        } catch (e) {
+            // Keep original if parsing fails
+        }
+    }
 
-    // STRATEGY 1: Primary search
+    log(`🎬 Searching for: "${searchKeyword}"`);
+
+    // STRATEGY 1: Primary search with sanitized keyword
     try {
-        const video = await findBestYouTubeVideo(keyword, serperApiKey);
+        const video = await findBestYouTubeVideo(searchKeyword, serperApiKey);
 
         if (video) {
             log(`✅ Found: "${video.title.substring(0, 50)}..."`);
@@ -187,12 +207,12 @@ export async function guaranteedYouTubeVideoInject(
         log(`⚠️ Primary failed: ${error.message}`);
     }
 
-    // STRATEGY 2: Fallback searches
+    // STRATEGY 2: Fallback searches with sanitized keyword
     const fallbackQueries = [
-        `${keyword} tutorial`,
-        `${keyword} guide`,
-        `how to ${keyword}`,
-        `${keyword} explained`
+        `${searchKeyword} tutorial`,
+        `${searchKeyword} guide`,
+        `how to ${searchKeyword}`,
+        `${searchKeyword} explained`
     ];
 
     for (const query of fallbackQueries) {

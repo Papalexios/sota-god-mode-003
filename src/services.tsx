@@ -3321,7 +3321,33 @@ class UltraPremiumMaintenanceEngine {
       let injectedVideo: YouTubeSearchResult | null = null;
 
       try {
-        const searchKeyword = page.title || semanticKeywords[0] || 'guide';
+        // CRITICAL: Sanitize search keyword - extract title from URL if needed
+        let searchKeyword = page.title || semanticKeywords[0] || 'guide';
+
+        // Check if searchKeyword looks like a URL and extract title from it
+        if (searchKeyword.includes('://') || searchKeyword.startsWith('/') || searchKeyword.includes('/')) {
+          this.log(`📹 YOUTUBE: WARNING - Keyword looks like URL: "${searchKeyword}"`, 'warning');
+          try {
+            const url = new URL(searchKeyword.startsWith('http') ? searchKeyword : `https://example.com${searchKeyword}`);
+            const pathParts = url.pathname.split('/').filter(p => p.length > 0);
+            const lastPart = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2] || '';
+            const extractedTitle = lastPart
+              .replace(/-/g, ' ')
+              .replace(/_/g, ' ')
+              .replace(/\.html?$/i, '')
+              .split(' ')
+              .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+              .join(' ')
+              .trim();
+            if (extractedTitle && extractedTitle.length > 3) {
+              searchKeyword = extractedTitle;
+              this.log(`📹 YOUTUBE: Extracted title: "${searchKeyword}"`, 'info');
+            }
+          } catch (e) {
+            // Keep original if parsing fails
+          }
+        }
+
         this.log(`📹 YOUTUBE: Query = "${searchKeyword}"`, 'debug');
 
         // CRITICAL: Check if Serper API key is available
@@ -3329,7 +3355,9 @@ class UltraPremiumMaintenanceEngine {
           this.log(`📹 YOUTUBE: ⚠️ SERPER API KEY MISSING - Cannot search for videos!`, 'error');
           this.log(`  To fix: Go to Settings → API Keys → Add Serper API key (get from serper.dev)`, 'info');
           // Still remove placeholder
-          contentWithVideo = optimizedContent.replace(/\[YOUTUBE_VIDEO_PLACEHOLDER\]/g, '');
+          contentWithVideo = optimizedContent
+            .replace(/\[YOUTUBE_VIDEO_PLACEHOLDER\]/gi, '')
+            .replace(/\[YOUTUBE_VIDEO_PLACE[A-Z]*\]/gi, '');
         } else {
           this.log(`📹 YOUTUBE: Serper key present (${this.context.serperApiKey.substring(0, 8)}...)`, 'debug');
 

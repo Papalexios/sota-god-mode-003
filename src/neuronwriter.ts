@@ -394,31 +394,86 @@ async function createNewQuery(
  * 4. If no existing query, create new one with /new-query and poll
  * 5. Fallback to synthetic terms if API is slow/unavailable
  */
+/**
+ * CRITICAL HELPER: Sanitize keyword to ensure it's not a URL
+ * If a URL is passed, extract a readable title from the slug
+ */
+function sanitizeKeywordInput(keyword: string): string {
+  if (!keyword) return '';
+
+  // Check if keyword looks like a URL
+  if (keyword.startsWith('http://') || keyword.startsWith('https://') || keyword.includes('/')) {
+    console.warn(`[NeuronWriter] ⚠️ URL detected as keyword, attempting to extract title from: ${keyword}`);
+
+    try {
+      // Try to extract the last path segment as the title
+      const url = new URL(keyword.startsWith('http') ? keyword : `https://example.com${keyword}`);
+      const pathParts = url.pathname.split('/').filter(p => p.length > 0);
+      const lastPart = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2] || '';
+
+      // Convert slug to title: get-out-of-shape -> Get Out of Shape
+      const title = lastPart
+        .replace(/-/g, ' ')
+        .replace(/_/g, ' ')
+        .replace(/\.html?$/i, '')
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ')
+        .trim();
+
+      if (title && title.length > 3) {
+        console.log(`[NeuronWriter] ✅ Extracted title: "${title}" from URL`);
+        return title;
+      }
+    } catch (e) {
+      console.error('[NeuronWriter] Failed to parse URL:', e);
+    }
+  }
+
+  return keyword.trim();
+}
+
+/**
+ * SOTA NEURONWRITER TERM FETCHING v16.1
+ * CRITICAL FIX: Returns NULL when API fails instead of generating fake terms!
+ * 
+ * Workflow:
+ * 1. Check keyword is valid (not a URL)
+ * 2. Check cache first (1 hour TTL)
+ * 3. Find existing query in project
+ * 4. Fetch terms from existing query if ready
+ * 5. Create new query if needed
+ * 6. Return NULL if API fails (NO FAKE FALLBACK TERMS!)
+ */
 export const fetchNeuronTerms = async (
   apiKey: string,
   projectId: string,
   query: string
 ): Promise<NeuronTerms | null> => {
-  if (!apiKey || !projectId || !query) {
-    console.warn('[NeuronWriter] Missing required parameters');
-    return generateFallbackTerms(query, 'Missing required parameters');
+  // CRITICAL: Sanitize the keyword - extract title if URL was passed
+  const sanitizedQuery = sanitizeKeywordInput(query);
+
+  if (!apiKey || !projectId || !sanitizedQuery) {
+    console.warn('[NeuronWriter] ❌ Missing required parameters - returning NULL (no fake terms)');
+    console.warn(`[NeuronWriter] apiKey: ${apiKey ? '✓' : '✗'}, projectId: ${projectId ? '✓' : '✗'}, query: "${sanitizedQuery || 'EMPTY'}"`);
+    return null; // CRITICAL: Return null, not fake terms!
   }
 
-  const cacheKey = `terms:${projectId}:${query.toLowerCase().trim()}`;
+  const cacheKey = `terms:${projectId}:${sanitizedQuery.toLowerCase().trim()}`;
 
   // Step 1: Check terms cache
   const cached = neuronTermsCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < TERMS_CACHE_TTL_MS) {
-    console.log(`[NeuronWriter] 📦 Cache hit for terms: "${query}"`);
+    console.log(`[NeuronWriter] 📦 Cache hit for terms: "${sanitizedQuery}"`);
     return cached.terms;
   }
 
-  console.log(`[NeuronWriter] 🚀 Starting fetch for: "${query}"`);
+  console.log(`[NeuronWriter] 🚀 Starting fetch for: "${sanitizedQuery}"`);
   console.log(`[NeuronWriter] Project ID: ${projectId.substring(0, 8)}...`);
 
   try {
     // Step 2: Try to find existing query
-    const existingQueryId = await findExistingQuery(apiKey, projectId, query);
+    const existingQueryId = await findExistingQuery(apiKey, projectId, sanitizedQuery);
 
     if (existingQueryId) {
       // Step 3: Fetch terms from existing query
@@ -440,7 +495,7 @@ export const fetchNeuronTerms = async (
     // Step 4: Create new query if no existing one found
     console.log('[NeuronWriter] No ready query found - creating new one...');
 
-    const newQueryResult = await createNewQuery(apiKey, projectId, query);
+    const newQueryResult = await createNewQuery(apiKey, projectId, sanitizedQuery);
 
     if (newQueryResult && countTerms(newQueryResult.terms) > 0) {
       // Cache the terms
@@ -454,13 +509,15 @@ export const fetchNeuronTerms = async (
       return newQueryResult.terms;
     }
 
-    // Step 5: Fallback to synthetic terms
-    console.warn('[NeuronWriter] ⚠️ API unavailable - generating fallback terms');
-    return generateFallbackTerms(query, 'API unavailable or slow');
+    // Step 5: CRITICAL FIX - Return NULL when API fails, NOT fake terms!
+    console.error('[NeuronWriter] ❌ API returned no terms - returning NULL (not generating fake terms)');
+    console.error('[NeuronWriter] Run NeuronWriter analysis on: https://app.neuronwriter.com for keyword: ' + sanitizedQuery);
+    return null;
 
   } catch (error: any) {
-    console.error('[NeuronWriter] Critical error:', error.message);
-    return generateFallbackTerms(query, error.message);
+    console.error('[NeuronWriter] ❌ Critical error:', error.message);
+    console.error('[NeuronWriter] Returning NULL - no fake fallback terms will be generated');
+    return null; // CRITICAL: Return null, not fake terms!
   }
 };
 
