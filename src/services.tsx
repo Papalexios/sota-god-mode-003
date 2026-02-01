@@ -654,7 +654,8 @@ export const fetchVerifiedReferences = async (
   logCallback?: (msg: string) => void
 ): Promise<{ html: string; references: VerifiedReference[] }> => {
   if (!serperApiKey) {
-    logCallback?.('[References] No Serper API key - skipping reference fetch');
+    console.warn('[References] ⚠️ Serper API key missing - cannot fetch references. Get your key at https://serper.dev');
+    logCallback?.('[References] ⚠️ Serper API key missing');
     return {
       html: generateFallbackReferencesHtml(keyword),
       references: []
@@ -1914,15 +1915,24 @@ export const generateContent = {
           },
 
           youtubeVideo: async () => {
-            if (!serperApiKey) return null;
+            if (!serperApiKey) {
+              console.warn('[YouTube] ⚠️ Serper API key missing - cannot find videos');
+              return null;
+            }
             const cacheKey = `youtube:${item.title.toLowerCase().trim()}`;
             return getCached(youtubeCache, cacheKey, async () => {
               return withCircuitBreaker('youtube', async () => {
-                return withTimeout(
+                const video = await withTimeout(
                   findBestYouTubeVideo(item.title, serperApiKey),
                   15000,
                   'YouTube'
                 );
+                if (video) {
+                  console.log(`[YouTube] ✅ Found video: ${video.title} (${video.videoId})`);
+                } else {
+                  console.warn(`[YouTube] ⚠️ No video found for: ${item.title}`);
+                }
+                return video;
               }, null);
             }, 3600000);
           }

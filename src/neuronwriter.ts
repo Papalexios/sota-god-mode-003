@@ -345,12 +345,14 @@ async function createNewQuery(
     const cacheKey = `${projectId}:${keyword.toLowerCase().trim()}`;
     queryIdCache.set(cacheKey, { queryId, timestamp: Date.now() });
 
-    // Poll for completion with REASONABLE timeouts
-    // NeuronWriter docs say "usually takes around 60 seconds"
-    const maxWaitTime = 90000; // 90 seconds max total wait
-    const pollInterval = 5000; // Check every 5 seconds
+    // CRITICAL FIX: Don't wait - NeuronWriter analysis takes too long
+    // Strategy: Create query immediately, poll a few times, then continue without blocking
+    const maxWaitTime = 15000; // Only wait 15 seconds max
+    const pollInterval = 3000; // Check every 3 seconds
     const startTime = Date.now();
     let pollCount = 0;
+
+    console.log(`[NeuronWriter] ⏳ Checking if analysis is ready (max 15s wait)...`);
 
     while (Date.now() - startTime < maxWaitTime) {
       pollCount++;
@@ -359,17 +361,19 @@ async function createNewQuery(
       await new Promise(resolve => setTimeout(resolve, pollInterval));
 
       const elapsed = Math.round((Date.now() - startTime) / 1000);
-      console.log(`[NeuronWriter] 🔄 Polling ${pollCount} (${elapsed}s elapsed)...`);
+      console.log(`[NeuronWriter] 🔄 Quick poll ${pollCount} (${elapsed}s)...`);
 
       const terms = await fetchTermsFromQuery(apiKey, queryId);
 
       if (terms && countTerms(terms) > 0) {
-        console.log(`[NeuronWriter] ✅ Analysis complete after ${elapsed}s`);
+        console.log(`[NeuronWriter] ✅ Analysis ready after ${elapsed}s`);
         return { queryId, terms };
       }
     }
 
-    console.warn(`[NeuronWriter] ⏱️ Analysis not ready after ${maxWaitTime / 1000}s - using fallback`);
+    // Don't fail - just continue without NeuronWriter data
+    console.log(`[NeuronWriter] ℹ️ Analysis still processing. Query ID saved: ${queryId}`);
+    console.log(`[NeuronWriter] 💡 Check back in your NeuronWriter dashboard for results`);
     return null;
 
   } catch (error: any) {

@@ -171,25 +171,11 @@ const BEAUTIFUL_HTML_ELEMENTS = `
   </div>
 </div>
 
-### 11. YOUTUBE VIDEO SECTION (MANDATORY - After 3rd H2)
-Include this placeholder and the system will auto-inject a relevant video:
-[YOUTUBE_VIDEO_PLACEHOLDER]
+### 11. YOUTUBE VIDEO SECTION
+CRITICAL: DO NOT write anything about YouTube videos. The system will automatically inject a relevant video embed after generation. Do not include any placeholder text or mention of videos in your output.
 
-### 12. REFERENCES SECTION (MANDATORY - At very end) - SOLID BACKGROUND
-<div class="sota-references" style="margin: 3rem 0; padding: 2rem; background: #0f172a; border-radius: 20px; border-left: 5px solid #3b82f6; border: 2px solid #334155;">
-  <h2 style="display: flex; align-items: center; gap: 0.75rem; margin: 0 0 1.5rem; color: #f1f5f9; font-size: 1.5rem;"><span>📚</span> References & Further Reading</h2>
-  <p style="margin: 0 0 1.5rem; color: #94a3b8; font-size: 0.9rem;">All sources verified • Authoritative references</p>
-  <ol style="list-style: none; padding: 0; margin: 0;">
-    <li style="display: flex; gap: 1rem; padding: 1rem; margin-bottom: 0.75rem; background: #1e293b; border-radius: 10px; border: 1px solid #475569;">
-      <div style="flex-shrink: 0; width: 32px; height: 32px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.85rem;">1</div>
-      <div style="flex: 1;">
-        <a href="URL" target="_blank" rel="noopener" style="color: #60a5fa; text-decoration: none; font-weight: 600; font-size: 1rem;">Source Title - Organization Name</a>
-        <p style="margin: 0.25rem 0 0; color: #cbd5e1; font-size: 0.85rem;">Brief description of what this source covers.</p>
-        <span style="display: inline-block; margin-top: 0.5rem; padding: 3px 10px; background: #166534; color: #86efac; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">HIGH AUTHORITY</span>
-      </div>
-    </li>
-  </ol>
-</div>
+### 12. REFERENCES SECTION
+CRITICAL: DO NOT write a references section. The system will automatically add verified, high-authority references after generation. Do not include any reference section, citations, or sources in your output.
 `;
 
 // ==================== PROMPT TEMPLATES ====================

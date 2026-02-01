@@ -524,10 +524,10 @@ export function guaranteedYouTubeInjection(
 </div>
 `.trim();
 
-  // Strategy 1: Replace placeholder
+  // Strategy 1: Replace placeholder (be aggressive - replace all instances)
   if (html.includes('[YOUTUBE_VIDEO_PLACEHOLDER]')) {
     console.log('[YouTubeGuaranteed] ✅ Replaced placeholder');
-    return html.replace('[YOUTUBE_VIDEO_PLACEHOLDER]', embedHtml);
+    return html.replace(/\[YOUTUBE_VIDEO_PLACEHOLDER\]/g, embedHtml);
   }
 
   // Strategy 2: Insert after 2nd H2 (middle of content)
