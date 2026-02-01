@@ -72,7 +72,7 @@ export const BLOCKED_DOMAINS: string[] = [
 
 export function detectCategory(keyword: string, semanticKeywords: string[]): string {
   const allText = [keyword, ...semanticKeywords].join(' ').toLowerCase();
-  
+
   let bestCategory = 'general';
   let highestScore = 0;
 
@@ -94,10 +94,10 @@ export function detectCategory(keyword: string, semanticKeywords: string[]): str
 
 export function determineAuthorityLevel(domain: string, category: string): 'high' | 'medium' | 'low' {
   if (domain.endsWith('.gov') || domain.endsWith('.edu')) return 'high';
-  
+
   const categoryConfig = REFERENCE_CATEGORIES[category];
   if (categoryConfig?.authorityDomains.some(d => domain.includes(d))) return 'high';
-  
+
   const majorPublications = ['nytimes.com', 'bbc.com', 'reuters.com', 'apnews.com', 'npr.org', 'theguardian.com'];
   if (majorPublications.some(d => domain.includes(d))) return 'high';
 
@@ -122,9 +122,9 @@ export async function fetchVerifiedReferences(
   if (!serperApiKey || serperApiKey.trim() === '') {
     console.error('[References] ❌ CRITICAL: No Serper API key provided!');
     log('⚠️ No Serper API key - returning fallback references section');
-    return { 
-      html: generateFallbackReferencesSection(keyword), 
-      references: [] 
+    return {
+      html: generateFallbackReferencesSection(keyword),
+      references: []
     };
   }
 
@@ -143,18 +143,18 @@ export async function fetchVerifiedReferences(
 
     let userDomain = '';
     if (wpUrl) {
-      try { userDomain = new URL(wpUrl).hostname.replace('www.', ''); } catch (e) {}
+      try { userDomain = new URL(wpUrl).hostname.replace('www.', ''); } catch (e) { }
     }
 
-    // ULTRA SOTA Query Builder - Maximum Relevance
+    // ULTRA SOTA Query Builder - Maximum Relevance + HELPFUL CONTENT
     const kw = `"${keyword}"`;
     const kwNoQuotes = keyword;
     const topSemantic = semanticKeywords.slice(0, 8);
     const semQuery = topSemantic.slice(0, 3).map(s => `"${s}"`).join(' OR ');
     const coreWords = keyword.split(/\s+/).filter(w => w.length > 3).slice(0, 3);
-    
+
     const searchQueries: string[] = [];
-    
+
     // TIER 1: HIGH-AUTHORITY DOMAIN QUERIES (Government, Academic, Major Orgs)
     const highAuthorityDomains = [
       'gov', 'edu', 'nih.gov', 'cdc.gov', 'who.int', 'ncbi.nlm.nih.gov',
@@ -162,7 +162,7 @@ export async function fetchVerifiedReferences(
     ];
     searchQueries.push(`${kw} site:gov OR site:edu`);
     searchQueries.push(`${kw} site:nih.gov OR site:cdc.gov OR site:who.int`);
-    
+
     // TIER 2: CATEGORY-SPECIFIC AUTHORITY DOMAINS
     if (categoryConfig) {
       const topDomains = categoryConfig.authorityDomains.slice(0, 8);
@@ -172,30 +172,43 @@ export async function fetchVerifiedReferences(
       const siteOr = topDomains.map(d => `site:${d}`).join(' OR ');
       searchQueries.push(`${kwNoQuotes} (${siteOr})`);
     }
-    
-    // TIER 3: CONTENT-TYPE SPECIFIC QUERIES
+
+    // TIER 3: HELPFUL CONTENT-FOCUSED QUERIES (NEW - for better relevance!)
+    searchQueries.push(`${kw} "complete guide" OR "ultimate guide" OR "how to"`);
+    searchQueries.push(`${kw} "step by step" OR "tutorial" OR "explained"`);
+    searchQueries.push(`${kw} "tips" OR "best practices" OR "recommendations"`);
+    searchQueries.push(`${kw} "checklist" OR "template" OR "tools"`);
+    searchQueries.push(`${kw} "for beginners" OR "introduction to" OR "basics"`);
+
+    // TIER 4: RESEARCH & DATA QUERIES
     searchQueries.push(`${kw} "research" OR "study" OR "systematic review" ${currentYear}`);
     searchQueries.push(`${kw} "guidelines" OR "official guide" OR "fact sheet"`);
     searchQueries.push(`${kw} "statistics" OR "data" OR "report" ${currentYear}`);
-    searchQueries.push(`${kw} "expert guide" OR "professional advice" OR "best practices"`);
-    searchQueries.push(`${kw} "comprehensive guide" OR "complete guide" ${currentYear}`);
-    
-    // TIER 4: SEMANTIC KEYWORD ENHANCED QUERIES
+
+    // TIER 5: EXPERT & PROFESSIONAL QUERIES  
+    searchQueries.push(`${kw} "expert advice" OR "professional tips" OR "industry insights"`);
+    searchQueries.push(`${kw} "comprehensive guide" OR "in-depth" ${currentYear}`);
+
+    // TIER 6: SEMANTIC KEYWORD ENHANCED QUERIES
     if (topSemantic.length > 0) {
-      searchQueries.push(`${kw} ${topSemantic[0]} authoritative source`);
-      searchQueries.push(`${kwNoQuotes} ${semQuery} official`);
+      searchQueries.push(`${kw} ${topSemantic[0]} guide resource`);
+      searchQueries.push(`${kwNoQuotes} ${semQuery} helpful tips`);
+      searchQueries.push(`${topSemantic[0]} ${topSemantic[1] || keyword} "how to" guide`);
     }
-    
-    // TIER 5: MAJOR PUBLICATION QUERIES  
-    const majorPubs = ['nytimes.com', 'bbc.com', 'reuters.com', 'forbes.com', 'wsj.com', 'theguardian.com'];
+
+    // TIER 7: MAJOR PUBLICATION QUERIES  
+    const majorPubs = ['nytimes.com', 'bbc.com', 'reuters.com', 'forbes.com', 'wsj.com', 'theguardian.com', 'cnn.com', 'npr.org'];
     const pubsQuery = majorPubs.slice(0, 4).map(d => `site:${d}`).join(' OR ');
     searchQueries.push(`${kw} (${pubsQuery})`);
-    
-    // TIER 6: FALLBACK BROAD QUERIES
-    searchQueries.push(`${kwNoQuotes} official information ${currentYear}`);
-    searchQueries.push(`${kwNoQuotes} trusted resource guide`);
+
+    // TIER 8: TRENDING/RECENT CONTENT
+    searchQueries.push(`${kwNoQuotes} ${currentYear} guide resources`);
+    searchQueries.push(`${kwNoQuotes} "updated ${currentYear}" OR "latest" guide`);
+
+    // TIER 9: FALLBACK BROAD QUERIES
     if (coreWords.length > 0) {
-      searchQueries.push(`${coreWords.join(' ')} authoritative guide ${currentYear}`);
+      searchQueries.push(`${coreWords.join(' ')} comprehensive guide ${currentYear}`);
+      searchQueries.push(`${coreWords.join(' ')} helpful resources tips`);
     }
 
     console.log(`[References] 📊 Generated ${searchQueries.length} search queries across 6 tiers`);
@@ -238,7 +251,7 @@ export async function fetchVerifiedReferences(
     const keywordLower = keyword.toLowerCase();
     const keywordTokens = keywordLower.split(/\s+/).filter(w => w.length > 3);
     const semanticLower = semanticKeywords.map(k => k.toLowerCase()).filter(k => k.length > 3);
-    
+
     // Off-topic blocklist (reject results containing these)
     const offTopicPhrases = [
       'unrelated', 'different topic', 'advertisement', 'sponsored',
@@ -289,32 +302,54 @@ export async function fetchVerifiedReferences(
 
         // Calculate relevance score
         let relevanceScore = 0;
-        
+
         // Exact phrase = highest priority
         if (exactKeywordMatch) relevanceScore += 100;
-        
+
         // Token matches
         relevanceScore += matchedKeywordTokens.length * 20;
         relevanceScore += matchedSemantic.length * 15;
-        
+
         // Title matches are more valuable than snippet
         for (const token of keywordTokens) {
           if (titleLower.includes(token)) relevanceScore += 25;
         }
-        
+
         // Freshness bonus
         if (combinedText.includes(String(currentYear))) relevanceScore += 30;
         if (combinedText.includes(String(currentYear - 1))) relevanceScore += 15;
-        
+
         // Authority domain bonus
         if (categoryConfig?.authorityDomains.some(d => domain.includes(d))) {
           relevanceScore += 50;
         }
-        
+
         // .gov/.edu bonus
         if (domain.endsWith('.gov') || domain.endsWith('.edu')) {
           relevanceScore += 40;
         }
+
+        // HELPFUL CONTENT INDICATORS BONUS (NEW!)
+        // Boost references that are actually helpful guides, tutorials, etc.
+        const helpfulIndicators = [
+          'guide', 'tutorial', 'how to', 'tips', 'checklist', 'template',
+          'step by step', 'explained', 'for beginners', 'best practices',
+          'complete guide', 'ultimate guide', 'comprehensive', 'everything you need',
+          'introduction', 'basics', 'essential', 'tools', 'resources',
+          'examples', 'strategies', 'techniques', 'methods', 'recommendations'
+        ];
+
+        let helpfulCount = 0;
+        for (const indicator of helpfulIndicators) {
+          if (combinedText.includes(indicator)) {
+            helpfulCount++;
+            relevanceScore += 15; // +15 for each helpful indicator
+          }
+        }
+
+        // Bonus for multiple helpful indicators (compound helpfulness)
+        if (helpfulCount >= 3) relevanceScore += 25;
+        if (helpfulCount >= 5) relevanceScore += 25;
 
         // MINIMUM RELEVANCE THRESHOLD (raised from 50 to 80)
         if (relevanceScore < 80) {
@@ -374,7 +409,7 @@ export async function fetchVerifiedReferences(
     if (validatedReferences.length < 3) {
       console.warn(`[References] ⚠️ Only ${validatedReferences.length} references passed validation - using fallback`);
       log(`Warning: Low reference count (${validatedReferences.length}) - adding fallback section`);
-      
+
       // Still return what we have + fallback HTML
       const fallbackHtml = generateFallbackReferencesSection(keyword);
       if (validatedReferences.length === 0) {
@@ -414,15 +449,15 @@ function generateFallbackReferencesSection(keyword: string): string {
   console.error('[ReferenceService] ❌ CRITICAL: No references available!');
   console.error('[ReferenceService] ❌ Please configure your Serper.dev API key in Settings → API Keys');
   console.error('[ReferenceService] ❌ Get your API key from: https://serper.dev');
-  
+
   // Return empty string - DO NOT show fake references
   // This ensures the app only shows REAL, verified references from Serper API
   return '';
 }
 
 export function generateReferencesHtml(
-  references: VerifiedReference[], 
-  category: string, 
+  references: VerifiedReference[],
+  category: string,
   keyword: string
 ): string {
   const categoryEmoji: Record<string, string> = {
