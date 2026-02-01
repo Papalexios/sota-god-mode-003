@@ -3286,7 +3286,13 @@ class UltraPremiumMaintenanceEngine {
         }
         phaseEnd();
       } else {
-        this.log('🧠 NeuronWriter: Not enabled or not configured', 'debug');
+        // DETAILED DEBUG: Print EXACTLY why NeuronWriter is not being used
+        const reasons: string[] = [];
+        if (!this.context.neuronConfig?.enabled) reasons.push('enabled=false');
+        if (!this.context.neuronConfig?.apiKey) reasons.push('apiKey missing');
+        if (!this.context.neuronConfig?.projectId) reasons.push('projectId missing');
+        this.log(`🧠 NeuronWriter: NOT USED - Reasons: ${reasons.join(', ')}`, 'warning');
+        this.log(`  To enable: Go to Settings → NeuronWriter → Enable and add API key + Project`, 'info');
       }
 
       // ========== PHASE 3: GOD MODE CONTENT RECONSTRUCTION ==========
@@ -3318,17 +3324,27 @@ class UltraPremiumMaintenanceEngine {
         const searchKeyword = page.title || semanticKeywords[0] || 'guide';
         this.log(`📹 YOUTUBE: Query = "${searchKeyword}"`, 'debug');
 
-        // Use the new GUARANTEED YouTube injection function
-        const youtubeResult = await guaranteedYouTubeVideoInject(
-          optimizedContent,
-          searchKeyword,
-          this.context.serperApiKey,
-          (msg) => this.log(`  ${msg}`, 'debug')
-        );
+        // CRITICAL: Check if Serper API key is available
+        if (!this.context.serperApiKey || this.context.serperApiKey.length < 10) {
+          this.log(`📹 YOUTUBE: ⚠️ SERPER API KEY MISSING - Cannot search for videos!`, 'error');
+          this.log(`  To fix: Go to Settings → API Keys → Add Serper API key (get from serper.dev)`, 'info');
+          // Still remove placeholder
+          contentWithVideo = optimizedContent.replace(/\[YOUTUBE_VIDEO_PLACEHOLDER\]/g, '');
+        } else {
+          this.log(`📹 YOUTUBE: Serper key present (${this.context.serperApiKey.substring(0, 8)}...)`, 'debug');
 
-        contentWithVideo = youtubeResult.html;
-        videoInjected = youtubeResult.success;
-        injectedVideo = youtubeResult.video;
+          // Use the new GUARANTEED YouTube injection function
+          const youtubeResult = await guaranteedYouTubeVideoInject(
+            optimizedContent,
+            searchKeyword,
+            this.context.serperApiKey,
+            (msg) => this.log(`  ${msg}`, 'debug')
+          );
+
+          contentWithVideo = youtubeResult.html;
+          videoInjected = youtubeResult.success;
+          injectedVideo = youtubeResult.video;
+        }
 
         if (videoInjected && injectedVideo) {
           this.log(`📹 YOUTUBE: ✅ SUCCESS - Injected: "${injectedVideo.title.substring(0, 50)}..."`, 'success');
