@@ -1823,8 +1823,9 @@ export const generateContent = {
       dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: 'Initializing...' } });
       analytics.reset();
 
+      let generationMetricId: number | null = null;
       try {
-        const generationMetricId = startMetric('contentGeneration', { title: item.title });
+        generationMetricId = startMetric('contentGeneration', { title: item.title });
 
         // =================================================================
         // ULTRA PERFORMANCE: PARALLEL PHASE 1 - Independent Operations
@@ -2176,7 +2177,7 @@ export const generateContent = {
         console.log(`[Cache Stats]`, getCacheStats());
 
       } catch (error: any) {
-        endMetric(generationMetricId, false);
+        if (generationMetricId !== null) endMetric(generationMetricId, false);
         analytics.log('error', `Generation failed: ${error.message}`);
         dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'error', statusText: error.message } });
       }
