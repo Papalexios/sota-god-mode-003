@@ -416,6 +416,13 @@ export const fetchWithProxies = async (
         ...options.headers as Record<string, string>,
       };
 
+      if (proxy.name === 'supabase-edge') {
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+        if (anonKey) {
+          headers['Authorization'] = `Bearer ${anonKey}`;
+        }
+      }
+
       if (proxy.name === 'cors-sh') {
         headers['x-cors-api-key'] = 'temp_' + Date.now();
       }
