@@ -202,8 +202,14 @@ export async function fetchReferencesCached(
             body: JSON.stringify({ q: query, num: 15 })
           });
           if (!response.ok) return [];
-          const data = await response.json();
-          return data.organic || [];
+          const text = await response.text();
+          if (!text.trim()) return [];
+          try {
+            const data = JSON.parse(text);
+            return data.organic || [];
+          } catch {
+            return [];
+          }
         },
         []
       );
@@ -419,7 +425,13 @@ export async function getSerpDataCached(
         });
 
         if (!response.ok) return null;
-        return response.json();
+        const text = await response.text();
+        if (!text.trim()) return null;
+        try {
+          return JSON.parse(text);
+        } catch {
+          return null;
+        }
       }, null);
     },
     3600000 // 1hr

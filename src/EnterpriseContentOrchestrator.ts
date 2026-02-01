@@ -214,8 +214,14 @@ export async function fetchReferencesEnterprise(
           body: JSON.stringify({ q: query, num: 15 })
         });
         if (!response.ok) return [];
-        const data = await response.json();
-        return data.organic || [];
+        const text = await response.text();
+        if (!text.trim()) return [];
+        try {
+          const data = JSON.parse(text);
+          return data.organic || [];
+        } catch {
+          return [];
+        }
       }, [])
     )
   );
@@ -355,7 +361,14 @@ export async function findYouTubeVideoEnterprise(
       );
 
       if (!response.ok) continue;
-      const data = await response.json();
+      const text = await response.text();
+      if (!text.trim()) continue;
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        continue;
+      }
       const videos = data.videos || [];
 
       for (const video of videos) {
@@ -518,8 +531,14 @@ export async function fetchAllDataParallel(
             body: JSON.stringify({ q: config.keyword, num: 10 })
           });
           if (!response.ok) return [];
-          const data = await response.json();
-          return data.organic || [];
+          const text = await response.text();
+          if (!text.trim()) return [];
+          try {
+            const data = JSON.parse(text);
+            return data.organic || [];
+          } catch {
+            return [];
+          }
         }, []);
       });
       timings.serp = Date.now() - start;

@@ -127,6 +127,20 @@ export class SotaErrorBoundary extends Component<ErrorBoundaryProps, ErrorBounda
     console.error('[SOTA_ERROR_BOUNDARY]', error, errorInfo);
   }
 
+  handleRetry = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
+  handleSoftReset = () => {
+    window.location.reload();
+  };
+
+  handleHardReset = () => {
+    localStorage.removeItem(STORAGE_KEYS.ITEMS);
+    localStorage.removeItem('generation_checkpoint_v2');
+    window.location.reload();
+  };
+
   render() {
     if (this.state.hasError) {
       return (
@@ -139,23 +153,62 @@ export class SotaErrorBoundary extends Component<ErrorBoundaryProps, ErrorBounda
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          alignItems: 'center'
+          alignItems: 'center',
+          gap: '1rem'
         }}>
-          <h1 style={{ fontSize: '2rem', marginBottom: '1rem', color: '#F87171' }}>
-            System Critical Error
+          <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem', color: '#F87171' }}>
+            Something went wrong
           </h1>
-          <p style={{ color: '#A0A8C2', marginBottom: '2rem', maxWidth: '600px' }}>
+          <p style={{ color: '#A0A8C2', marginBottom: '1rem', maxWidth: '600px' }}>
             {this.state.error?.message || 'An unexpected error occurred.'}
           </p>
-          <button
-            className="btn"
-            onClick={() => {
-              localStorage.removeItem(STORAGE_KEYS.ITEMS);
-              window.location.reload();
-            }}
-          >
-            Reset Application
-          </button>
+          <p style={{ color: '#6B7280', fontSize: '0.875rem', marginBottom: '1rem' }}>
+            Your progress has been auto-saved. You can try again or reload.
+          </p>
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button
+              style={{
+                padding: '0.75rem 1.5rem',
+                backgroundColor: '#10B981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              onClick={this.handleRetry}
+            >
+              Try Again
+            </button>
+            <button
+              style={{
+                padding: '0.75rem 1.5rem',
+                backgroundColor: '#3B82F6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              onClick={this.handleSoftReset}
+            >
+              Reload Page
+            </button>
+            <button
+              style={{
+                padding: '0.75rem 1.5rem',
+                backgroundColor: '#6B7280',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              onClick={this.handleHardReset}
+            >
+              Full Reset
+            </button>
+          </div>
         </div>
       );
     }

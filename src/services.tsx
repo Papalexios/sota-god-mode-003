@@ -53,6 +53,17 @@ import {
 } from './YouTubeService';
 
 import {
+  saveCheckpoint,
+  getCheckpoint,
+  clearCheckpoint,
+  createInitialCheckpoint,
+  retryWithBackoff,
+  parseJSONSafely,
+  safeFetchJSON,
+  GenerationCheckpoint
+} from './RobustGenerationEngine';
+
+import {
   fetchNeuronTerms,
   formatNeuronTermsForPrompt,
   calculateNeuronContentScore,
@@ -1823,17 +1834,32 @@ export const generateContent = {
       dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: 'Initializing...' } });
       analytics.reset();
 
+      let checkpoint = getCheckpoint(item.id) || createInitialCheckpoint(item.id, item.title);
+      const updateStatus = (text: string) => {
+        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: text } });
+      };
+
       let generationMetricId: number | null = null;
       try {
         generationMetricId = startMetric('contentGeneration', { title: item.title });
 
+        if (checkpoint.currentPhase > 0 && checkpoint.collectedData) {
+          console.log(`[Generation] Resuming from checkpoint phase ${checkpoint.currentPhase} for "${item.title}"`);
+          updateStatus(`Resuming from phase ${checkpoint.currentPhase}...`);
+        }
+
         // =================================================================
-        // ULTRA PERFORMANCE: PARALLEL PHASE 1 - Independent Operations
-        // Executes SERP, Keywords, NeuronWriter, and YouTube search in parallel
-        // Expected speedup: ~50% reduction in pre-processing time
+        // PHASE 1: Research (with checkpoint recovery)
         // =================================================================
-        analytics.log('research', 'Starting PARALLEL content research...', { title: item.title });
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '⚡ Parallel Research...' } });
+        let serpData: any[] = checkpoint.collectedData.serpData || [];
+        let semanticKeywords: string[] = checkpoint.collectedData.semanticKeywords || [];
+        let neuronTerms: NeuronTerms | null = checkpoint.collectedData.neuronTerms || null;
+        let youtubeVideo: YouTubeSearchResult | null = checkpoint.collectedData.youtubeVideo || null;
+
+        const shouldRunResearch = !checkpoint.phases[0]?.completed;
+        if (shouldRunResearch) {
+          analytics.log('research', 'Starting PARALLEL content research...', { title: item.title });
+          updateStatus('Phase 1: Research...');
 
         const parallelMetricId = startMetric('parallelPhase1', { title: item.title });
 
@@ -1902,19 +1928,29 @@ export const generateContent = {
           }
         }, 60000);
 
-        endMetric(parallelMetricId, true);
+          endMetric(parallelMetricId, true);
 
-        let serpData = parallelResults.serpData.success ? parallelResults.serpData.data : [];
-        let semanticKeywords = parallelResults.semanticKeywords.success ? parallelResults.semanticKeywords.data : [item.title];
-        let neuronTerms: NeuronTerms | null = parallelResults.neuronTerms.success ? parallelResults.neuronTerms.data : null;
-        let youtubeVideo = parallelResults.youtubeVideo.success ? parallelResults.youtubeVideo.data : null;
+          serpData = parallelResults.serpData.success ? parallelResults.serpData.data : [];
+          semanticKeywords = parallelResults.semanticKeywords.success ? parallelResults.semanticKeywords.data : [item.title];
+          neuronTerms = parallelResults.neuronTerms.success ? parallelResults.neuronTerms.data : null;
+          youtubeVideo = parallelResults.youtubeVideo.success ? parallelResults.youtubeVideo.data : null;
 
-        console.log(`[ParallelPhase1] SERP: ${serpData.length} results, Keywords: ${semanticKeywords.length}, NeuronWriter: ${neuronTerms ? 'loaded' : 'none'}, YouTube: ${youtubeVideo ? 'found' : 'none'}`);
+          console.log(`[ParallelPhase1] SERP: ${serpData.length} results, Keywords: ${semanticKeywords.length}, NeuronWriter: ${neuronTerms ? 'loaded' : 'none'}, YouTube: ${youtubeVideo ? 'found' : 'none'}`);
+
+          checkpoint.collectedData.serpData = serpData;
+          checkpoint.collectedData.semanticKeywords = semanticKeywords;
+          checkpoint.collectedData.neuronTerms = neuronTerms;
+          checkpoint.collectedData.youtubeVideo = youtubeVideo;
+          checkpoint.phases[0].completed = true;
+          checkpoint.currentPhase = 1;
+          saveCheckpoint(checkpoint);
+          console.log('[Checkpoint] Phase 1 (Research) saved');
+        }
 
         let neuronTermsFormatted: string | null = null;
         if (neuronTerms) {
           neuronTermsFormatted = formatNeuronTermsForPrompt(neuronTerms);
-          console.log(`[NeuronWriter] ✅ Successfully fetched terms`);
+          console.log(`[NeuronWriter] Loaded terms`);
 
           const neuronKeywords = [
             neuronTerms.h1,
@@ -1929,198 +1965,210 @@ export const generateContent = {
             .slice(0, 10);
 
           semanticKeywords = [...new Set([...semanticKeywords, ...neuronKeywords])];
-          console.log(`[NeuronWriter] Merged ${neuronKeywords.length} NeuronWriter keywords`);
-        }
-
-        // Phase 3: Main Content Generation
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '✍️ Writing...' } });
-        let contentResponse = await callAIFn(
-          'ultra_sota_article_writer',
-          [item.title, semanticKeywords, existingPages, serpData, neuronTermsFormatted, null],
-          'html'
-        );
-
-        // Phase 3.5: MANDATORY NeuronWriter Term Enforcement
-        let neuronScore = 0;
-        if (neuronTerms) {
-          dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🧠 Enforcing NeuronWriter...' } });
-          console.log(`[ContentGen] Enforcing NeuronWriter terms for: "${item.title}"`);
-
-          const enforceResult = await enforceNeuronWriterTerms(
-            contentResponse,
-            neuronTerms,
-            async (prompt: string) => await callAIFn('dom_content_polisher', [prompt, 'neuron_enforcement'], 'html'),
-            85, // Target score
-            3   // Max passes
-          );
-
-          contentResponse = enforceResult.html;
-          neuronScore = enforceResult.score;
-          console.log(`[ContentGen] NeuronWriter enforcement complete: ${neuronScore}% score, ${enforceResult.termsAdded} terms added`);
         }
 
         // =================================================================
-        // OPTIMIZED Phase 4: References with Parallel Validation
-        // Uses batch validation with 5 concurrent requests, 3s timeout
-        // Expected speedup: ~80% reduction in validation time
+        // PHASE 2: Content Generation (with retry and checkpoint)
         // =================================================================
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📚 References...' } });
-        const refMetricId = startMetric('referenceFetch', { title: item.title });
+        let contentResponse = checkpoint.collectedData.contentResponse || '';
+        if (!checkpoint.phases[1]?.completed || !contentResponse) {
+          updateStatus('Phase 2: Writing content...');
 
-        let referencesHtml = '';
-        let references: any[] = [];
-
-        if (serperApiKey && serperApiKey.trim().length >= 10) {
-          console.log(`[ContentGen] ✅ Serper API key present for references`);
-
-          const refCacheKey = `refs:${item.title.toLowerCase().trim()}`;
-          const cachedRefs = referenceCache.get(refCacheKey);
-
-          if (cachedRefs) {
-            console.log(`[ContentGen] References CACHE HIT`);
-            references = cachedRefs;
-          } else {
-            const { html, references: fetchedRefs } = await fetchVerifiedReferencesOptimized(
-              item.title, semanticKeywords, serperApiKey, wpConfig.url
+          contentResponse = await retryWithBackoff(async () => {
+            return await callAIFn(
+              'ultra_sota_article_writer',
+              [item.title, semanticKeywords, existingPages, serpData, neuronTermsFormatted, null],
+              'html'
             );
-            referencesHtml = html;
-            references = fetchedRefs;
+          }, 'Content Generation', 3);
 
-            if (references.length > 0) {
-              referenceCache.set(refCacheKey, references, 86400000);
-            }
+          checkpoint.collectedData.contentResponse = contentResponse;
+          checkpoint.phases[1].completed = true;
+          checkpoint.currentPhase = 2;
+          saveCheckpoint(checkpoint);
+          console.log('[Checkpoint] Phase 2 (Content Generation) saved');
+        }
+
+        // =================================================================
+        // PHASE 3: NeuronWriter Optimization (with checkpoint)
+        // =================================================================
+        let neuronScore = 0;
+        if (neuronTerms && !checkpoint.phases[2]?.completed) {
+          updateStatus('Phase 3: Optimizing for NeuronWriter...');
+
+          try {
+            const enforceResult = await retryWithBackoff(async () => {
+              return await enforceNeuronWriterTerms(
+                contentResponse,
+                neuronTerms!,
+                async (prompt: string) => await callAIFn('dom_content_polisher', [prompt, 'neuron_enforcement'], 'html'),
+                85,
+                3
+              );
+            }, 'NeuronWriter Enforcement', 2);
+
+            contentResponse = enforceResult.html;
+            neuronScore = enforceResult.score;
+            checkpoint.collectedData.contentResponse = contentResponse;
+          } catch (e: any) {
+            console.warn(`[NeuronWriter] Optimization failed, continuing with base content: ${e.message}`);
           }
 
-          if (references.length > 0) {
-            console.log(`[ContentGen] ✅ ${references.length} verified references`);
-            if (!referencesHtml && references.length > 0) {
+          checkpoint.phases[2].completed = true;
+          checkpoint.currentPhase = 3;
+          saveCheckpoint(checkpoint);
+          console.log('[Checkpoint] Phase 3 (NeuronWriter) saved');
+        }
+
+        // =================================================================
+        // PHASE 4: References (with checkpoint)
+        // =================================================================
+        let referencesHtml = '';
+        let references: any[] = checkpoint.collectedData.references || [];
+
+        if (!checkpoint.phases[3]?.completed) {
+          updateStatus('Phase 4: Fetching references...');
+          const refMetricId = startMetric('referenceFetch', { title: item.title });
+
+          if (serperApiKey && serperApiKey.trim().length >= 10) {
+            const refCacheKey = `refs:${item.title.toLowerCase().trim()}`;
+            const cachedRefs = referenceCache.get(refCacheKey);
+
+            if (cachedRefs) {
+              references = cachedRefs;
+            } else {
+              try {
+                const { html, references: fetchedRefs } = await retryWithBackoff(async () => {
+                  return await fetchVerifiedReferencesOptimized(
+                    item.title, semanticKeywords, serperApiKey, wpConfig.url
+                  );
+                }, 'Reference Fetch', 2);
+                referencesHtml = html;
+                references = fetchedRefs;
+
+                if (references.length > 0) {
+                  referenceCache.set(refCacheKey, references, 86400000);
+                }
+              } catch (e: any) {
+                console.warn(`[References] Fetch failed: ${e.message}`);
+              }
+            }
+
+            if (references.length > 0 && !referencesHtml) {
               referencesHtml = generateReferencesHtml(references, item.title);
             }
-          } else {
-            console.warn(`[ContentGen] ⚠️ No references fetched - check API key`);
           }
-        } else {
-          console.error(`[ContentGen] ❌ Serper API key missing - cannot fetch references`);
+
+          endMetric(refMetricId, references.length > 0);
+          checkpoint.collectedData.references = references;
+          checkpoint.phases[3].completed = true;
+          checkpoint.currentPhase = 4;
+          saveCheckpoint(checkpoint);
+          console.log('[Checkpoint] Phase 4 (References) saved');
         }
 
-        endMetric(refMetricId, references.length > 0);
-
-        if (youtubeVideo) {
-          console.log(`[ContentGen] ✅ YouTube video found: "${youtubeVideo.title}"`);
-        } else {
-          console.warn(`[ContentGen] ⚠️ YouTube not found - will use fallback`);
-        }
-
-        // Phase 6: AI-Powered Internal Links (with hybrid fallback)
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🔗 Adding AI Links...' } });
+        // =================================================================
+        // PHASE 5: Internal Links (with checkpoint)
+        // =================================================================
         let contentWithLinks = contentResponse;
         let linkResult = { linkCount: 0, links: [] as any[] };
 
-        console.log(`[Internal Links] existingPages count: ${existingPages.length}`);
+        if (!checkpoint.phases[4]?.completed) {
+          updateStatus('Phase 5: Adding internal links...');
 
-        if (existingPages.length > 0) {
-          console.log(`[Internal Links] Using AI-powered internal linking for: "${item.title}"`);
+          if (existingPages.length > 0) {
+            try {
+              const aiLinkConfig: AILinkingConfig = {
+                callAiFn: async (prompt: string) => await callAIFn('dom_content_polisher', [prompt, 'internal_linking'], 'json'),
+                primaryKeyword: item.title,
+                minLinks: 4,
+                maxLinks: 8
+              };
 
-          // Create AI linking config
-          const aiLinkConfig: AILinkingConfig = {
-            callAiFn: async (prompt: string) => await callAIFn('dom_content_polisher', [prompt, 'internal_linking'], 'json'),
-            primaryKeyword: item.title,
-            minLinks: 4,
-            maxLinks: 8
-          };
+              const internalPages: InternalPage[] = existingPages.map(p => ({
+                title: p.title,
+                slug: p.slug,
+                url: p.url || `${wpConfig.url}/${p.slug}/`
+              }));
 
-          // Convert existing pages to InternalPage format
-          const internalPages: InternalPage[] = existingPages.map(p => ({
-            title: p.title,
-            slug: p.slug,
-            url: p.url || `${wpConfig.url}/${p.slug}/`
-          }));
+              const linkingResult = await retryWithBackoff(async () => {
+                return await processContentWithHybridInternalLinks(
+                  contentResponse,
+                  internalPages,
+                  wpConfig.url || '',
+                  aiLinkConfig
+                );
+              }, 'Internal Linking', 2);
 
-          const baseUrl = wpConfig.url || '';
+              contentWithLinks = linkingResult.html;
+              linkResult = {
+                linkCount: linkingResult.stats.successful,
+                links: linkingResult.placements.map(p => ({
+                  anchorText: p.anchorText,
+                  targetUrl: p.targetUrl,
+                  targetTitle: p.targetTitle
+                }))
+              };
+            } catch (e: any) {
+              console.warn(`[Internal Links] Failed: ${e.message}, continuing without links`);
+              contentWithLinks = contentResponse;
+            }
+          }
 
-          // Use hybrid linking (AI-first with deterministic fallback)
-          const linkingResult = await processContentWithHybridInternalLinks(
-            contentResponse,
-            internalPages,
-            baseUrl,
-            aiLinkConfig
-          );
-
-          contentWithLinks = linkingResult.html;
-          linkResult = {
-            linkCount: linkingResult.stats.successful,
-            links: linkingResult.placements.map(p => ({
-              anchorText: p.anchorText,
-              targetUrl: p.targetUrl,
-              targetTitle: p.targetTitle
-            }))
-          };
-          console.log(`[Internal Links] SUCCESS - Added ${linkResult.linkCount} links using ${linkingResult.stats.method} method`);
-        } else {
-          console.warn('[Internal Links] No existingPages available - cannot add internal links');
+          checkpoint.collectedData.internalLinks = linkResult.links;
+          checkpoint.phases[4].completed = true;
+          checkpoint.currentPhase = 5;
+          saveCheckpoint(checkpoint);
+          console.log('[Checkpoint] Phase 5 (Internal Links) saved');
         }
 
-        // Phase 7: Polish Content
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '✨ Polishing...' } });
+        // =================================================================
+        // PHASE 6: Media Integration (YouTube) - with checkpoint
+        // =================================================================
+        updateStatus('Phase 6: Adding media...');
         let finalContent = polishContentHtml(contentWithLinks);
 
-        // Phase 7.5: Append References
         if (referencesHtml) {
           finalContent += referencesHtml;
         }
 
-        // Phase 7.9: GUARANTEED YouTube Injection (LAST STEP before schema)
-        // CRITICAL FIX: Only inject ONE YouTube video - no duplicates!
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Injecting Video...' } });
+        if (!checkpoint.phases[5]?.completed) {
+          const existingYouTubeCheck = [
+            /youtube\.com\/embed\//i,
+            /class="[^"]*sota-youtube[^"]*"/i,
+            /class="[^"]*youtube-embed[^"]*"/i,
+            /wp-block-embed-youtube/i
+          ];
 
-        // Check if YouTube already exists in content (prevent duplicates)
-        const existingYouTubeCheck = [
-          /youtube\.com\/embed\//i,
-          /class="[^"]*sota-youtube[^"]*"/i,
-          /class="[^"]*youtube-embed[^"]*"/i,
-          /wp-block-embed-youtube/i
-        ];
-        
-        const youtubeAlreadyExists = existingYouTubeCheck.some(pattern => pattern.test(finalContent));
-        
-        if (youtubeAlreadyExists) {
-          console.log(`[ContentGen] ✅ YouTube video already exists in content - skipping injection to prevent duplicate`);
-        } else if (youtubeVideo) {
-          console.log(`[ContentGen] GUARANTEED YouTube injection for: "${item.title}"`);
-          finalContent = guaranteedYouTubeInjection(finalContent, youtubeVideo);
-          
-          if (finalContent.includes(youtubeVideo.videoId)) {
-            console.log(`[ContentGen] ✅ YouTube video CONFIRMED in final content`);
-          } else {
-            console.warn(`[ContentGen] ⚠️ YouTube injection may have failed, but not adding duplicate`);
-          }
-        } else {
-          // NO VIDEO FOUND - inject fallback ONLY if no YouTube content exists
-          console.log(`[ContentGen] 📹 No video from API - injecting FALLBACK YouTube section`);
-          const fallbackHtml = generateFallbackYouTubeSection(item.title);
+          const youtubeAlreadyExists = existingYouTubeCheck.some(pattern => pattern.test(finalContent));
 
-          // Find best injection point (before references or at end)
-          const refMatch = finalContent.match(/<div[^>]*class="[^"]*sota-references[^"]*"[^>]*>/i);
-          if (refMatch && refMatch.index !== undefined) {
-            finalContent = finalContent.substring(0, refMatch.index) + fallbackHtml + '\n\n' + finalContent.substring(refMatch.index);
-          } else {
-            finalContent = finalContent + '\n\n' + fallbackHtml;
+          if (!youtubeAlreadyExists) {
+            if (youtubeVideo) {
+              finalContent = guaranteedYouTubeInjection(finalContent, youtubeVideo);
+            } else {
+              const fallbackHtml = generateFallbackYouTubeSection(item.title);
+              const refMatch = finalContent.match(/<div[^>]*class="[^"]*sota-references[^"]*"[^>]*>/i);
+              if (refMatch && refMatch.index !== undefined) {
+                finalContent = finalContent.substring(0, refMatch.index) + fallbackHtml + '\n\n' + finalContent.substring(refMatch.index);
+              } else {
+                finalContent = finalContent + '\n\n' + fallbackHtml;
+              }
+            }
           }
-          console.log(`[ContentGen] ✅ Fallback YouTube section injected`);
+
+          checkpoint.phases[5].completed = true;
+          checkpoint.currentPhase = 6;
+          checkpoint.partialContent = finalContent;
+          saveCheckpoint(checkpoint);
+          console.log('[Checkpoint] Phase 6 (Media) saved');
+        } else if (checkpoint.partialContent) {
+          finalContent = checkpoint.partialContent;
         }
 
-        // FINAL VERIFICATION: Log YouTube status (no more emergency fallbacks that cause duplicates)
-        const hasYouTubeContent = finalContent.includes('youtube.com') ||
-          finalContent.includes('youtu.be') ||
-          finalContent.includes('sota-youtube');
-        if (hasYouTubeContent) {
-          console.log(`[ContentGen] ✅✅ VERIFIED: YouTube content IS present in final output`);
-        } else {
-          console.warn(`[ContentGen] ⚠️ No YouTube content in output - Serper API key may be missing`);
-        }
-
-        // Phase 8: Schema
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📋 Schema...' } });
+        // =================================================================
+        // PHASE 7: Schema Generation (final phase)
+        // =================================================================
+        updateStatus('Phase 7: Generating schema...');
 
         const schemaData = generateFullSchema({
           pageType: item.type === 'pillar' ? 'pillar' : 'article',
@@ -2175,17 +2223,31 @@ export const generateContent = {
         };
 
         dispatch({ type: 'SET_CONTENT', payload: { id: item.id, content: generatedContent } });
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'done', statusText: '✅ Complete' } });
+        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'done', statusText: 'Complete' } });
+
+        clearCheckpoint(item.id);
+        console.log(`[Generation] Successfully completed for "${item.title}"`);
 
         endMetric(generationMetricId, true);
         const perfSummary = getMetricsSummary();
         console.log(`[Performance] Generation complete: ${perfSummary.avgDuration.toFixed(0)}ms avg, ${perfSummary.successRate.toFixed(1)}% success`);
-        console.log(`[Cache Stats]`, getCacheStats());
 
       } catch (error: any) {
         if (generationMetricId !== null) endMetric(generationMetricId, false);
-        analytics.log('error', `Generation failed: ${error.message}`);
-        dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'error', statusText: error.message } });
+        const errorMsg = error.message || 'Unknown error';
+        analytics.log('error', `Generation failed: ${errorMsg}`);
+
+        checkpoint.lastUpdated = new Date().toISOString();
+        saveCheckpoint(checkpoint);
+
+        console.error(`[Generation] Failed at phase ${checkpoint.currentPhase} for "${item.title}": ${errorMsg}`);
+        console.log(`[Generation] Progress saved - can resume from phase ${checkpoint.currentPhase}`);
+
+        dispatch({ type: 'UPDATE_STATUS', payload: {
+          id: item.id,
+          status: 'error',
+          statusText: `Failed at phase ${checkpoint.currentPhase}: ${errorMsg.substring(0, 50)}`
+        } });
       }
     }
   },

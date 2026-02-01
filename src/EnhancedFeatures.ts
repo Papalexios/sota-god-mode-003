@@ -32,7 +32,15 @@ export async function findYouTubeVideo(
 
     if (!response.ok) return { html: '', video: null };
 
-    const data = await response.json();
+    const text = await response.text();
+    if (!text.trim()) return { html: '', video: null };
+
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return { html: '', video: null };
+    }
     const videos = data.videos || [];
 
     for (const video of videos) {
@@ -116,7 +124,15 @@ export async function fetchReferences(
 
     if (!response.ok) return { html: '', references: [] };
 
-    const data = await response.json();
+    const text = await response.text();
+    if (!text.trim()) return { html: '', references: [] };
+
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return { html: '', references: [] };
+    }
     const results = data.organic || [];
     const references: Reference[] = [];
 
