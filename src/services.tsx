@@ -103,7 +103,16 @@ import {
   EnterpriseReference
 } from './EnterpriseContentOrchestrator';
 
-console.log('[SOTA Services v16.0] ENTERPRISE PERFORMANCE ENGINE Initialized');
+import {
+  guaranteedYouTubeVideoInject,
+  injectEnterpriseInternalLinks,
+  fetchNeuronWriterTermsWithFallback,
+  fetchEnterpriseReferences,
+  enhanceContentEnterprise
+} from './SOTAContentGenerationEngine';
+
+console.log('[SOTA Services v17.0] ENTERPRISE PERFORMANCE ENGINE Initialized');
+console.log('[SOTA Services] CRITICAL FIXES: YouTube injection, Internal Links, References, NeuronWriter');
 console.log('[SOTA Services] Features: Parallel Execution, LRU Caching, Circuit Breaker, Enterprise Orchestration');
 
 function countNeuronTerms(terms: NeuronTerms): number {
@@ -572,76 +581,27 @@ export const findRelevantYouTubeVideo = async (
   }
 };
 
-// ==================== INJECT YOUTUBE VIDEO INTO CONTENT ====================
+// ==================== INJECT YOUTUBE VIDEO INTO CONTENT (ENTERPRISE WRAPPER) ====================
 
+/**
+ * ENTERPRISE YouTube injection - GUARANTEED to either inject video or cleanly remove placeholder
+ * This wrapper uses the new SOTAContentGenerationEngine for robust injection
+ */
 export const injectYouTubeIntoContent = async (
   content: string,
   keyword: string,
   serperApiKey: string,
   logCallback?: (msg: string) => void
 ): Promise<string> => {
-  if (!serperApiKey) {
-    logCallback?.('[YouTube] No Serper API key - cannot inject video');
-    return content.replace('[YOUTUBE_VIDEO_PLACEHOLDER]', '');
-  }
+  // Use the new enterprise function which guarantees proper injection
+  const result = await guaranteedYouTubeVideoInject(
+    content,
+    keyword,
+    serperApiKey,
+    logCallback
+  );
 
-  logCallback?.(`[YouTube] GUARANTEED injection for: "${keyword}"`);
-
-  try {
-    const result = await injectYouTubeVideo(content, keyword, serperApiKey);
-
-    if (result.video) {
-      logCallback?.(`[YouTube] SUCCESS - Injected: "${result.video.title}"`);
-      return result.html;
-    }
-
-    logCallback?.('[YouTube] Primary method failed, trying enhanced fallback...');
-
-    const searchQueries = [
-      `${keyword} tutorial`,
-      `${keyword} guide`,
-      `how to ${keyword}`,
-      `${keyword} explained`,
-      `best ${keyword}`
-    ];
-
-    for (const query of searchQueries) {
-      logCallback?.(`[YouTube] Trying: "${query}"`);
-      const { html: fallbackHtml, video } = await findRelevantYouTubeVideo(query, serperApiKey);
-
-      if (fallbackHtml && video) {
-        logCallback?.(`[YouTube] FOUND via fallback: "${video.title}"`);
-        const ultraYoutubeHtml = generateUltraPremiumYouTubeSection(video);
-
-        if (content.includes('[YOUTUBE_VIDEO_PLACEHOLDER]')) {
-          return content.replace('[YOUTUBE_VIDEO_PLACEHOLDER]', ultraYoutubeHtml);
-        }
-
-        const h2Matches = [...content.matchAll(/<\/h2>/gi)];
-        if (h2Matches.length >= 2 && h2Matches[1].index !== undefined) {
-          const insertPos = h2Matches[1].index + 5;
-          logCallback?.(`[YouTube] Injecting after 2nd H2`);
-          return content.substring(0, insertPos) + '\n\n' + ultraYoutubeHtml + '\n\n' + content.substring(insertPos);
-        }
-
-        if (h2Matches.length >= 1 && h2Matches[0].index !== undefined) {
-          const insertPos = h2Matches[0].index + 5;
-          logCallback?.(`[YouTube] Injecting after 1st H2`);
-          return content.substring(0, insertPos) + '\n\n' + ultraYoutubeHtml + '\n\n' + content.substring(insertPos);
-        }
-
-        logCallback?.(`[YouTube] Appending to end`);
-        return content.replace('[YOUTUBE_VIDEO_PLACEHOLDER]', '') + '\n\n' + ultraYoutubeHtml;
-      }
-    }
-
-    logCallback?.('[YouTube] All attempts failed - no video available');
-    return content.replace('[YOUTUBE_VIDEO_PLACEHOLDER]', '');
-
-  } catch (error: any) {
-    logCallback?.(`[YouTube] ERROR: ${error.message}`);
-    return content.replace('[YOUTUBE_VIDEO_PLACEHOLDER]', '');
-  }
+  return result.html;
 };
 
 // ==================== VERIFIED REFERENCES ENGINE ====================
@@ -935,7 +895,7 @@ async function fetchVerifiedReferencesOptimized(
       const domain = url.hostname.replace('www.', '');
 
       if (OPTIMIZED_BLOCKED_DOMAINS.has(domain) ||
-          [...OPTIMIZED_BLOCKED_DOMAINS].some(d => domain.includes(d))) continue;
+        [...OPTIMIZED_BLOCKED_DOMAINS].some(d => domain.includes(d))) continue;
       if (userDomain && domain.includes(userDomain)) continue;
       if (seenDomains.has(domain)) continue;
 
@@ -1862,81 +1822,81 @@ export const generateContent = {
           analytics.log('research', 'Starting PARALLEL content research...', { title: item.title });
           updateStatus('Phase 1: Research...');
 
-        const parallelMetricId = startMetric('parallelPhase1', { title: item.title });
+          const parallelMetricId = startMetric('parallelPhase1', { title: item.title });
 
-        const parallelResults = await executeParallel({
-          serpData: async () => {
-            if (!serperApiKey) return [];
-            const cacheKey = `serp:${item.title.toLowerCase().trim()}`;
-            return getCached(referenceCache, cacheKey, async () => {
-              return withCircuitBreaker('serper', async () => {
-                const response = await fetchWithProxies('https://google.serper.dev/search', {
-                  method: 'POST',
-                  headers: { 'X-API-KEY': serperApiKey, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ q: item.title, num: 10 })
-                });
-                const text = await response.text();
-                if (!text.trim()) return [];
+          const parallelResults = await executeParallel({
+            serpData: async () => {
+              if (!serperApiKey) return [];
+              const cacheKey = `serp:${item.title.toLowerCase().trim()}`;
+              return getCached(referenceCache, cacheKey, async () => {
+                return withCircuitBreaker('serper', async () => {
+                  const response = await fetchWithProxies('https://google.serper.dev/search', {
+                    method: 'POST',
+                    headers: { 'X-API-KEY': serperApiKey, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ q: item.title, num: 10 })
+                  });
+                  const text = await response.text();
+                  if (!text.trim()) return [];
+                  try {
+                    const data = JSON.parse(text);
+                    return data.organic || [];
+                  } catch {
+                    return [];
+                  }
+                }, []);
+              }, 3600000);
+            },
+
+            semanticKeywords: async () => {
+              const cacheKey = `keywords:${item.title.toLowerCase().trim()}`;
+              return getCached(semanticKeywordsCache, cacheKey, async () => {
                 try {
-                  const data = JSON.parse(text);
-                  return data.organic || [];
+                  const response = await callAIFn('semantic_keyword_generator', [item.title, geoTargeting.location || null, []], 'json');
+                  const data = safeParseJSON<any>(response, { keywords: [] });
+                  return data?.keywords || data?.semanticKeywords || [item.title];
                 } catch {
-                  return [];
+                  return [item.title];
                 }
-              }, []);
-            }, 3600000);
-          },
+              }, 86400000);
+            },
 
-          semanticKeywords: async () => {
-            const cacheKey = `keywords:${item.title.toLowerCase().trim()}`;
-            return getCached(semanticKeywordsCache, cacheKey, async () => {
-              try {
-                const response = await callAIFn('semantic_keyword_generator', [item.title, geoTargeting.location || null, []], 'json');
-                const data = safeParseJSON<any>(response, { keywords: [] });
-                return data?.keywords || data?.semanticKeywords || [item.title];
-              } catch {
-                return [item.title];
+            neuronTerms: async () => {
+              if (!neuronConfig?.enabled || !neuronConfig.apiKey || !neuronConfig.projectId) return null;
+              const cacheKey = `neuron:${neuronConfig.projectId}:${item.title.toLowerCase().trim()}`;
+              return getCached(neuronTermsCache, cacheKey, async () => {
+                return withCircuitBreaker('neuronwriter', async () => {
+                  return withTimeout(
+                    fetchNeuronTerms(neuronConfig.apiKey, neuronConfig.projectId, item.title),
+                    60000,
+                    'NeuronWriter'
+                  );
+                }, null);
+              }, 3600000);
+            },
+
+            youtubeVideo: async () => {
+              if (!serperApiKey) {
+                console.warn('[YouTube] ⚠️ Serper API key missing - cannot find videos');
+                return null;
               }
-            }, 86400000);
-          },
-
-          neuronTerms: async () => {
-            if (!neuronConfig?.enabled || !neuronConfig.apiKey || !neuronConfig.projectId) return null;
-            const cacheKey = `neuron:${neuronConfig.projectId}:${item.title.toLowerCase().trim()}`;
-            return getCached(neuronTermsCache, cacheKey, async () => {
-              return withCircuitBreaker('neuronwriter', async () => {
-                return withTimeout(
-                  fetchNeuronTerms(neuronConfig.apiKey, neuronConfig.projectId, item.title),
-                  60000,
-                  'NeuronWriter'
-                );
-              }, null);
-            }, 3600000);
-          },
-
-          youtubeVideo: async () => {
-            if (!serperApiKey) {
-              console.warn('[YouTube] ⚠️ Serper API key missing - cannot find videos');
-              return null;
+              const cacheKey = `youtube:${item.title.toLowerCase().trim()}`;
+              return getCached(youtubeCache, cacheKey, async () => {
+                return withCircuitBreaker('youtube', async () => {
+                  const video = await withTimeout(
+                    findBestYouTubeVideo(item.title, serperApiKey),
+                    15000,
+                    'YouTube'
+                  );
+                  if (video) {
+                    console.log(`[YouTube] ✅ Found video: ${video.title} (${video.videoId})`);
+                  } else {
+                    console.warn(`[YouTube] ⚠️ No video found for: ${item.title}`);
+                  }
+                  return video;
+                }, null);
+              }, 3600000);
             }
-            const cacheKey = `youtube:${item.title.toLowerCase().trim()}`;
-            return getCached(youtubeCache, cacheKey, async () => {
-              return withCircuitBreaker('youtube', async () => {
-                const video = await withTimeout(
-                  findBestYouTubeVideo(item.title, serperApiKey),
-                  15000,
-                  'YouTube'
-                );
-                if (video) {
-                  console.log(`[YouTube] ✅ Found video: ${video.title} (${video.videoId})`);
-                } else {
-                  console.warn(`[YouTube] ⚠️ No video found for: ${item.title}`);
-                }
-                return video;
-              }, null);
-            }, 3600000);
-          }
-        }, 60000);
+          }, 60000);
 
           endMetric(parallelMetricId, true);
 
@@ -2315,11 +2275,13 @@ export const generateContent = {
         console.error(`[Generation] Failed at phase ${checkpoint.currentPhase} for "${item.title}": ${errorMsg}`);
         console.log(`[Generation] Progress saved - can resume from phase ${checkpoint.currentPhase}`);
 
-        dispatch({ type: 'UPDATE_STATUS', payload: {
-          id: item.id,
-          status: 'error',
-          statusText: `Failed at phase ${checkpoint.currentPhase}: ${errorMsg.substring(0, 50)}`
-        } });
+        dispatch({
+          type: 'UPDATE_STATUS', payload: {
+            id: item.id,
+            status: 'error',
+            statusText: `Failed at phase ${checkpoint.currentPhase}: ${errorMsg.substring(0, 50)}`
+          }
+        });
       }
     }
   },
@@ -2488,9 +2450,9 @@ export const generateContent = {
         /class="[^"]*youtube-embed[^"]*"/i,
         /wp-block-embed-youtube/i
       ];
-      
+
       const youtubeAlreadyExists = existingYouTubeCheck.some(pattern => pattern.test(finalContent));
-      
+
       if (youtubeAlreadyExists) {
         console.log(`[Refresh] ✅ YouTube video already exists - skipping to prevent duplicate`);
       } else if (youtubeVideo) {
@@ -3272,41 +3234,39 @@ class UltraPremiumMaintenanceEngine {
       }
       phaseEnd();
 
-      // ========== PHASE 2.5: NeuronWriter Integration (if enabled) ==========
+      // ========== PHASE 2.5: NeuronWriter Integration (ENTERPRISE - with timeout) ==========
       let neuronTermsFormatted: string | null = null;
+      let neuronScore = 0;
+
       if (this.context.neuronConfig?.enabled && this.context.neuronConfig.apiKey && this.context.neuronConfig.projectId) {
         phaseEnd = phaseTimer('neuronwriter');
-        this.log('🧠 NEURONWRITER: Creating new content query...', 'info');
+        this.log('🧠 NEURONWRITER: ENTERPRISE integration with smart caching...', 'info');
 
         try {
-          const { fetchNeuronTerms, formatNeuronTermsForPrompt } = await import('./neuronwriter');
-
-          this.log(`🧠 NEURONWRITER: Analyzing "${page.title}"...`, 'info');
-
-          const neuronTerms = await fetchNeuronTerms(
+          // Use the new enterprise function with timeout
+          const neuronResult = await fetchNeuronWriterTermsWithFallback(
             this.context.neuronConfig.apiKey,
             this.context.neuronConfig.projectId,
-            page.title || semanticKeywords[0]
+            page.title || semanticKeywords[0],
+            15000, // 15 second timeout
+            (msg) => this.log(`  ${msg}`, 'debug')
           );
 
-          if (neuronTerms) {
-            neuronTermsFormatted = formatNeuronTermsForPrompt(neuronTerms);
+          if (neuronResult.terms && neuronResult.formatted) {
+            neuronTermsFormatted = neuronResult.formatted;
+            neuronScore = neuronResult.score;
 
-            this.log('🧠 NEURONWRITER: Successfully retrieved ALL SEO terms!', 'success');
-            this.log(`  H1: ${neuronTerms.h1?.split(',').length || 0} terms`, 'debug');
-            this.log(`  H2: ${neuronTerms.h2?.split(',').length || 0} terms`, 'debug');
-            this.log(`  Content Basic: ${neuronTerms.content_basic?.split(',').length || 0} terms`, 'debug');
-            this.log(`  Content Extended: ${neuronTerms.content_extended?.split(',').length || 0} terms`, 'debug');
-            this.log(`  Entities: ${(neuronTerms.entities_basic?.split(',').length || 0) + (neuronTerms.entities_extended?.split(',').length || 0)} entities`, 'debug');
-            this.log(`  Questions: ${neuronTerms.questions?.length || 0}`, 'debug');
-            this.log(`  Suggested Headings: ${neuronTerms.headings?.length || 0}`, 'debug');
+            this.log('🧠 NEURONWRITER: ✅ Successfully retrieved SEO terms!', 'success');
+            this.log(`  Terms fetched: ${neuronScore} total terms`, 'debug');
 
+            // Extract keywords from NeuronWriter terms
+            const terms = neuronResult.terms;
             const neuronKeywords = [
-              neuronTerms.h1,
-              neuronTerms.h2,
-              neuronTerms.h3,
-              neuronTerms.content_basic,
-              neuronTerms.entities_basic
+              terms.h1,
+              terms.h2,
+              terms.h3,
+              terms.content_basic,
+              terms.entities_basic
             ]
               .filter(Boolean)
               .join(' ')
@@ -3318,7 +3278,7 @@ class UltraPremiumMaintenanceEngine {
             semanticKeywords = [...new Set([...semanticKeywords, ...neuronKeywords])];
             this.log(`🧠 NEURONWRITER: Merged ${neuronKeywords.length} high-priority terms with keywords`, 'success');
           } else {
-            this.log(`🧠 NEURONWRITER: Query completed but no terms returned - check API key and project`, 'warning');
+            this.log(`🧠 NEURONWRITER: ⚠️ No terms returned - using fallback keywords`, 'warning');
           }
         } catch (e: any) {
           this.log(`🧠 NEURONWRITER ERROR: ${e.message}`, 'error');
@@ -3346,108 +3306,100 @@ class UltraPremiumMaintenanceEngine {
       this.log(`  ✓ Generated ${(optimizedContent.length / 1000).toFixed(1)}KB optimized content`, 'debug');
       phaseEnd();
 
-      // ========== PHASE 4: YouTube Video Injection (GUARANTEED) ==========
+      // ========== PHASE 4: YouTube Video Injection (GUARANTEED - ENTERPRISE) ==========
       phaseEnd = phaseTimer('youtube');
-      this.log('📹 YOUTUBE: Searching for relevant video...', 'info');
+      this.log('📹 YOUTUBE: ENTERPRISE guaranteed video injection...', 'info');
 
       let contentWithVideo = optimizedContent;
       let videoInjected = false;
+      let injectedVideo: YouTubeSearchResult | null = null;
 
       try {
         const searchKeyword = page.title || semanticKeywords[0] || 'guide';
         this.log(`📹 YOUTUBE: Query = "${searchKeyword}"`, 'debug');
 
-        contentWithVideo = await injectYouTubeIntoContent(
+        // Use the new GUARANTEED YouTube injection function
+        const youtubeResult = await guaranteedYouTubeVideoInject(
           optimizedContent,
           searchKeyword,
           this.context.serperApiKey,
           (msg) => this.log(`  ${msg}`, 'debug')
         );
 
-        videoInjected = contentWithVideo !== optimizedContent && !contentWithVideo.includes('[YOUTUBE_VIDEO_PLACEHOLDER]');
+        contentWithVideo = youtubeResult.html;
+        videoInjected = youtubeResult.success;
+        injectedVideo = youtubeResult.video;
 
-        if (videoInjected) {
-          this.log('📹 YOUTUBE: SUCCESS - Video injected into content!', 'success');
+        if (videoInjected && injectedVideo) {
+          this.log(`📹 YOUTUBE: ✅ SUCCESS - Injected: "${injectedVideo.title.substring(0, 50)}..."`, 'success');
         } else {
-          this.log('📹 YOUTUBE: Primary injection did not add video, trying direct search...', 'warning');
-
-          const { html: youtubeHtml, video } = await findRelevantYouTubeVideo(
-            searchKeyword,
-            this.context.serperApiKey,
-            (msg) => this.log(`  ${msg}`, 'debug')
-          );
-
-          if (youtubeHtml && video) {
-            this.log(`📹 YOUTUBE: Found video: "${video.title}"`, 'debug');
-
-            const cleanContent = contentWithVideo.replace('[YOUTUBE_VIDEO_PLACEHOLDER]', '');
-            const h2Matches = [...cleanContent.matchAll(/<\/h2>/gi)];
-
-            if (h2Matches.length >= 2 && h2Matches[1].index !== undefined) {
-              const insertPos = h2Matches[1].index + 5;
-              contentWithVideo = cleanContent.substring(0, insertPos) + '\n\n' + youtubeHtml + '\n\n' + cleanContent.substring(insertPos);
-              videoInjected = true;
-              this.log('📹 YOUTUBE: SUCCESS - Injected after 2nd H2', 'success');
-            } else if (h2Matches.length >= 1 && h2Matches[0].index !== undefined) {
-              const insertPos = h2Matches[0].index + 5;
-              contentWithVideo = cleanContent.substring(0, insertPos) + '\n\n' + youtubeHtml + '\n\n' + cleanContent.substring(insertPos);
-              videoInjected = true;
-              this.log('📹 YOUTUBE: SUCCESS - Injected after 1st H2', 'success');
-            } else {
-              contentWithVideo = cleanContent + '\n\n' + youtubeHtml;
-              videoInjected = true;
-              this.log('📹 YOUTUBE: SUCCESS - Appended to end of content', 'success');
-            }
-          } else {
-            this.log('📹 YOUTUBE: No video found for this topic', 'warning');
-          }
+          this.log('📹 YOUTUBE: ⚠️ No video found - placeholder removed cleanly', 'warning');
         }
       } catch (e: any) {
         this.log(`📹 YOUTUBE ERROR: ${e.message}`, 'error');
-      }
-
-      if (!videoInjected) {
-        this.log('📹 YOUTUBE: Unable to inject video - continuing without', 'warning');
-        contentWithVideo = contentWithVideo.replace('[YOUTUBE_VIDEO_PLACEHOLDER]', '');
+        // Ensure placeholder is removed even on error
+        contentWithVideo = contentWithVideo.replace(/\[YOUTUBE_VIDEO_PLACEHOLDER\]/g, '');
       }
 
       phaseEnd();
 
-      // ========== PHASE 5: Internal Link Injection ==========
+      // ========== PHASE 5: Internal Link Injection (ENTERPRISE - AI-POWERED) ==========
       phaseEnd = phaseTimer('linking');
-      this.log('🔗 Injecting internal links...', 'info');
+      this.log('🔗 INTERNAL LINKS: ENTERPRISE AI-powered injection...', 'info');
 
-      const linkResult = await generateEnhancedInternalLinks(
+      // Create AI function for anchor text generation
+      const createAIFn = () => async (prompt: string): Promise<string> => {
+        return await callAI(
+          this.context!.apiClients,
+          this.context!.selectedModel,
+          this.context!.geoTargeting,
+          this.context!.openrouterModels || [],
+          this.context!.selectedGroqModel || '',
+          'generate_internal_links',
+          [prompt],
+          'json'
+        );
+      };
+
+      const linkResult = await injectEnterpriseInternalLinks(
         contentWithVideo,
         this.context.existingPages,
-        page.title || '',
-        null,
-        ''
+        page.title || semanticKeywords[0] || '',
+        createAIFn(),
+        (msg) => this.log(`  ${msg}`, 'debug')
       );
 
-      this.log(`  ✓ Injected ${linkResult.linkCount} internal links`, 'debug');
+      this.log(`🔗 INTERNAL LINKS: ✅ Injected ${linkResult.linkCount} high-quality links`, 'success');
+      if (linkResult.links.length > 0) {
+        this.log(`  Top links: ${linkResult.links.slice(0, 3).map(l => `"${l.anchor}"`).join(', ')}`, 'debug');
+      }
       phaseEnd();
 
-      // ========== PHASE 6: Verified External References ==========
+      // ========== PHASE 6: Verified External References (ENTERPRISE) ==========
       phaseEnd = phaseTimer('references');
-      this.log('📚 Fetching verified references...', 'info');
+      this.log('📚 REFERENCES: ENTERPRISE verified reference fetching...', 'info');
 
       let referencesHtml = '';
       let referencesCount = 0;
 
       try {
-        const { html, references } = await fetchVerifiedReferences(
+        const refResult = await fetchEnterpriseReferences(
           page.title || semanticKeywords[0],
           semanticKeywords,
           this.context.serperApiKey,
-          this.context.wpConfig.url
+          this.context.wpConfig.url,
+          (msg) => this.log(`  ${msg}`, 'debug')
         );
 
-        referencesHtml = html;
-        referencesCount = references.length;
-        this.log(`  ✓ Added ${referencesCount} verified references`, 'debug');
+        if (refResult.success && refResult.html) {
+          referencesHtml = refResult.html;
+          referencesCount = refResult.references.length;
+          this.log(`📚 REFERENCES: ✅ Added ${referencesCount} verified references`, 'success');
+        } else {
+          this.log('📚 REFERENCES: ⚠️ No references found - continuing without', 'warning');
+        }
       } catch (e: any) {
-        this.log(`  ⚠️ Reference fetching failed: ${e.message}`, 'warning');
+        this.log(`📚 REFERENCES ERROR: ${e.message}`, 'error');
       }
       phaseEnd();
 
