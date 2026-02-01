@@ -3055,6 +3055,58 @@ const App: React.FC = () => {
                 <p>Review generated content and publish to WordPress.</p>
               </div>
 
+              {/* API STATUS BANNER - Shows what's configured */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '0.75rem',
+                marginBottom: '1.5rem',
+                padding: '1rem',
+                background: 'rgba(15, 23, 42, 0.6)',
+                borderRadius: '12px',
+                border: '1px solid rgba(59, 130, 246, 0.2)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+                  <span style={{ color: (apiClients.gemini || apiClients.openai || apiClients.anthropic || apiClients.openrouter) ? '#10b981' : '#ef4444' }}>
+                    {(apiClients.gemini || apiClients.openai || apiClients.anthropic || apiClients.openrouter) ? '✓' : '✗'}
+                  </span>
+                  <span style={{ color: 'rgba(255,255,255,0.8)' }}>AI Provider</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+                  <span style={{ color: apiKeys.serperApiKey ? '#10b981' : '#ef4444' }}>
+                    {apiKeys.serperApiKey ? '✓' : '✗'}
+                  </span>
+                  <span style={{ color: 'rgba(255,255,255,0.8)' }}>Serper (YouTube/References)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+                  <span style={{ color: neuronConfig.enabled && neuronConfig.apiKey && neuronConfig.projectId ? '#10b981' : '#f59e0b' }}>
+                    {neuronConfig.enabled && neuronConfig.apiKey && neuronConfig.projectId ? '✓' : '○'}
+                  </span>
+                  <span style={{ color: 'rgba(255,255,255,0.8)' }}>NeuronWriter (Optional)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+                  <span style={{ color: existingPages.length > 0 ? '#10b981' : '#f59e0b' }}>
+                    {existingPages.length > 0 ? '✓' : '○'}
+                  </span>
+                  <span style={{ color: 'rgba(255,255,255,0.8)' }}>Sitemap ({existingPages.length} pages)</span>
+                </div>
+              </div>
+
+              {/* Warning if missing critical APIs */}
+              {!apiKeys.serperApiKey && (
+                <div style={{
+                  padding: '1rem',
+                  marginBottom: '1rem',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '10px',
+                  color: '#fca5a5',
+                  fontSize: '0.9rem'
+                }}>
+                  <strong>Missing Serper API Key:</strong> YouTube videos and reference citations will NOT be added. Get your free key at <a href="https://serper.dev" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa' }}>serper.dev</a>
+                </div>
+              )}
+
               {/* Search and Actions */}
               <div className="review-toolbar" style={{
                 display: 'flex',

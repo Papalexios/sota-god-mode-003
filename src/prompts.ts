@@ -428,10 +428,8 @@ Title handled by CMS. Start with hero block.
 - 32-48px spacing between H2s
 - At least one paragraph before any list
 
-### YOUTUBE VIDEO (MANDATORY)
-Include a YouTube video placeholder in the middle of the article.
-Use: [YOUTUBE_VIDEO_PLACEHOLDER]
-The system will inject the actual video using Serper API.
+### YOUTUBE VIDEO (AUTOMATIC)
+DO NOT include any video placeholders. The system will automatically inject a relevant YouTube video into your content after generation.
 
 ## GAP ANALYSIS: BEAT THE COMPETITION
 Include AT LEAST 15 KEYWORDS/ENTITIES that competitor articles typically MISS:
@@ -624,13 +622,9 @@ IMPORTANT: The system will automatically inject 4-8 internal links with proper a
 
 ## SEMANTIC KEYWORDS (incorporate naturally, never force)
 ${keywordsStr}
-${neuronData ? `\n## 🧠 NEURONWRITER SEO TERMS (CRITICAL FOR RANKING)\nThese terms are from NeuronWriter analysis. Include them naturally throughout:\n${neuronData}\n` : ''}
-## 📹 YOUTUBE VIDEO (MANDATORY)
-Include this placeholder after section 3 or 4:
-[YOUTUBE_VIDEO_PLACEHOLDER]
-The system will automatically inject a relevant video using Serper API.
+${neuronData ? `\n## 🧠 NEURONWRITER SEO TERMS (CRITICAL FOR RANKING)\nThese terms are from NeuronWriter analysis. Include them NATURALLY throughout your content:\n${neuronData}\n` : ''}
 
-## 🔗 INTERNAL LINK RULES (CRITICAL)
+## 🔗 INTERNAL LINK RULES
 ${pagesStr}
 
 STRICT LINKING RULES:
@@ -862,9 +856,6 @@ ${keywordsStr}
 ${neuronTerms ? `\n## 🧠 NEURONWRITER SEO TERMS (CRITICAL - Use these for ranking):\n${neuronTerms}\n` : ''}
 ## INTERNAL LINK TARGETS (Use 10-15 with descriptive anchors):
 ${pagesStr}
-
-## YOUTUBE VIDEO PLACEHOLDER
-Include after section 3 or 4: [YOUTUBE_VIDEO_PLACEHOLDER]
 
 ## EXISTING CONTENT TO TRANSFORM:
 ${existingContent?.substring(0, 12000) || 'No content'}
