@@ -383,6 +383,19 @@ export function validateAnchorText(anchor: string, config: LinkEngineConfig = DE
     return { valid: false, reason: 'Empty anchor text', score: 0 };
   }
 
+  // CRITICAL FIX: NEVER allow sentence boundary punctuation INSIDE anchor text
+  // This prevents "faster than you think. Research" type errors
+  // Check the middle of the string (not first or last char) for sentence-ending punctuation
+  const middlePart = cleaned.slice(1, -1);
+  if (/[.!?]/.test(middlePart)) {
+    return { valid: false, reason: 'Contains sentence boundary punctuation (. ! ?)', score: 0 };
+  }
+
+  // Also reject if anchor ends with sentence punctuation
+  if (/[.!?]$/.test(cleaned)) {
+    return { valid: false, reason: 'Ends with sentence punctuation', score: 0 };
+  }
+
   const words = cleaned.split(/\s+/).filter(w => w.length > 0);
 
   if (words.length < config.minAnchorWords) {
@@ -477,9 +490,12 @@ function findBestAnchorInParagraph(
   config: LinkEngineConfig = DEFAULT_CONFIG
 ): { anchor: string; score: number } | null {
   const text = extractCleanText(paragraphText);
-  const words = text.split(/\s+/).filter(w => w.length > 0);
 
-  if (words.length < config.minAnchorWords) return null;
+  // CRITICAL FIX: Split into sentences FIRST to prevent crossing boundaries
+  // Split on sentence-ending punctuation followed by space or end of string
+  const sentences = text.split(/(?<=[.!?])\s+/).filter(s => s.length > 20);
+
+  if (sentences.length === 0) return null;
 
   const targetTerms = [
     ...extractKeyTerms(targetPage.title),
@@ -489,28 +505,36 @@ function findBestAnchorInParagraph(
 
   let bestCandidate: { anchor: string; score: number } | null = null;
 
-  for (let len = config.minAnchorWords; len <= config.maxAnchorWords; len++) {
-    for (let start = 0; start <= words.length - len; start++) {
-      const phraseWords = words.slice(start, start + len);
-      const phrase = phraseWords.join(' ');
+  // Process each sentence SEPARATELY - this is the key fix
+  for (const sentence of sentences) {
+    const words = sentence.split(/\s+/).filter(w => w.length > 0);
 
-      const validation = validateAnchorText(phrase, config);
-      if (!validation.valid) continue;
+    if (words.length < config.minAnchorWords) continue;
 
-      const phraseLower = phrase.toLowerCase();
-      let matchScore = 0;
-      for (const term of uniqueTerms) {
-        if (phraseLower.includes(term)) {
-          matchScore += 20;
+    for (let len = config.minAnchorWords; len <= config.maxAnchorWords; len++) {
+      for (let start = 0; start <= words.length - len; start++) {
+        const phraseWords = words.slice(start, start + len);
+        const phrase = phraseWords.join(' ');
+
+        // Validate anchor (this now includes the sentence boundary check)
+        const validation = validateAnchorText(phrase, config);
+        if (!validation.valid) continue;
+
+        const phraseLower = phrase.toLowerCase();
+        let matchScore = 0;
+        for (const term of uniqueTerms) {
+          if (phraseLower.includes(term)) {
+            matchScore += 20;
+          }
         }
-      }
 
-      if (matchScore === 0) continue;
+        if (matchScore === 0) continue;
 
-      const totalScore = validation.score + matchScore;
+        const totalScore = validation.score + matchScore;
 
-      if (!bestCandidate || totalScore > bestCandidate.score) {
-        bestCandidate = { anchor: phrase, score: totalScore };
+        if (!bestCandidate || totalScore > bestCandidate.score) {
+          bestCandidate = { anchor: phrase, score: totalScore };
+        }
       }
     }
   }
