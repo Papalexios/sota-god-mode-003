@@ -200,27 +200,7 @@ class AnalyticsEngine {
 const analytics = new AnalyticsEngine();
 
 // ==================== NEURONWRITER ENFORCEMENT ENGINE ====================
-
-/**
- * Helper function to create a timeout promise
- */
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`${operation} timed out after ${timeoutMs / 1000}s`));
-    }, timeoutMs);
-
-    promise
-      .then(result => {
-        clearTimeout(timer);
-        resolve(result);
-      })
-      .catch(error => {
-        clearTimeout(timer);
-        reject(error);
-      });
-  });
-}
+// Note: withTimeout is imported from PerformanceEngine
 
 /**
  * MANDATORY NeuronWriter Term Enforcement - FIXED v2.0
