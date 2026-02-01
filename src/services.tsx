@@ -1945,7 +1945,14 @@ export const generateContent = {
           neuronTerms = parallelResults.neuronTerms.success ? parallelResults.neuronTerms.data : null;
           youtubeVideo = parallelResults.youtubeVideo.success ? parallelResults.youtubeVideo.data : null;
 
-          console.log(`[ParallelPhase1] SERP: ${serpData.length} results, Keywords: ${semanticKeywords.length}, NeuronWriter: ${neuronTerms ? 'loaded' : 'none'}, YouTube: ${youtubeVideo ? 'found' : 'none'}`);
+          console.log('='.repeat(80));
+          console.log('[Phase 1 RESULTS] Research & Data Collection Complete');
+          console.log('='.repeat(80));
+          console.log(`📊 SERP Data: ${serpData.length} results`);
+          console.log(`🔤 Semantic Keywords: ${semanticKeywords.length} keywords`);
+          console.log(`🧠 NeuronWriter: ${neuronTerms ? '✅ LOADED (' + Object.keys(neuronTerms).filter(k => neuronTerms[k]?.length > 0).length + ' term categories)' : '❌ NOT AVAILABLE'}`);
+          console.log(`📹 YouTube Video: ${youtubeVideo ? `✅ FOUND - "${youtubeVideo.title}" (${youtubeVideo.videoId})` : '❌ NOT FOUND'}`);
+          console.log('='.repeat(80));
 
           checkpoint.collectedData.serpData = serpData;
           checkpoint.collectedData.semanticKeywords = semanticKeywords;
@@ -1960,7 +1967,10 @@ export const generateContent = {
         let neuronTermsFormatted: string | null = null;
         if (neuronTerms) {
           neuronTermsFormatted = formatNeuronTermsForPrompt(neuronTerms);
-          console.log(`[NeuronWriter] Loaded terms`);
+          console.log('[NeuronWriter] ✅ Formatting terms for AI prompt...');
+          console.log(`[NeuronWriter] H1 terms: ${neuronTerms.h1 || 'none'}`);
+          console.log(`[NeuronWriter] H2 terms: ${neuronTerms.h2 ? neuronTerms.h2.substring(0, 100) + '...' : 'none'}`);
+          console.log(`[NeuronWriter] Content Basic: ${neuronTerms.content_basic ? neuronTerms.content_basic.substring(0, 100) + '...' : 'none'}`);
 
           const neuronKeywords = [
             neuronTerms.h1,
@@ -1974,7 +1984,11 @@ export const generateContent = {
             .filter(k => k.length > 2)
             .slice(0, 10);
 
+          console.log(`[NeuronWriter] Extracted ${neuronKeywords.length} keywords: ${neuronKeywords.slice(0, 5).join(', ')}...`);
           semanticKeywords = [...new Set([...semanticKeywords, ...neuronKeywords])];
+          console.log(`[NeuronWriter] ✅ Merged with semantic keywords (total: ${semanticKeywords.length})`);
+        } else {
+          console.log('[NeuronWriter] ⚠️ No NeuronWriter terms available - continuing without');
         }
 
         // =================================================================
@@ -1983,6 +1997,13 @@ export const generateContent = {
         let contentResponse = checkpoint.collectedData.contentResponse || '';
         if (!checkpoint.phases[1]?.completed || !contentResponse) {
           updateStatus('Phase 2: Writing content...');
+
+          console.log('[Phase 2] 📝 Starting AI content generation...');
+          console.log(`[Phase 2] Title: "${item.title}"`);
+          console.log(`[Phase 2] Semantic Keywords: ${semanticKeywords.length} keywords`);
+          console.log(`[Phase 2] Existing Pages: ${existingPages.length} pages`);
+          console.log(`[Phase 2] SERP Data: ${serpData.length} results`);
+          console.log(`[Phase 2] NeuronWriter Terms: ${neuronTermsFormatted ? '✅ PROVIDED TO AI' : '❌ NONE'}`);
 
           contentResponse = await retryWithBackoff(async () => {
             return await callAIFn(
@@ -2045,13 +2066,21 @@ export const generateContent = {
           updateStatus('Phase 4: Fetching references...');
           const refMetricId = startMetric('referenceFetch', { title: item.title });
 
-          if (serperApiKey && serperApiKey.trim().length >= 10) {
+          console.log('[Phase 4] 📚 Starting reference fetch...');
+
+          if (!serperApiKey || serperApiKey.trim().length < 10) {
+            console.log('[Phase 4] ❌ Serper API key missing or invalid');
+            console.log('[Phase 4] ⚠️ SKIPPING references - Get your key at https://serper.dev');
+          } else {
+            console.log('[Phase 4] ✅ Serper API key validated');
             const refCacheKey = `refs:${item.title.toLowerCase().trim()}`;
             const cachedRefs = referenceCache.get(refCacheKey);
 
             if (cachedRefs) {
+              console.log('[Phase 4] 📦 Using cached references');
               references = cachedRefs;
             } else {
+              console.log('[Phase 4] 🌐 Fetching live references from Serper API...');
               try {
                 const { html, references: fetchedRefs } = await retryWithBackoff(async () => {
                   return await fetchVerifiedReferencesOptimized(
@@ -2062,14 +2091,18 @@ export const generateContent = {
                 references = fetchedRefs;
 
                 if (references.length > 0) {
+                  console.log(`[Phase 4] ✅ Found ${references.length} verified references`);
                   referenceCache.set(refCacheKey, references, 86400000);
+                } else {
+                  console.log('[Phase 4] ⚠️ No references found');
                 }
               } catch (e: any) {
-                console.warn(`[References] Fetch failed: ${e.message}`);
+                console.error(`[Phase 4] ❌ Reference fetch failed: ${e.message}`);
               }
             }
 
             if (references.length > 0 && !referencesHtml) {
+              console.log('[Phase 4] Generating references HTML...');
               referencesHtml = generateReferencesHtml(references, item.title);
             }
           }
@@ -2091,7 +2124,12 @@ export const generateContent = {
         if (!checkpoint.phases[4]?.completed) {
           updateStatus('Phase 5: Adding internal links...');
 
-          if (existingPages.length > 0) {
+          console.log('[Phase 5] 🔗 Starting internal link generation...');
+
+          if (existingPages.length === 0) {
+            console.log('[Phase 5] ⚠️ No existing pages available for internal linking');
+          } else {
+            console.log(`[Phase 5] ✅ ${existingPages.length} pages available for linking`);
             try {
               const aiLinkConfig: AILinkingConfig = {
                 callAiFn: async (prompt: string) => await callAIFn('dom_content_polisher', [prompt, 'internal_linking'], 'json'),
@@ -2105,6 +2143,8 @@ export const generateContent = {
                 slug: p.slug,
                 url: p.url || `${wpConfig.url}/${p.slug}/`
               }));
+
+              console.log(`[Phase 5] Requesting ${aiLinkConfig.minLinks}-${aiLinkConfig.maxLinks} internal links...`);
 
               const linkingResult = await retryWithBackoff(async () => {
                 return await processContentWithHybridInternalLinks(
@@ -2124,8 +2164,19 @@ export const generateContent = {
                   targetTitle: p.targetTitle
                 }))
               };
+
+              console.log(`[Phase 5] ✅ Internal linking complete!`);
+              console.log(`[Phase 5] Added ${linkResult.linkCount} links (${linkingResult.stats.method} method)`);
+              console.log(`[Phase 5] Skipped ${linkingResult.stats.skippedInvalidUrls} invalid URLs`);
+              if (linkResult.links.length > 0) {
+                console.log(`[Phase 5] Sample links:`);
+                linkResult.links.slice(0, 3).forEach((link, i) => {
+                  console.log(`  ${i + 1}. "${link.anchorText}" → ${link.targetUrl}`);
+                });
+              }
             } catch (e: any) {
-              console.warn(`[Internal Links] Failed: ${e.message}, continuing without links`);
+              console.error(`[Phase 5] ❌ Internal linking failed: ${e.message}`);
+              console.log('[Phase 5] Continuing without internal links');
               contentWithLinks = contentResponse;
             }
           }
@@ -2143,11 +2194,9 @@ export const generateContent = {
         updateStatus('Phase 6: Adding media...');
         let finalContent = polishContentHtml(contentWithLinks);
 
-        if (referencesHtml) {
-          finalContent += referencesHtml;
-        }
-
         if (!checkpoint.phases[5]?.completed) {
+          console.log('[Phase 6] 📹 YouTube injection phase starting...');
+
           const existingYouTubeCheck = [
             /youtube\.com\/embed\//i,
             /class="[^"]*sota-youtube[^"]*"/i,
@@ -2157,18 +2206,15 @@ export const generateContent = {
 
           const youtubeAlreadyExists = existingYouTubeCheck.some(pattern => pattern.test(finalContent));
 
-          if (!youtubeAlreadyExists) {
-            if (youtubeVideo) {
-              finalContent = guaranteedYouTubeInjection(finalContent, youtubeVideo);
-            } else {
-              const fallbackHtml = generateFallbackYouTubeSection(item.title);
-              const refMatch = finalContent.match(/<div[^>]*class="[^"]*sota-references[^"]*"[^>]*>/i);
-              if (refMatch && refMatch.index !== undefined) {
-                finalContent = finalContent.substring(0, refMatch.index) + fallbackHtml + '\n\n' + finalContent.substring(refMatch.index);
-              } else {
-                finalContent = finalContent + '\n\n' + fallbackHtml;
-              }
-            }
+          if (youtubeAlreadyExists) {
+            console.log('[Phase 6] ✅ YouTube video already exists in content');
+          } else if (youtubeVideo) {
+            console.log(`[Phase 6] ✅ Injecting YouTube video: ${youtubeVideo.title}`);
+            finalContent = guaranteedYouTubeInjection(finalContent, youtubeVideo);
+          } else {
+            console.log('[Phase 6] ⚠️ No YouTube video found - adding fallback search section');
+            const fallbackHtml = generateFallbackYouTubeSection(item.title);
+            finalContent = finalContent + '\n\n' + fallbackHtml;
           }
 
           checkpoint.phases[5].completed = true;
@@ -2178,6 +2224,17 @@ export const generateContent = {
           console.log('[Checkpoint] Phase 6 (Media) saved');
         } else if (checkpoint.partialContent) {
           finalContent = checkpoint.partialContent;
+        }
+
+        // =================================================================
+        // PHASE 6.5: Add References (AFTER YouTube, at the very end)
+        // =================================================================
+        console.log('[Phase 6.5] 📚 Adding references section...');
+        if (referencesHtml && referencesHtml.trim().length > 0) {
+          console.log(`[Phase 6.5] ✅ Adding ${references.length} verified references`);
+          finalContent += '\n\n' + referencesHtml;
+        } else {
+          console.log('[Phase 6.5] ⚠️ No references to add');
         }
 
         // =================================================================
