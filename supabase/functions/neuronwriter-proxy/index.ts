@@ -62,7 +62,7 @@ async function makeNeuronRequest(
         data: responseData,
       }),
       {
-        status: response.ok ? 200 : response.status,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );

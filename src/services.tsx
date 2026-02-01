@@ -80,8 +80,20 @@ import {
   getCacheStats
 } from './PerformanceEngine';
 
-console.log('[SOTA Services v15.0] ULTRA PERFORMANCE ENGINE Initialized');
-console.log('[SOTA Services] Features: Parallel Execution, LRU Caching, Circuit Breaker');
+import {
+  fetchAllDataParallel,
+  fetchReferencesEnterprise,
+  findYouTubeVideoEnterprise,
+  validateInternalPages,
+  injectYouTubeGuaranteed,
+  generateReferencesHtml as generateEnterpriseReferencesHtml,
+  injectInternalLinksEnterprise,
+  ValidatedInternalPage,
+  EnterpriseReference
+} from './EnterpriseContentOrchestrator';
+
+console.log('[SOTA Services v16.0] ENTERPRISE PERFORMANCE ENGINE Initialized');
+console.log('[SOTA Services] Features: Parallel Execution, LRU Caching, Circuit Breaker, Enterprise Orchestration');
 
 function countNeuronTerms(terms: NeuronTerms): number {
   let count = 0;
