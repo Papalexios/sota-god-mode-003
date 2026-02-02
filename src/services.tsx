@@ -114,6 +114,12 @@ import {
   enhanceContentEnterprise
 } from './SOTAContentGenerationEngine';
 
+// CRITICAL FIX: Import the bulletproof pipeline for guaranteed YouTube, References, and Internal Links
+import {
+  runEnterpriseContentPipeline,
+  PipelineConfig as EnterprisePipelineConfig
+} from './SOTAEnterpriseContentPipeline';
+
 console.log('[SOTA Services v17.0] ENTERPRISE PERFORMANCE ENGINE Initialized');
 console.log('[SOTA Services] CRITICAL FIXES: YouTube injection, Internal Links, References, NeuronWriter');
 console.log('[SOTA Services] Features: Parallel Execution, LRU Caching, Circuit Breaker, Enterprise Orchestration');
@@ -2082,53 +2088,118 @@ export const generateContent = {
         }
 
         // =================================================================
-        // PHASE 6: Media Integration (YouTube) - with checkpoint
+        // PHASE 6: BULLETPROOF ENTERPRISE CONTENT PIPELINE
+        // Guarantees: YouTube, Internal Links, and References
         // =================================================================
-        updateStatus('Phase 6: Adding media...');
+        updateStatus('Phase 6: Enterprise Enhancement Pipeline...');
         let finalContent = polishContentHtml(contentWithLinks);
 
         if (!checkpoint.phases[5]?.completed) {
-          console.log('[Phase 6] 📹 YouTube injection phase starting...');
+          console.log('='.repeat(80));
+          console.log('[Phase 6] 🚀 BULLETPROOF ENTERPRISE CONTENT PIPELINE STARTING');
+          console.log('='.repeat(80));
+          console.log(`[Phase 6] Serper API Key: ${serperApiKey ? '✅ Present' : '❌ MISSING - YouTube & References will fail!'}`);
+          console.log(`[Phase 6] Existing Pages: ${existingPages.length}`);
+          console.log(`[Phase 6] WP URL: ${wpConfig.url || 'Not configured'}`);
 
-          const existingYouTubeCheck = [
-            /youtube\.com\/embed\//i,
-            /class="[^"]*sota-youtube[^"]*"/i,
-            /class="[^"]*youtube-embed[^"]*"/i,
-            /wp-block-embed-youtube/i
-          ];
+          // Run the bulletproof pipeline
+          const pipelineConfig: EnterprisePipelineConfig = {
+            serperApiKey: serperApiKey || '',
+            wpBaseUrl: wpConfig.url || '',
+            existingPages: existingPages.map(p => ({
+              id: p.id,
+              title: p.title,
+              slug: p.slug,
+              url: p.url || (p.id && p.id.startsWith('http') ? p.id : undefined)
+            })),
+            keyword: item.title,
+            logCallback: (msg: string) => {
+              console.log(`[Pipeline] ${msg}`);
+              updateStatus(msg.substring(0, 50));
+            }
+          };
 
-          const youtubeAlreadyExists = existingYouTubeCheck.some(pattern => pattern.test(finalContent));
+          try {
+            const pipelineResult = await runEnterpriseContentPipeline(finalContent, pipelineConfig);
+            
+            finalContent = pipelineResult.html;
+            
+            // Update tracking variables with pipeline results
+            if (pipelineResult.youtubeVideo) {
+              youtubeVideo = pipelineResult.youtubeVideo;
+            }
+            if (pipelineResult.references.length > 0) {
+              references = pipelineResult.references.map(r => ({
+                title: r.title,
+                url: r.url,
+                domain: r.domain,
+                description: r.description,
+                authority: r.authority,
+                verified: true
+              }));
+              referencesHtml = ''; // Already injected by pipeline
+            }
+            if (pipelineResult.internalLinks.length > 0) {
+              linkResult = {
+                linkCount: pipelineResult.internalLinksCount,
+                links: pipelineResult.internalLinks.map(l => ({
+                  anchorText: l.anchorText,
+                  targetUrl: l.targetUrl,
+                  targetTitle: l.targetTitle
+                }))
+              };
+            }
 
-          if (youtubeAlreadyExists) {
-            console.log('[Phase 6] ✅ YouTube video already exists in content');
-          } else if (youtubeVideo) {
-            console.log(`[Phase 6] ✅ Injecting YouTube video: ${youtubeVideo.title}`);
-            finalContent = guaranteedYouTubeInjection(finalContent, youtubeVideo);
-          } else {
-            console.log('[Phase 6] ⚠️ No YouTube video found - adding fallback search section');
-            const fallbackHtml = generateFallbackYouTubeSection(item.title);
-            finalContent = finalContent + '\n\n' + fallbackHtml;
+            console.log('='.repeat(80));
+            console.log('[Phase 6] 🏁 PIPELINE COMPLETE');
+            console.log(`[Phase 6] YouTube: ${pipelineResult.youtubeInjected ? '✅' : '❌'}`);
+            console.log(`[Phase 6] References: ${pipelineResult.references.length}`);
+            console.log(`[Phase 6] Internal Links: ${pipelineResult.internalLinksCount}`);
+            console.log(`[Phase 6] Errors: ${pipelineResult.errors.length > 0 ? pipelineResult.errors.join(', ') : 'None'}`);
+            console.log('='.repeat(80));
+            
+          } catch (pipelineError: any) {
+            console.error('[Phase 6] ❌ Pipeline error:', pipelineError.message);
+            // Fall back to previous behavior
+            console.log('[Phase 6] Falling back to legacy injection...');
+            
+            const existingYouTubeCheck = [
+              /youtube\.com\/embed\//i,
+              /class="[^"]*sota-youtube[^"]*"/i,
+              /class="[^"]*youtube-embed[^"]*"/i,
+              /wp-block-embed-youtube/i
+            ];
+
+            const youtubeAlreadyExists = existingYouTubeCheck.some(pattern => pattern.test(finalContent));
+
+            if (youtubeAlreadyExists) {
+              console.log('[Phase 6] ✅ YouTube video already exists in content');
+            } else if (youtubeVideo) {
+              console.log(`[Phase 6] ✅ Injecting YouTube video: ${youtubeVideo.title}`);
+              finalContent = guaranteedYouTubeInjection(finalContent, youtubeVideo);
+            } else {
+              console.log('[Phase 6] ⚠️ No YouTube video found - adding fallback search section');
+              const fallbackHtml = generateFallbackYouTubeSection(item.title);
+              finalContent = finalContent + '\n\n' + fallbackHtml;
+            }
+            
+            // Add references if not already in content
+            if (referencesHtml && referencesHtml.trim().length > 0 && !finalContent.includes('sota-references')) {
+              console.log(`[Phase 6] ✅ Adding ${references.length} verified references (fallback)`);
+              finalContent += '\n\n' + referencesHtml;
+            }
           }
 
           checkpoint.phases[5].completed = true;
           checkpoint.currentPhase = 6;
           checkpoint.partialContent = finalContent;
           saveCheckpoint(checkpoint);
-          console.log('[Checkpoint] Phase 6 (Media) saved');
+          console.log('[Checkpoint] Phase 6 (Enterprise Pipeline) saved');
         } else if (checkpoint.partialContent) {
           finalContent = checkpoint.partialContent;
         }
 
-        // =================================================================
-        // PHASE 6.5: Add References (AFTER YouTube, at the very end)
-        // =================================================================
-        console.log('[Phase 6.5] 📚 Adding references section...');
-        if (referencesHtml && referencesHtml.trim().length > 0) {
-          console.log(`[Phase 6.5] ✅ Adding ${references.length} verified references`);
-          finalContent += '\n\n' + referencesHtml;
-        } else {
-          console.log('[Phase 6.5] ⚠️ No references to add');
-        }
+        // References are now handled by the pipeline above - no need for separate phase
 
         // =================================================================
         // PHASE 7: Schema Generation (final phase)
@@ -2313,9 +2384,17 @@ export const generateContent = {
 
       // Fetch verified references (with improved queries)
       dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📚 References...' } });
-      const { html: referencesHtml, references } = await fetchVerifiedReferences(
-        item.title, semanticKeywords, serperApiKey, wpConfig.url
-      );
+      let referencesHtml = '';
+      let references: any[] = [];
+      try {
+        const refResult = await fetchVerifiedReferences(
+          item.title, semanticKeywords, serperApiKey, wpConfig.url
+        );
+        referencesHtml = refResult.html;
+        references = refResult.references;
+      } catch (e) {
+        console.warn('[Refresh] Reference fetch failed:', e);
+      }
 
       // Find YouTube video (search first, inject last)
       dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Finding Video...' } });
@@ -2327,7 +2406,7 @@ export const generateContent = {
         console.log(`[Refresh] ✅ serperApiKey present (${serperApiKey.length} chars)`);
       }
 
-      const youtubeVideo = await findBestYouTubeVideo(item.title, serperApiKey);
+      let youtubeVideo = await findBestYouTubeVideo(item.title, serperApiKey);
 
       // AI-Powered Internal Links (with hybrid fallback)
       dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🔗 Adding AI Links...' } });
@@ -2367,50 +2446,93 @@ export const generateContent = {
         console.log(`[Refresh] Added ${linkResult.linkCount} internal links`);
       }
 
-      // Append references
-      if (referencesHtml) {
-        finalContent += referencesHtml;
-      }
+      // =================================================================
+      // RUN BULLETPROOF ENTERPRISE PIPELINE FOR REFRESH
+      // =================================================================
+      dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '🚀 Enterprise Pipeline...' } });
 
-      // GUARANTEED YouTube Injection (LAST STEP)
-      // CRITICAL FIX: Only inject ONE YouTube video - no duplicates!
-      dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: '📹 Injecting Video...' } });
+      console.log('[Refresh] 🚀 Running Bulletproof Enterprise Content Pipeline...');
+      
+      const pipelineConfig: EnterprisePipelineConfig = {
+        serperApiKey: serperApiKey || '',
+        wpBaseUrl: wpConfig.url || '',
+        existingPages: existingPages.map(p => ({
+          id: p.id,
+          title: p.title,
+          slug: p.slug,
+          url: p.url || (p.id && p.id.startsWith('http') ? p.id : undefined)
+        })),
+        keyword: item.title,
+        logCallback: (msg: string) => {
+          console.log(`[Refresh Pipeline] ${msg}`);
+          dispatch({ type: 'UPDATE_STATUS', payload: { id: item.id, status: 'generating', statusText: msg.substring(0, 50) } });
+        }
+      };
 
-      // Check if YouTube already exists in content (prevent duplicates)
-      const existingYouTubeCheck = [
-        /youtube\.com\/embed\//i,
-        /class="[^"]*sota-youtube[^"]*"/i,
-        /class="[^"]*youtube-embed[^"]*"/i,
-        /wp-block-embed-youtube/i
-      ];
+      try {
+        const pipelineResult = await runEnterpriseContentPipeline(finalContent, pipelineConfig);
+        
+        finalContent = pipelineResult.html;
+        
+        // Update tracking variables with pipeline results
+        if (pipelineResult.youtubeVideo) {
+          youtubeVideo = pipelineResult.youtubeVideo;
+        }
+        if (pipelineResult.references.length > 0) {
+          references = pipelineResult.references.map(r => ({
+            title: r.title,
+            url: r.url,
+            domain: r.domain,
+            description: r.description,
+            authority: r.authority,
+            verified: true
+          }));
+        }
+        if (pipelineResult.internalLinks.length > 0) {
+          linkResult = {
+            linkCount: pipelineResult.internalLinksCount,
+            links: pipelineResult.internalLinks.map(l => ({
+              anchorText: l.anchorText,
+              targetUrl: l.targetUrl,
+              targetTitle: l.targetTitle
+            }))
+          };
+        }
 
-      const youtubeAlreadyExists = existingYouTubeCheck.some(pattern => pattern.test(finalContent));
+        console.log('[Refresh] 🏁 Pipeline Complete');
+        console.log(`[Refresh] YouTube: ${pipelineResult.youtubeInjected ? '✅' : '❌'}`);
+        console.log(`[Refresh] References: ${pipelineResult.references.length}`);
+        console.log(`[Refresh] Internal Links: ${pipelineResult.internalLinksCount}`);
+        
+      } catch (pipelineError: any) {
+        console.error('[Refresh] ❌ Pipeline error:', pipelineError.message);
+        console.log('[Refresh] Falling back to legacy...');
+        
+        // Append references if available
+        if (referencesHtml) {
+          finalContent += referencesHtml;
+        }
 
-      if (youtubeAlreadyExists) {
-        console.log(`[Refresh] ✅ YouTube video already exists - skipping to prevent duplicate`);
-      } else if (youtubeVideo) {
-        finalContent = guaranteedYouTubeInjection(finalContent, youtubeVideo);
-        console.log(`[Refresh] ✅ YouTube video injected: ${youtubeVideo.videoId}`);
-      } else {
-        // NO VIDEO FOUND - inject fallback ONLY if no YouTube exists
-        console.log(`[Refresh] 📹 No video from API - injecting FALLBACK YouTube section`);
-        const fallbackHtml = generateFallbackYouTubeSection(item.title);
+        // Legacy YouTube injection
+        const existingYouTubeCheck = [
+          /youtube\.com\/embed\//i,
+          /class="[^"]*sota-youtube[^"]*"/i,
+          /class="[^"]*youtube-embed[^"]*"/i,
+          /wp-block-embed-youtube/i
+        ];
 
-        const refMatch = finalContent.match(/<div[^>]*class="[^"]*sota-references[^"]*"[^>]*>/i);
-        if (refMatch && refMatch.index !== undefined) {
-          finalContent = finalContent.substring(0, refMatch.index) + fallbackHtml + '\n\n' + finalContent.substring(refMatch.index);
+        const youtubeAlreadyExists = existingYouTubeCheck.some(pattern => pattern.test(finalContent));
+
+        if (youtubeAlreadyExists) {
+          console.log(`[Refresh] ✅ YouTube video already exists`);
+        } else if (youtubeVideo) {
+          finalContent = guaranteedYouTubeInjection(finalContent, youtubeVideo);
+          console.log(`[Refresh] ✅ YouTube video injected: ${youtubeVideo.videoId}`);
         } else {
+          console.log(`[Refresh] 📹 No video found - adding fallback`);
+          const fallbackHtml = generateFallbackYouTubeSection(item.title);
           finalContent = finalContent + '\n\n' + fallbackHtml;
         }
-        console.log(`[Refresh] ✅ Fallback YouTube section injected`);
-      }
-
-      // FINAL VERIFICATION (no emergency fallback to prevent duplicates)
-      const hasYouTubeContent = finalContent.includes('youtube.com') || finalContent.includes('sota-youtube');
-      if (hasYouTubeContent) {
-        console.log(`[Refresh] ✅✅ YouTube content verified in output`);
-      } else {
-        console.warn(`[Refresh] ⚠️ No YouTube content - Serper API key may be missing`);
       }
 
       const generatedContent: GeneratedContent = {

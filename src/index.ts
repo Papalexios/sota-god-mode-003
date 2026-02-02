@@ -31,3 +31,6 @@ export * from './prompts';
 // NeuronWriter
 export * from './neuronwriter';
 
+// SOTA Enterprise Content Pipeline (Bulletproof YouTube, References, Internal Links)
+export * from './SOTAEnterpriseContentPipeline';
+
