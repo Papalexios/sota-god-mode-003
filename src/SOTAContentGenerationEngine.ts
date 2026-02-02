@@ -158,12 +158,18 @@ export async function guaranteedYouTubeVideoInject(
 
     // CRITICAL: ULTRA-AGGRESSIVE placeholder removal
     // Catches variations: YOUTUBE_VIDEO_PLACEHOLDER, typos like PLACEHER, etc.
+    // Also removes AI-generated fake YouTube fallback sections
     let resultHtml = html
         .replace(/\[YOUTUBE_VIDEO_PLACEHOLDER\]/gi, '')
         .replace(/\[YOUTUBE_VIDEO_PLACE[A-Z]*\]/gi, '') // Catch typos
         .replace(/\[?YOUTUBE[\s_-]*VIDEO[\s_-]*PLACE[\w]*\]?/gi, '')
-        .replace(/📹\s*<h4><strong>Looking for Video Tutorials\?<\/strong><\/h4>[\s\S]*?Search YouTube for.*?<\/a>/gi, '') // Remove broken AI-generated YouTube sections
-        .replace(/<p>📹<\/p>\s*<h4>.*?Video Tutorials.*?<\/h4>[\s\S]*?youtube\.com\/results[\s\S]*?<\/a>\s*<\/p>/gi, ''); // Another pattern
+        // Remove AI-generated fake YouTube fallback sections (CRITICAL!)
+        .replace(/<div[^>]*class="[^"]*sota-youtube-fallback[^"]*"[^>]*>[\s\S]*?<\/div>\s*<\/div>/gi, '')
+        .replace(/<div[^>]*class="[^"]*sota-youtube-fallback[^"]*"[^>]*>[\s\S]*?Search YouTube[\s\S]*?<\/a>[\s\S]*?<\/div>/gi, '')
+        .replace(/📹\s*<h4><strong>Looking for Video Tutorials\?<\/strong><\/h4>[\s\S]*?Search YouTube for.*?<\/a>/gi, '')
+        .replace(/<p>📹<\/p>\s*<h4>.*?Video Tutorials.*?<\/h4>[\s\S]*?youtube\.com\/results[\s\S]*?<\/a>\s*<\/p>/gi, '')
+        // Additional pattern: Remove any div with "Looking for Video Tutorials?" inside
+        .replace(/<div[^>]*>[\s\S]*?Looking for Video Tutorials[\s\S]*?youtube\.com\/results[\s\S]*?<\/div>/gi, '');
 
     // Check if API key is available
     if (!serperApiKey || serperApiKey.trim().length < 10) {

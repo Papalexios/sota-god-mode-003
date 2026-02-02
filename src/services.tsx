@@ -1669,83 +1669,13 @@ const polishContentHtml = (html: string): string => {
     return match.replace('<p>', '<p style="margin-bottom: 1.5rem; line-height: 1.8; color: inherit;">');
   });
 
-  // 3. VISUAL INJECTION ENGINE (Force visuals every ~3 paragraphs)
-  const paragraphs = polished.split('</p>');
-  let newHtml = '';
-  let pCount = 0;
-
-  const injectables = [
-    // 1. EXPERT INSIGHT (Gold/Black)
-    `<div style="display: flex; gap: 1.5rem; padding: 2.5rem; background: linear-gradient(135deg, #18181b 0%, #000000 100%); border-radius: 24px; margin: 3.5rem 0; border: 2px solid #eab308; box-shadow: 0 20px 40px -10px rgba(234, 179, 8, 0.3);">
-      <span style="font-size: 3rem;">🎓</span>
-      <div>
-        <h4 style="margin: 0 0 0.75rem; font-size: 1.5rem; font-weight: 900; color: #eab308; text-transform: uppercase; letter-spacing: 0.05em;">Expert Insight</h4>
-        <p style="margin: 0; color: #ffffff; line-height: 1.6; font-weight: 600; font-size: 1.1rem;">Top veterinarians agree that consistent routines trump occasional interventions every time.</p>
-      </div>
-    </div>`,
-
-    // 2. ACTION ITEM (Neon Orange)
-    `<div style="display: flex; gap: 1.5rem; padding: 2.5rem; background: linear-gradient(135deg, #2a1205 0%, #000000 100%); border-radius: 24px; margin: 3.5rem 0; border: 2px solid #f97316; box-shadow: 0 20px 40px -10px rgba(249, 115, 22, 0.4);">
-      <span style="font-size: 3rem;">🚀</span>
-      <div>
-        <h4 style="margin: 0 0 0.75rem; font-size: 1.5rem; font-weight: 900; color: #f97316; text-transform: uppercase; letter-spacing: 0.05em;">Action Item</h4>
-        <p style="margin: 0; color: #ffffff; line-height: 1.6; font-weight: 600; font-size: 1.1rem;">Check your current setup against this guide today. Small adjustments yield massive long-term results.</p>
-      </div>
-    </div>`,
-
-    // 3. KEY TAKEAWAY (Electric Purple)
-    `<div style="display: flex; gap: 1.5rem; padding: 2.5rem; background: linear-gradient(135deg, #1e1b4b 0%, #020617 100%); border-radius: 24px; margin: 3.5rem 0; border: 2px solid #a855f7; box-shadow: 0 20px 40px -10px rgba(168, 85, 247, 0.4);">
-      <span style="font-size: 3rem;">💎</span>
-      <div>
-        <h4 style="margin: 0 0 0.75rem; font-size: 1.5rem; font-weight: 900; color: #d8b4fe; text-transform: uppercase; letter-spacing: 0.05em;">Key Takeaway</h4>
-        <p style="margin: 0; color: #ffffff; line-height: 1.6; font-weight: 600; font-size: 1.1rem;">Quality is not an accident. It is always the result of high intention and sincere effort.</p>
-      </div>
-    </div>`,
-
-    // 4. ULTRA SOTA PRO TIP (Emerald/White)
-    `<div style="display: flex; gap: 1.5rem; padding: 2.5rem; background: linear-gradient(145deg, #064e3b 0%, #022c22 100%); border-radius: 24px; margin: 3.5rem 0; border: 2px solid #34d399; box-shadow: 0 20px 40px -10px rgba(16, 185, 129, 0.5); position: relative; overflow: hidden;">
-      <div style="position: absolute; top: 0; right: 0; width: 100px; height: 100px; background: rgba(52, 211, 153, 0.1); border-radius: 50%; blur: 20px;"></div>
-      <span style="font-size: 3rem; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));">💡</span>
-      <div style="position: relative; z-index: 1;">
-        <h4 style="margin: 0 0 0.75rem; font-size: 1.5rem; font-weight: 900; color: #34d399; text-transform: uppercase; letter-spacing: 0.05em;">Pro Tip</h4>
-        <p style="margin: 0; color: #ffffff; line-height: 1.6; font-weight: 600; font-size: 1.1rem;">Always verify specific details with your vet. Individual needs vary, and professional guidance is unbeatable.</p>
-      </div>
-    </div>`,
-
-    // 5. DID YOU KNOW (Cyan/Blue)
-    `<div style="display: flex; gap: 1.5rem; padding: 2.5rem; background: linear-gradient(135deg, #083344 0%, #020617 100%); border-radius: 24px; margin: 3.5rem 0; border: 2px solid #06b6d4; box-shadow: 0 20px 40px -10px rgba(6, 182, 212, 0.4);">
-      <span style="font-size: 3rem;">🧠</span>
-      <div>
-        <h4 style="margin: 0 0 0.75rem; font-size: 1.5rem; font-weight: 900; color: #22d3ee; text-transform: uppercase; letter-spacing: 0.05em;">Did You Know?</h4>
-        <p style="margin: 0; color: #ffffff; line-height: 1.6; font-weight: 600; font-size: 1.1rem;">Recent studies show that preventive care reduces long-term costs by over 40% on average.</p>
-      </div>
-    </div>`,
-
-    // 6. ULTRA SOTA WARNING (Deep Red/White)
-    `<div style="display: flex; gap: 1.5rem; padding: 2.5rem; background: linear-gradient(145deg, #7f1d1d 0%, #450a0a 100%); border-radius: 24px; margin: 3.5rem 0; border: 2px solid #f87171; box-shadow: 0 20px 40px -10px rgba(220, 38, 38, 0.5);">
-      <span style="font-size: 3rem; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));">⚠️</span>
-      <div>
-        <h4 style="margin: 0 0 0.75rem; font-size: 1.5rem; font-weight: 900; color: #f87171; text-transform: uppercase; letter-spacing: 0.05em;">Critical Warning</h4>
-        <p style="margin: 0; color: #ffffff; line-height: 1.6; font-weight: 600; font-size: 1.1rem;">Ignoring early warning signs can lead to long-term complications. Act fast.</p>
-      </div>
-    </div>`
-  ];
-
-  paragraphs.forEach((p, idx) => {
-    if (!p.trim()) return;
-    newHtml += p + '</p>';
-    pCount++;
-
-    // Inject visual if no specialized element in last 3 paragraphs
-    if (pCount % 3 === 0 && idx < paragraphs.length - 2) {
-      if (!p.includes('<div') && !p.includes('<blockquote')) {
-        const visual = injectables[(pCount / 3) % injectables.length];
-        newHtml += visual;
-      }
-    }
-  });
-
-  polished = newHtml;
+  // 3. VISUAL INJECTION ENGINE - DISABLED
+  // CRITICAL FIX: Do NOT inject hardcoded callout boxes here!
+  // The AI should generate contextual, topic-relevant callouts during content generation.
+  // Previously, this was injecting irrelevant pet/veterinarian content into ALL articles.
+  // 
+  // The beautiful HTML elements are now ONLY added by the AI during content generation,
+  // ensuring they are contextually relevant to the actual topic.
 
   // 4. Force Table Styling (High Contrast Upgrade)
   if (polished.includes('<table') && !polished.includes('border-radius: 16px')) {
