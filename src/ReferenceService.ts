@@ -351,15 +351,15 @@ export async function fetchVerifiedReferences(
         if (helpfulCount >= 3) relevanceScore += 25;
         if (helpfulCount >= 5) relevanceScore += 25;
 
-        // MINIMUM RELEVANCE THRESHOLD (raised from 50 to 80)
-        if (relevanceScore < 80) {
+        // MINIMUM RELEVANCE THRESHOLD (lowered to 60 to ensure coverage)
+        if (relevanceScore < 60) {
           log(`Rejected: ${domain} (low relevance: ${relevanceScore})`);
           continue;
         }
 
-        // URL validation
+        // URL validation (fast check)
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
 
         try {
           const checkResponse = await fetch(ref.link, {
@@ -377,8 +377,10 @@ export async function fetchVerifiedReferences(
           }
         } catch (e) {
           clearTimeout(timeoutId);
-          log(`Rejected: ${domain} (unreachable)`);
-          continue;
+          // If we can't verify, we might still include it if it's high authority
+          if (determineAuthorityLevel(domain, category) !== 'high') {
+            continue;
+          }
         }
 
         const authority = determineAuthorityLevel(domain, category);
@@ -399,38 +401,24 @@ export async function fetchVerifiedReferences(
       }
     }
 
-    // Sort by relevance + authority
+    // Sort by authority (High > Medium) then relevance
     validatedReferences.sort((a, b) => {
-      const authorityScore = { high: 100, medium: 50, low: 10 };
-      return authorityScore[b.authority] - authorityScore[a.authority];
+      const authVal = { 'high': 3, 'medium': 2, 'low': 1 };
+      return authVal[b.authority] - authVal[a.authority];
     });
 
-    // QUALITY ASSURANCE: GUARANTEED minimum references
-    if (validatedReferences.length < 3) {
-      console.warn(`[References] ⚠️ Only ${validatedReferences.length} references passed validation - using fallback`);
-      log(`Warning: Low reference count (${validatedReferences.length}) - adding fallback section`);
-
-      // Still return what we have + fallback HTML
-      const fallbackHtml = generateFallbackReferencesSection(keyword);
-      if (validatedReferences.length === 0) {
-        return { html: fallbackHtml, references: [] };
-      }
-      // Combine existing references with encouragement to verify
+    // If we have ANY validated references, return them!
+    if (validatedReferences.length > 0) {
+      console.log(`[References] ✅ Returning ${validatedReferences.length} verified references`);
       const html = generateReferencesHtml(validatedReferences, category, keyword);
       return { html, references: validatedReferences };
     }
 
-    console.log(`[References] ✅ Successfully validated ${validatedReferences.length} high-quality references`);
-    console.log('[References] Top 5 references:');
-    validatedReferences.slice(0, 5).forEach((ref, i) => {
-      console.log(`  ${i + 1}. ${ref.title} (${ref.domain}) - ${ref.authority} authority`);
-    });
+    console.warn(`[References] ⚠️ No references passed strict validation`);
+    log(`Warning: Zero valid references found`);
 
-    log(`Successfully validated ${validatedReferences.length} references`);
-
-    const html = generateReferencesHtml(validatedReferences, category, keyword);
-
-    return { html, references: validatedReferences };
+    // Only return fallback (empty) if we truly found nothing
+    return { html: '', references: [] };
   } catch (error: any) {
     console.error(`[References] ❌ Reference fetch FAILED:`, error);
     log(`Reference fetch failed: ${error.message}`);

@@ -105,6 +105,9 @@ import {
 
 import {
   guaranteedYouTubeVideoInject,
+  cleanContentBeforeProcessing
+} from './SOTAContentGenerationEngine';
+import {
   injectEnterpriseInternalLinks,
   fetchNeuronWriterTermsWithFallback,
   fetchEnterpriseReferences,
@@ -3321,6 +3324,11 @@ class UltraPremiumMaintenanceEngine {
       phaseEnd = phaseTimer('linking');
       this.log('🔗 INTERNAL LINKS: ENTERPRISE AI-powered injection...', 'info');
 
+      // CRITICAL: Clean content before processing links to remove AI hallucinations
+      // This wipes fake internal links, fake related guides, and empty placeholders
+      // contentWithVideo already has the YouTube video, so we clean around it
+      const cleanedContent = cleanContentBeforeProcessing(contentWithVideo);
+
       // Create AI function for anchor text generation
       const createAIFn = () => async (prompt: string): Promise<string> => {
         return await callAI(
@@ -3336,7 +3344,7 @@ class UltraPremiumMaintenanceEngine {
       };
 
       const linkResult = await injectEnterpriseInternalLinks(
-        contentWithVideo,
+        cleanedContent,
         this.context.existingPages,
         page.title || semanticKeywords[0] || '',
         createAIFn(),

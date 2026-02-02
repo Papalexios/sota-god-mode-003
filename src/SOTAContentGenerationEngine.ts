@@ -141,6 +141,34 @@ function extractSafeAnchorsFromSentence(sentence: string, targetTitle: string): 
     return candidates;
 }
 
+/**
+ * WIPES AI-generated artifacts before processing
+ * - Removes fake internal links (hallucinations)
+ * - Removes fake reference sections
+ * - Cleans up empty placeholders
+ */
+export function cleanContentBeforeProcessing(html: string): string {
+    let cleaned = html;
+
+    // 1. Remove AI-generated "Related Guides" or "Internal Links" sections that contain fake links
+    cleaned = cleaned.replace(/<div[^>]*class="[^"]*sota-related-guides[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
+    cleaned = cleaned.replace(/<div[^>]*class="[^"]*related-posts[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
+
+    // 2. Remove AI-generated "References" sections (we generate these programmatically)
+    cleaned = cleaned.replace(/<h2[^>]*>.*?References.*?<\/h2>[\s\S]*?(?=<h2|$)/gi, '');
+    cleaned = cleaned.replace(/<div[^>]*class="[^"]*sota-references[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
+
+    // 3. Strip ALL relative links (likely hallucinated internal links)
+    // We only want internal links that WE inject programmatically
+    cleaned = cleaned.replace(/<a[^>]+href=["'](\/[^"']*)["'][^>]*>(.*?)<\/a>/gi, '$2');
+
+    // 4. Strip absolute links that look like placeholders or the site's own domain (if we knew it)
+    // As a safety net, we'll strip links containing "example.com" or "yoursite.com"
+    cleaned = cleaned.replace(/<a[^>]+href=["'][^"']*(example\.com|yoursite\.com)[^"']*["'][^>]*>(.*?)<\/a>/gi, '$2');
+
+    return cleaned;
+}
+
 // ==================== YOUTUBE VIDEO INJECTION - GUARANTEED ====================
 /**
  * GUARANTEED YouTube video injection - will NEVER leave a placeholder

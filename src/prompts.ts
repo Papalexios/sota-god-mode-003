@@ -790,11 +790,10 @@ it's, don't, won't, can't, you're, they'd, I've, we've, here's, that's
 
 ${BEAUTIFUL_HTML_ELEMENTS}
 
-## INTERNAL LINKING (CRITICAL FOR SEO)
-- 4-7 word descriptive anchors - NEVER generic
-- MAX 1 link/sentence, 3/paragraph
-- SPACE EVENLY (every 3-4 paragraphs)
-- NEVER link-stuff intro/conclusion
+## ⛔ INTERNAL LINKING - DO NOT ADD!
+The system will AUTOMATICALLY inject internal links after content generation.
+DO NOT add any <a href> tags pointing to internal pages.
+DO NOT make up URLs. The automated system will handle all internal linking.
 
 ## ABSOLUTE REQUIREMENTS
 
@@ -826,7 +825,7 @@ ${BEAUTIFUL_HTML_ELEMENTS}
    - Stunning comparison tables
    - Solid background callouts
 
-6. **10-15 internal links** (4-7 word anchors)
+6. **⛔ NO INTERNAL LINKS** - System adds them automatically
 
 7. **NEURONWRITER COMPLIANCE (MANDATORY)**
    - Use ALL provided 'Basic Content Terms'
@@ -872,8 +871,11 @@ ${neuronTerms}
 5. ✅ Use 80%+ of content_extended terms throughout
 6. ❌ DO NOT keyword stuff - weave terms NATURALLY into sentences
 ` : ''}
-## INTERNAL LINK TARGETS (Use 10-15 with descriptive anchors):
-${pagesStr}
+## ⛔ INTERNAL LINKS - DO NOT ADD ANY!
+The system will AUTOMATICALLY inject internal links AFTER content generation.
+DO NOT add any <a href> tags pointing to internal pages.
+DO NOT make up URLs or link to pages.
+Just write the content - links will be added by the automated system.
 
 ## EXISTING CONTENT TO TRANSFORM:
 ${existingContent?.substring(0, 12000) || 'No content'}
@@ -882,12 +884,13 @@ ${existingContent?.substring(0, 12000) || 'No content'}
 Reconstruct this into ULTRA-PREMIUM HTML5 that:
 1. Reads 100% human (contractions, varied sentences, personal expertise)
 2. Uses ALL beautiful visual components
-3. Has 10-15 internal links (4-7 word anchors, evenly spaced)
+3. ⛔ DO NOT ADD INTERNAL LINKS - System will inject them automatically
 4. Includes [YOUTUBE_VIDEO_PLACEHOLDER] for video injection
 5. Has ZERO AI detection patterns
 6. **CRITICAL**: Uses 100% of NeuronWriter basic terms + 80% of extended terms NATURALLY
 7. Uses NeuronWriter suggested headings as H2 structure
 8. Achieves 2800-3800 words of pure value
+9. ⛔ DO NOT ADD REFERENCES SECTION - System will add verified references automatically
 
 Transform and dominate.`;
     }
